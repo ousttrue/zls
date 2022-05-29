@@ -1491,10 +1491,7 @@ fn extractErr(val: anytype) anyerror {
     return error.HackDone;
 }
 
-fn processJsonRpc(arena: *std.heap.ArenaAllocator, parser: *std.json.Parser, json: []const u8, config: Config) !void {
-    var tree = try parser.parse(json);
-    defer tree.deinit();
-
+fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     const id = if (tree.root.Object.get("id")) |id| switch (id) {
         .Integer => |int| types.RequestId{ .Integer = int },
         .String => |str| types.RequestId{ .String = str },
@@ -1547,7 +1544,7 @@ fn processJsonRpc(arena: *std.heap.ArenaAllocator, parser: *std.json.Parser, jso
                     done = extractErr(method_info[2](arena, id, request_obj, config));
                 } else |err| {
                     if (err == error.MalformedJson) {
-                        logger.warn("Could not create request type {s} from JSON {s}", .{ @typeName(ReqT), json });
+                        logger.warn("Could not create request type {s} from JSON", .{ @typeName(ReqT) });
                     }
                     done = err;
                 }
@@ -1814,7 +1811,10 @@ pub fn run() anyerror!void {
         const buf = try arena.allocator().alloc(u8, headers.content_length);
         try reader.readNoEof(buf);
 
-        try processJsonRpc(&arena, &json_parser, buf, config);
+        var tree = try json_parser.parse(buf);
+        defer tree.deinit();
+
+        try processJsonRpc(&arena, config, tree);
         json_parser.reset();
         arena.deinit();
         arena.state = .{};
