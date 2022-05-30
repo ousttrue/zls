@@ -1444,6 +1444,23 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
 
     std.debug.assert(tree.root.Object.get("method") != null);
     const method = tree.root.Object.get("method").?.String;
+    const unimplemented_map = std.ComptimeStringMap(void, .{
+        .{"textDocument/documentHighlight"},
+        .{"textDocument/codeAction"},
+        .{"textDocument/codeLens"},
+        .{"textDocument/documentLink"},
+        .{"textDocument/rangeFormatting"},
+        .{"textDocument/onTypeFormatting"},
+        .{"textDocument/prepareRename"},
+        .{"textDocument/foldingRange"},
+        .{"textDocument/selectionRange"},
+        .{"textDocument/semanticTokens/range"},
+        .{"workspace/didChangeWorkspaceFolders"},
+    });
+    if (unimplemented_map.has(method)) {
+        // TODO: Unimplemented methods, implement them and add them to server capabilities.
+        return try respondGeneric(arena, id, null_result_response);
+    }
 
     const start_time = std.time.milliTimestamp();
     defer {
@@ -1506,24 +1523,6 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
         else => return err,
     };
 
-    const unimplemented_map = std.ComptimeStringMap(void, .{
-        .{"textDocument/documentHighlight"},
-        .{"textDocument/codeAction"},
-        .{"textDocument/codeLens"},
-        .{"textDocument/documentLink"},
-        .{"textDocument/rangeFormatting"},
-        .{"textDocument/onTypeFormatting"},
-        .{"textDocument/prepareRename"},
-        .{"textDocument/foldingRange"},
-        .{"textDocument/selectionRange"},
-        .{"textDocument/semanticTokens/range"},
-        .{"workspace/didChangeWorkspaceFolders"},
-    });
-
-    if (unimplemented_map.has(method)) {
-        // TODO: Unimplemented methods, implement them and add them to server capabilities.
-        return try respondGeneric(arena, id, null_result_response);
-    }
     if (tree.root.Object.get("id")) |_| {
         return try respondError(arena, id, not_implemented_response);
     }
