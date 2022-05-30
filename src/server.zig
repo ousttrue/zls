@@ -1050,8 +1050,10 @@ fn documentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: 
     });
 }
 
-fn initializeHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Initialize, config: Config) !void {
+fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
+
+    const req = try requests.fromDynamicTree(arena, requests.Initialize, tree.root);
 
     for (req.params.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
@@ -1159,7 +1161,7 @@ fn initializeHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: 
 }
 
 pub var keep_running = true;
-fn shutdownHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, config: Config) !void {
+fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
     _ = arena;
 
@@ -1170,16 +1172,22 @@ fn shutdownHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, config:
     try respondGeneric(arena, id, null_result_response);
 }
 
-fn openDocumentHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.OpenDocument, config: Config) !void {
+fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+
+    const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
+
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     try publishDiagnostics(arena, handle.*, config);
 
+    // TODO:
     if (client_capabilities.supports_semantic_tokens)
-        try semanticTokensFullHandler(arena, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }, config);
+        try semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } });
 }
 
-fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.ChangeDocument, config: Config) !void {
+fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = id;
+
+    const req = try requests.fromDynamicTree(arena, requests.ChangeDocument, tree.root);
 
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
@@ -1190,10 +1198,13 @@ fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, r
     try publishDiagnostics(arena, handle.*, config);
 }
 
-fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SaveDocument, config: Config) error{OutOfMemory}!void {
+fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
     _ = id;
     _ = arena;
+
+    const req = try requests.fromDynamicTree(arena, requests.SaveDocument, tree.root);
+
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to save non existent document {s}", .{req.params.textDocument.uri});
         return;
@@ -1201,14 +1212,20 @@ fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req
     try document_store.applySave(handle);
 }
 
-fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.CloseDocument, config: Config) error{}!void {
+fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
     _ = id;
     _ = arena;
+    const req = try requests.fromDynamicTree(arena, requests.CloseDocument, tree.root);
     document_store.closeDocument(req.params.textDocument.uri);
 }
 
-fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SemanticTokensFull, config: Config) !void {
+fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.SemanticTokensFull, tree.root);
+    try semanticTokensFullHandlerReq(arena, config, id, req);
+}
+
+fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.SemanticTokensFull) !void {
     if (config.enable_semantic_tokens) blk: {
         const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
             logger.warn("Trying to get semantic tokens of non existent document {s}", .{req.params.textDocument.uri});
@@ -1226,7 +1243,8 @@ fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, id: types.RequestI
     return try respondGeneric(arena, id, no_semantic_tokens_response);
 }
 
-fn completionHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Completion, config: Config) !void {
+fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.Completion, tree.root);
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to complete in non existent document {s}", .{req.params.textDocument.uri});
         return try respondGeneric(arena, id, no_completions_response);
@@ -1249,8 +1267,9 @@ fn completionHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: 
     }
 }
 
-fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SignatureHelp, config: Config) !void {
+fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
+    const req = try requests.fromDynamicTree(arena, requests.SignatureHelp, tree.root);
 
     const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
@@ -1305,15 +1324,18 @@ fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reques
     }
 }
 
-fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config) !void {
+fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.GotoDefinition, tree.root);
     try gotoHandler(arena, id, req, config, true);
 }
 
-fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDeclaration, config: Config) !void {
+fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.GotoDeclaration, tree.root);
     try gotoHandler(arena, id, req, config, false);
 }
 
-fn hoverHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Hover, config: Config) !void {
+fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.Hover, tree.root);
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get hover in non existent document {s}", .{req.params.textDocument.uri});
         return try respondGeneric(arena, id, null_result_response);
@@ -1334,9 +1356,9 @@ fn hoverHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reque
     }
 }
 
-fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.DocumentSymbols, config: Config) !void {
+fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
-
+    const req = try requests.fromDynamicTree(arena, requests.DocumentSymbols, tree.root);
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get document symbols in non existent document {s}", .{req.params.textDocument.uri});
         return try respondGeneric(arena, id, null_result_response);
@@ -1344,7 +1366,8 @@ fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, 
     try documentSymbol(arena, id, handle);
 }
 
-fn formattingHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Formatting, config: Config) !void {
+fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.Formatting, tree.root);
     if (config.zig_exe_path) |zig_exe_path| {
         const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
             logger.warn("Trying to got to definition in non existent document {s}", .{req.params.textDocument.uri});
@@ -1386,7 +1409,8 @@ fn formattingHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: 
     return try respondGeneric(arena, id, null_result_response);
 }
 
-fn renameHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Rename, config: Config) !void {
+fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.Rename, tree.root);
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to rename in non existent document {s}", .{req.params.textDocument.uri});
         return try respondGeneric(arena, id, null_result_response);
@@ -1407,7 +1431,8 @@ fn renameHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requ
     }
 }
 
-fn referencesHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.References, config: Config) !void {
+fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get references in non existent document {s}", .{req.params.textDocument.uri});
         return try respondGeneric(arena, id, null_result_response);
@@ -1469,64 +1494,42 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
     }
 
     const method_map = .{
-        .{"initialized"},
-        .{"$/cancelRequest"},
-        .{"textDocument/willSave"},
-        .{ "initialize", requests.Initialize, initializeHandler },
-        .{ "shutdown", void, shutdownHandler },
-        .{ "textDocument/didOpen", requests.OpenDocument, openDocumentHandler },
-        .{ "textDocument/didChange", requests.ChangeDocument, changeDocumentHandler },
-        .{ "textDocument/didSave", requests.SaveDocument, saveDocumentHandler },
-        .{ "textDocument/didClose", requests.CloseDocument, closeDocumentHandler },
-        .{ "textDocument/semanticTokens/full", requests.SemanticTokensFull, semanticTokensFullHandler },
-        .{ "textDocument/completion", requests.Completion, completionHandler },
-        .{ "textDocument/signatureHelp", requests.SignatureHelp, signatureHelpHandler },
-        .{ "textDocument/definition", requests.GotoDefinition, gotoDefinitionHandler },
-        .{ "textDocument/typeDefinition", requests.GotoDefinition, gotoDefinitionHandler },
-        .{ "textDocument/implementation", requests.GotoDefinition, gotoDefinitionHandler },
-        .{ "textDocument/declaration", requests.GotoDeclaration, gotoDeclarationHandler },
-        .{ "textDocument/hover", requests.Hover, hoverHandler },
-        .{ "textDocument/documentSymbol", requests.DocumentSymbols, documentSymbolsHandler },
-        .{ "textDocument/formatting", requests.Formatting, formattingHandler },
-        .{ "textDocument/rename", requests.Rename, renameHandler },
-        .{ "textDocument/references", requests.References, referencesHandler },
+        // .{"initialized"},
+        // .{"$/cancelRequest"},
+        // .{"textDocument/willSave"},
+        .{ "initialize", initializeHandler },
+        .{ "shutdown", shutdownHandler },
+        .{ "textDocument/didOpen", openDocumentHandler },
+        .{ "textDocument/didChange", changeDocumentHandler },
+        .{ "textDocument/didSave", saveDocumentHandler },
+        .{ "textDocument/didClose", closeDocumentHandler },
+        .{ "textDocument/semanticTokens/full", semanticTokensFullHandler },
+        .{ "textDocument/completion", completionHandler },
+        .{ "textDocument/signatureHelp", signatureHelpHandler },
+        .{ "textDocument/definition", gotoDefinitionHandler },
+        .{ "textDocument/typeDefinition", gotoDefinitionHandler },
+        .{ "textDocument/implementation", gotoDefinitionHandler },
+        .{ "textDocument/declaration", gotoDeclarationHandler },
+        .{ "textDocument/hover", hoverHandler },
+        .{ "textDocument/documentSymbol", documentSymbolsHandler },
+        .{ "textDocument/formatting", formattingHandler },
+        .{ "textDocument/rename", renameHandler },
+        .{ "textDocument/references", referencesHandler },
     };
 
     // Hack to avoid `return`ing in the inline for, which causes bugs.
-    var done: ?anyerror = null;
     inline for (method_map) |method_info| {
-        if (done == null and std.mem.eql(u8, method, method_info[0])) {
-            if (method_info.len == 1) {
-                done = error.HackDone;
-            } else if (method_info[1] != void) {
-                const ReqT = method_info[1];
-                if (requests.fromDynamicTree(arena, ReqT, tree.root)) |request_obj| {
-                    done = error.HackDone;
-                    done = extractErr(method_info[2](arena, id, request_obj, config));
-                } else |err| {
-                    if (err == error.MalformedJson) {
-                        logger.warn("Could not create request type {s} from JSON", .{@typeName(ReqT)});
-                    }
-                    done = err;
-                }
-            } else {
-                done = error.HackDone;
-                (method_info[2])(arena, id, config) catch |err| {
-                    done = err;
-                };
-            }
+        if (std.mem.eql(u8, method, method_info[0])) {
+            try method_info[1](arena, config, tree, id);
+            return;
         }
     }
-    if (done) |err| switch (err) {
-        error.MalformedJson => return try respondGeneric(arena, id, null_result_response),
-        error.HackDone => return,
-        else => return err,
-    };
 
     if (tree.root.Object.get("id")) |_| {
         return try respondError(arena, id, not_implemented_response);
     }
     logger.debug("Method without return value not implemented: {s}", .{method});
+    return try respondGeneric(arena, id, null_result_response);
 }
 
 pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
