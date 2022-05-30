@@ -95,6 +95,10 @@ fn respondError(arena: *std.heap.ArenaAllocator, id: types.RequestId, e: types.R
     try send(arena, types.Response{ .id = id, .result = null_result_response, .@"error" = e });
 }
 
+fn nullResponse(id: types.RequestId) types.Response {
+    return types.Response{ .id = id, .result=null_result_response };
+}
+
 fn respondGeneric(arena: *std.heap.ArenaAllocator, id: types.RequestId, result: types.ResponseParams) !void {
     try send(arena, types.Response{ .id = id, .result = result });
 }
@@ -1082,7 +1086,10 @@ fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
         }
     }
 
-    try send(arena, types.Response{
+    // logger.info("zls initialized", .{});
+    // logger.info("{}", .{client_capabilities});
+    // logger.info("Using offset encoding: {s}", .{std.meta.tagName(offset_encoding)});
+    const res = types.Response{
         .id = id,
         .result = .{
             .InitializeResult = .{
@@ -1153,11 +1160,9 @@ fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
                 },
             },
         },
-    });
+    };
 
-    logger.info("zls initialized", .{});
-    logger.info("{}", .{client_capabilities});
-    logger.info("Using offset encoding: {s}", .{std.meta.tagName(offset_encoding)});
+    try send(arena, res);
 }
 
 pub var keep_running = true;
@@ -1169,7 +1174,8 @@ fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.
 
     keep_running = false;
     // Technically we should deinitialize first and send possible errors to the client
-    try respondGeneric(arena, id, null_result_response);
+    const res = nullResponse(id);
+    try send(arena, res);
 }
 
 fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
