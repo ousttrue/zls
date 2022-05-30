@@ -6,6 +6,7 @@ const server = @import("server.zig");
 const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
+const readRequestHeader = @import("./header.zig").readRequestHeader;
 const logger = std.log.scoped(.main);
 
 // Always set this to debug to make std.log call into our handler, then control the runtime
@@ -272,5 +273,34 @@ pub fn main() anyerror!void {
         break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
     };
 
-    try server.run(allocator, config, build_runner_path, build_runner_cache_path);
+    try server.init(allocator, config, build_runner_path, build_runner_cache_path);
+    defer server.deinit();
+
+    // This JSON parser is passed to processJsonRpc and reset.
+    var json_parser = std.json.Parser.init(allocator, false);
+    defer json_parser.deinit();
+
+    // Arena used for temporary allocations while handling a request
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    const reader = std.io.getStdIn().reader();
+    while (server.keep_running) {
+        const headers = readRequestHeader(arena.allocator(), reader) catch |err| {
+            logger.err("{s}; exiting!", .{@errorName(err)});
+            return;
+        };
+        const buf = try arena.allocator().alloc(u8, headers.content_length);
+        try reader.readNoEof(buf);
+
+        var tree = try json_parser.parse(buf);
+        defer {
+            tree.deinit();
+            json_parser.reset();
+            arena.deinit();
+            arena.state = .{};
+        }
+
+        try server.processJsonRpc(&arena, config, tree);
+    }
 }

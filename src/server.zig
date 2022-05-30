@@ -2,7 +2,6 @@ const std = @import("std");
 const build_options = @import("build_options");
 const Config = @import("./Config.zig");
 const DocumentStore = @import("./DocumentStore.zig");
-const readRequestHeader = @import("./header.zig").readRequestHeader;
 const requests = @import("./requests.zig");
 const types = @import("./types.zig");
 const analysis = @import("./analysis.zig");
@@ -1069,7 +1068,6 @@ fn documentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: 
     });
 }
 
-
 fn initializeHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Initialize, config: Config) !void {
     _ = config;
 
@@ -1455,7 +1453,7 @@ fn extractErr(val: anytype) anyerror {
     return error.HackDone;
 }
 
-fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     const id = if (tree.root.Object.get("id")) |id| switch (id) {
         .Integer => |int| types.RequestId{ .Integer = int },
         .String => |str| types.RequestId{ .String = str },
@@ -1508,7 +1506,7 @@ fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.jso
                     done = extractErr(method_info[2](arena, id, request_obj, config));
                 } else |err| {
                     if (err == error.MalformedJson) {
-                        logger.warn("Could not create request type {s} from JSON", .{ @typeName(ReqT) });
+                        logger.warn("Could not create request type {s} from JSON", .{@typeName(ReqT)});
                     }
                     done = err;
                 }
@@ -1550,18 +1548,10 @@ fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.jso
     logger.debug("Method without return value not implemented: {s}", .{method});
 }
 
-
-pub fn run(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
+pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
     allocator = a;
-    defer keep_running = false;
-
     analysis.init(allocator);
-    defer analysis.deinit();
-
-    // Init global vars
-    const reader = std.io.getStdIn().reader();
     stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
-
     try document_store.init(
         allocator,
         config.zig_exe_path,
@@ -1577,33 +1567,12 @@ pub fn run(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, 
         "ZLS_DONT_CARE",
         config.builtin_path,
     );
-    defer document_store.deinit();
+}
 
-    // This JSON parser is passed to processJsonRpc and reset.
-    var json_parser = std.json.Parser.init(allocator, false);
-    defer json_parser.deinit();
-
-    // Arena used for temporary allocations while handling a request
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-
-    while (keep_running) {
-        const headers = readRequestHeader(arena.allocator(), reader) catch |err| {
-            logger.err("{s}; exiting!", .{@errorName(err)});
-            return;
-        };
-        const buf = try arena.allocator().alloc(u8, headers.content_length);
-        try reader.readNoEof(buf);
-
-        var tree = try json_parser.parse(buf);
-        defer tree.deinit();
-
-        try processJsonRpc(&arena, config, tree);
-        json_parser.reset();
-        arena.deinit();
-        arena.state = .{};
-    }
-
+pub fn deinit() void {
+    keep_running = false;
+    analysis.deinit();
+    document_store.deinit();
     if (builtin_completions) |compls| {
         allocator.free(compls);
     }
