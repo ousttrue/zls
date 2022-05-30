@@ -1173,7 +1173,6 @@ fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.
 }
 
 fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
-
     const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
 
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
@@ -1454,11 +1453,9 @@ fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
     }
 }
 
-// Needed for the hack seen below.
-fn extractErr(val: anytype) anyerror {
-    val catch |e| return e;
-    return error.HackDone;
-}
+const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!void;
+
+var method_map: std.StringHashMap(RequestProto) = undefined;
 
 pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     const id = if (tree.root.Object.get("id")) |id| switch (id) {
@@ -1492,37 +1489,13 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
         const end_time = std.time.milliTimestamp();
         logger.debug("Took {}ms to process method {s}", .{ end_time - start_time, method });
     }
+    // .{"initialized"},
+    // .{"$/cancelRequest"},
+    // .{"textDocument/willSave"},
 
-    const method_map = .{
-        // .{"initialized"},
-        // .{"$/cancelRequest"},
-        // .{"textDocument/willSave"},
-        .{ "initialize", initializeHandler },
-        .{ "shutdown", shutdownHandler },
-        .{ "textDocument/didOpen", openDocumentHandler },
-        .{ "textDocument/didChange", changeDocumentHandler },
-        .{ "textDocument/didSave", saveDocumentHandler },
-        .{ "textDocument/didClose", closeDocumentHandler },
-        .{ "textDocument/semanticTokens/full", semanticTokensFullHandler },
-        .{ "textDocument/completion", completionHandler },
-        .{ "textDocument/signatureHelp", signatureHelpHandler },
-        .{ "textDocument/definition", gotoDefinitionHandler },
-        .{ "textDocument/typeDefinition", gotoDefinitionHandler },
-        .{ "textDocument/implementation", gotoDefinitionHandler },
-        .{ "textDocument/declaration", gotoDeclarationHandler },
-        .{ "textDocument/hover", hoverHandler },
-        .{ "textDocument/documentSymbol", documentSymbolsHandler },
-        .{ "textDocument/formatting", formattingHandler },
-        .{ "textDocument/rename", renameHandler },
-        .{ "textDocument/references", referencesHandler },
-    };
-
-    // Hack to avoid `return`ing in the inline for, which causes bugs.
-    inline for (method_map) |method_info| {
-        if (std.mem.eql(u8, method, method_info[0])) {
-            try method_info[1](arena, config, tree, id);
-            return;
-        }
+    if (method_map.get(method)) |handler| {
+        try handler(arena, config, tree, id);
+        return;
     }
 
     if (tree.root.Object.get("id")) |_| {
@@ -1551,10 +1524,31 @@ pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8,
         "ZLS_DONT_CARE",
         config.builtin_path,
     );
+
+    method_map = std.StringHashMap(RequestProto).init(allocator);
+    try method_map.put("initialize", initializeHandler);
+    try method_map.put("shutdown", shutdownHandler);
+    try method_map.put("textDocument/semanticTokens/full", semanticTokensFullHandler);
+    try method_map.put("textDocument/didOpen", openDocumentHandler);
+    try method_map.put("textDocument/didChange", changeDocumentHandler);
+    try method_map.put("textDocument/didSave", saveDocumentHandler);
+    try method_map.put("textDocument/didClose", closeDocumentHandler);
+    try method_map.put("textDocument/completion", completionHandler);
+    try method_map.put("textDocument/signatureHelp", signatureHelpHandler);
+    try method_map.put("textDocument/definition", gotoDefinitionHandler);
+    try method_map.put("textDocument/typeDefinition", gotoDefinitionHandler);
+    try method_map.put("textDocument/implementation", gotoDefinitionHandler);
+    try method_map.put("textDocument/declaration", gotoDeclarationHandler);
+    try method_map.put("textDocument/hover", hoverHandler);
+    try method_map.put("textDocument/documentSymbol", documentSymbolsHandler);
+    try method_map.put("textDocument/formatting", formattingHandler);
+    try method_map.put("textDocument/rename", renameHandler);
+    try method_map.put("textDocument/references", referencesHandler);
 }
 
 pub fn deinit() void {
     keep_running = false;
+    method_map.deinit();
     analysis.deinit();
     document_store.deinit();
     if (builtin_completions) |compls| {
