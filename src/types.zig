@@ -43,6 +43,7 @@ pub const ResponseParams = union(enum) {
     Locations: []Location,
     WorkspaceEdit: WorkspaceEdit,
     InitializeResult: InitializeResult,
+    Null: ?struct{},
 };
 
 /// JSONRPC notifications
@@ -67,11 +68,17 @@ pub const Notification = struct {
     params: Params,
 };
 
+// "error":{"code":-32601,"message":"NotImplemented"}}
+pub const ResponseError = struct{
+    code: i32, 
+    message: []const u8,
+};
 /// JSONRPC response
 pub const Response = struct {
     jsonrpc: string = "2.0",
     id: RequestId,
     result: ResponseParams,
+    @"error": ?ResponseError=null,
 };
 
 /// Type of a debug message
