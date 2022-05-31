@@ -1374,43 +1374,45 @@ fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree:
     return try getDocumentSymbol(arena, id, req);
 }
 
-fn doFormat(config: Config, id: types.RequestId, req: requests.Formatting) !types.Response {
-    if (config.zig_exe_path) |zig_exe_path| {
-        const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
-            logger.warn("Trying to got to definition in non existent document {s}", .{req.params.textDocument.uri});
-            return nullResponse(id);
-        };
+fn doFormat(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Formatting) !types.Response {
+    const zig_exe_path = config.zig_exe_path orelse {
+        logger.warn("no zig_exe_path", .{});
+        return nullResponse(id);
+    };
 
-        var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, allocator);
-        process.stdin_behavior = .Pipe;
-        process.stdout_behavior = .Pipe;
-        process.spawn() catch |err| {
-            logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
-            return nullResponse(id);
-        };
-        try process.stdin.?.writeAll(handle.document.text);
-        process.stdin.?.close();
-        process.stdin = null;
+    const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
+        logger.warn("Trying to got to definition in non existent document {s}", .{req.params.textDocument.uri});
+        return nullResponse(id);
+    };
 
-        const stdout_bytes = try process.stdout.?.reader().readAllAlloc(allocator, std.math.maxInt(usize));
-        defer allocator.free(stdout_bytes);
+    var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, allocator);
+    process.stdin_behavior = .Pipe;
+    process.stdout_behavior = .Pipe;
+    process.spawn() catch |err| {
+        logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
+        return nullResponse(id);
+    };
+    try process.stdin.?.writeAll(handle.document.text);
+    process.stdin.?.close();
+    process.stdin = null;
 
-        switch (try process.wait()) {
-            .Exited => |code| if (code == 0) {
-                return types.Response{
-                    .id = id,
-                    .result = .{
-                        .TextEdits = &[1]types.TextEdit{
-                            .{
-                                .range = try offsets.documentRange(handle.document, offset_encoding),
-                                .newText = stdout_bytes,
-                            },
+    const stdout_bytes = try process.stdout.?.reader().readAllAlloc(arena.allocator(), std.math.maxInt(usize));
+
+    switch (try process.wait()) {
+        .Exited => |code| if (code == 0) {
+            return types.Response{
+                .id = id,
+                .result = .{
+                    .TextEdits = &[1]types.TextEdit{
+                        .{
+                            .range = try offsets.documentRange(handle.document, offset_encoding),
+                            .newText = stdout_bytes,
                         },
                     },
-                };
-            },
-            else => {},
-        }
+                },
+            };
+        },
+        else => {},
     }
 
     return nullResponse(id);
@@ -1418,7 +1420,7 @@ fn doFormat(config: Config, id: types.RequestId, req: requests.Formatting) !type
 
 fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Formatting, tree.root);
-    return try doFormat(config, id, req);
+    return try doFormat(arena, config, id, req);
 }
 
 fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Rename) !types.Response
