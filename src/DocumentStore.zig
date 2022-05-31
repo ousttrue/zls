@@ -195,7 +195,7 @@ fn loadPackages(context: LoadPackagesContext) !void {
 /// This function asserts the document is not open yet and takes ownership
 /// of the uri and text passed in.
 fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Handle {
-    log.debug("Opened document: {s}", .{uri});
+    // log.debug("Opened document: {s}", .{uri});
 
     var handle = try self.allocator.create(Handle);
     errdefer self.allocator.destroy(handle);
@@ -279,9 +279,9 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
                     candidate = build_file;
                 }
             }
-            if (candidate) |build_file| {
-                log.debug("Found a candidate associated build file: `{s}`", .{build_file.uri});
-            }
+            // if (candidate) |build_file| {
+            //     log.debug("Found a candidate associated build file: `{s}`", .{build_file.uri});
+            // }
         }
 
         // Then, try to find the closest build file.
@@ -347,7 +347,7 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
         if (candidate) |build_file| {
             build_file.refs += 1;
             handle.associated_build_file = build_file;
-            log.debug("Associated build file `{s}` to document `{s}`", .{ build_file.uri, handle.uri() });
+            // log.debug("Associated build file `{s}` to document `{s}`", .{ build_file.uri, handle.uri() });
         }
     }
 
