@@ -1170,16 +1170,16 @@ fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.
     return nullResponse(id);
 }
 
-fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
 
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     try notifyDiagnostics(arena, handle.*, config);
 
-    return if (client_capabilities.supports_semantic_tokens)
-        (semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
-    else
-        types.Response{ .id = id, .result = no_semantic_tokens_response };
+    // return if (client_capabilities.supports_semantic_tokens)
+    //     (semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
+    // else
+    //     types.Response{ .id = id, .result = no_semantic_tokens_response };
 }
 
 fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
@@ -1195,7 +1195,7 @@ fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: 
     return nullResponse(id);
 }
 
-fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     _ = config;
     _ = arena;
     const req = try requests.fromDynamicTree(arena, requests.SaveDocument, tree.root);
@@ -1205,7 +1205,6 @@ fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     else{
         logger.warn("Trying to save non existent document {s}", .{req.params.textDocument.uri});
     }
-    return nullResponse(id);
 }
 
 fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
@@ -1481,39 +1480,15 @@ fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
 }
 
 const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
+const NotifyProto = fn(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) anyerror!void;
 
-var method_map: std.StringHashMap(RequestProto) = undefined;
+var request_map: std.StringHashMap(RequestProto) = undefined;
+var notify_map: std.StringHashMap(NotifyProto) = undefined;
 
-pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
-    const id = if (tree.root.Object.get("id")) |id| switch (id) {
-        .Integer => |int| types.RequestId{ .Integer = int },
-        .String => |str| types.RequestId{ .String = str },
-        else => types.RequestId{ .Integer = 0 },
-    } else types.RequestId{ .Integer = 0 };
-
-    std.debug.assert(tree.root.Object.get("method") != null);
-    const method = tree.root.Object.get("method").?.String;
-    const unimplemented_map = std.ComptimeStringMap(void, .{
-        .{"textDocument/documentHighlight"},
-        .{"textDocument/codeAction"},
-        .{"textDocument/codeLens"},
-        .{"textDocument/documentLink"},
-        .{"textDocument/rangeFormatting"},
-        .{"textDocument/onTypeFormatting"},
-        .{"textDocument/prepareRename"},
-        .{"textDocument/foldingRange"},
-        .{"textDocument/selectionRange"},
-        .{"textDocument/semanticTokens/range"},
-        .{"workspace/didChangeWorkspaceFolders"},
-    });
-    if (unimplemented_map.has(method)) {
-        // TODO: Unimplemented methods, implement them and add them to server capabilities.
-        return try respondGeneric(arena, id, null_result_response);
-    }
-
-    const start_time = std.time.milliTimestamp();
-
-    if (method_map.get(method)) |handler| {
+fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) !void
+{
+    if (request_map.get(method)) |handler| {
+        const start_time = std.time.milliTimestamp();
         if(handler(arena, config, tree, id))|res|
         {
             try send(arena, res);
@@ -1523,13 +1498,57 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
         else |err|
         {
             logger.warn("[{}] handler error: {s}", .{id, @errorName(err)});
-            return try respondError(arena, id, not_implemented_response);
+            try respondError(arena, id, not_implemented_response);
         }
     }
     else{
         // no method
         logger.warn("[{}] unknown method: {s}", .{id, method});
-        return try respondError(arena, id, not_implemented_response);
+        const res = nullResponse(id);
+        try send(arena, res);
+    }
+}
+
+fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) !void
+{
+    if (notify_map.get(method)) |handler| {
+        const start_time = std.time.milliTimestamp();
+        try handler(arena, config, tree);
+        const end_time = std.time.milliTimestamp();
+        logger.debug("Took {}ms to process notify {s}", .{ end_time - start_time, method });
+    }
+    else{
+        logger.warn("unknown notify: {s}", .{method});
+    }
+}
+
+pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+    // request: id, method, ?params
+    // reponse: id, ?result, ?error
+    // notify: method, ?params
+    if (tree.root.Object.get("id")) |id| {
+        if(tree.root.Object.get("method")) |method| {
+            // request
+            switch (id) {
+                .Integer => |int| try request(arena, config, tree, types.RequestId{ .Integer = int }, method.String),
+                .String => |str| try request(arena, config, tree, types.RequestId{ .String = str }, method.String),
+                else => unreachable,
+            }
+        }
+        else{
+            // response
+            unreachable;
+        }
+    }
+    else{
+        if(tree.root.Object.get("method")) |method| {
+            // notify
+            try notify(arena, config, tree, method.String);
+        }
+        else{
+            // invalid            
+            unreachable;
+        }
     }
 }
 
@@ -1553,30 +1572,32 @@ pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8,
         config.builtin_path,
     );
 
-    method_map = std.StringHashMap(RequestProto).init(allocator);
-    try method_map.put("initialize", initializeHandler);
-    try method_map.put("shutdown", shutdownHandler);
-    try method_map.put("textDocument/semanticTokens/full", semanticTokensFullHandler);
-    try method_map.put("textDocument/didOpen", openDocumentHandler);
-    try method_map.put("textDocument/didChange", changeDocumentHandler);
-    try method_map.put("textDocument/didSave", saveDocumentHandler);
-    try method_map.put("textDocument/didClose", closeDocumentHandler);
-    try method_map.put("textDocument/completion", completionHandler);
-    try method_map.put("textDocument/signatureHelp", signatureHelpHandler);
-    try method_map.put("textDocument/definition", gotoDefinitionHandler);
-    try method_map.put("textDocument/typeDefinition", gotoDefinitionHandler);
-    try method_map.put("textDocument/implementation", gotoDefinitionHandler);
-    try method_map.put("textDocument/declaration", gotoDeclarationHandler);
-    try method_map.put("textDocument/hover", hoverHandler);
-    try method_map.put("textDocument/documentSymbol", documentSymbolsHandler);
-    try method_map.put("textDocument/formatting", formattingHandler);
-    try method_map.put("textDocument/rename", renameHandler);
-    try method_map.put("textDocument/references", referencesHandler);
+    request_map = std.StringHashMap(RequestProto).init(allocator);
+    try request_map.put("initialize", initializeHandler);
+    try request_map.put("shutdown", shutdownHandler);
+    try request_map.put("textDocument/semanticTokens/full", semanticTokensFullHandler);
+    try request_map.put("textDocument/didChange", changeDocumentHandler);
+    try request_map.put("textDocument/didClose", closeDocumentHandler);
+    try request_map.put("textDocument/completion", completionHandler);
+    try request_map.put("textDocument/signatureHelp", signatureHelpHandler);
+    try request_map.put("textDocument/definition", gotoDefinitionHandler);
+    try request_map.put("textDocument/typeDefinition", gotoDefinitionHandler);
+    try request_map.put("textDocument/implementation", gotoDefinitionHandler);
+    try request_map.put("textDocument/declaration", gotoDeclarationHandler);
+    try request_map.put("textDocument/hover", hoverHandler);
+    try request_map.put("textDocument/documentSymbol", documentSymbolsHandler);
+    try request_map.put("textDocument/formatting", formattingHandler);
+    try request_map.put("textDocument/rename", renameHandler);
+    try request_map.put("textDocument/references", referencesHandler);
+
+    notify_map = std.StringHashMap(NotifyProto).init(allocator);
+    try notify_map.put("textDocument/didOpen", openDocumentHandler);
+    try notify_map.put("textDocument/didSave", saveDocumentHandler);
 }
 
 pub fn deinit() void {
     keep_running = false;
-    method_map.deinit();
+    request_map.deinit();
     analysis.deinit();
     document_store.deinit();
     if (builtin_completions) |compls| {
