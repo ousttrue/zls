@@ -1182,7 +1182,7 @@ fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     //     types.Response{ .id = id, .result = no_semantic_tokens_response };
 }
 
-fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     const req = try requests.fromDynamicTree(arena, requests.ChangeDocument, tree.root);
 
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
@@ -1191,8 +1191,6 @@ fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: 
     } else {
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
     }
-
-    return nullResponse(id);
 }
 
 fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
@@ -1207,12 +1205,11 @@ fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     }
 }
 
-fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     _ = config;
     _ = arena;
     const req = try requests.fromDynamicTree(arena, requests.CloseDocument, tree.root);
     document_store.closeDocument(req.params.textDocument.uri);
-    return nullResponse(id);
 }
 
 fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
@@ -1576,8 +1573,6 @@ pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8,
     try request_map.put("initialize", initializeHandler);
     try request_map.put("shutdown", shutdownHandler);
     try request_map.put("textDocument/semanticTokens/full", semanticTokensFullHandler);
-    try request_map.put("textDocument/didChange", changeDocumentHandler);
-    try request_map.put("textDocument/didClose", closeDocumentHandler);
     try request_map.put("textDocument/completion", completionHandler);
     try request_map.put("textDocument/signatureHelp", signatureHelpHandler);
     try request_map.put("textDocument/definition", gotoDefinitionHandler);
@@ -1593,6 +1588,8 @@ pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8,
     notify_map = std.StringHashMap(NotifyProto).init(allocator);
     try notify_map.put("textDocument/didOpen", openDocumentHandler);
     try notify_map.put("textDocument/didSave", saveDocumentHandler);
+    try notify_map.put("textDocument/didChange", changeDocumentHandler);
+    try notify_map.put("textDocument/didClose", closeDocumentHandler);
 }
 
 pub fn deinit() void {
