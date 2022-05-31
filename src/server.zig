@@ -96,7 +96,7 @@ fn respondError(arena: *std.heap.ArenaAllocator, id: types.RequestId, e: types.R
 }
 
 fn nullResponse(id: types.RequestId) types.Response {
-    return types.Response{ .id = id, .result=null_result_response };
+    return types.Response{ .id = id, .result = null_result_response };
 }
 
 fn respondGeneric(arena: *std.heap.ArenaAllocator, id: types.RequestId, result: types.ResponseParams) !void {
@@ -1184,9 +1184,12 @@ fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     try publishDiagnostics(arena, handle.*, config);
 
-    // TODO:
-    if (client_capabilities.supports_semantic_tokens)
-        try semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } });
+    const res = if (client_capabilities.supports_semantic_tokens)
+        (semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
+    else
+        types.Response{ .id = id, .result = no_semantic_tokens_response };
+
+    try send(arena, res);
 }
 
 fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
@@ -1227,25 +1230,23 @@ fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: s
 
 fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     const req = try requests.fromDynamicTree(arena, requests.SemanticTokensFull, tree.root);
-    try semanticTokensFullHandlerReq(arena, config, id, req);
+    const res = try semanticTokensFullHandlerReq(arena, config, id, req);
+    try send(arena, res);
 }
 
-fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.SemanticTokensFull) !void {
-    if (config.enable_semantic_tokens) blk: {
-        const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
+fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.SemanticTokensFull) !types.Response {
+    if (config.enable_semantic_tokens) {
+        if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
+            const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &document_store, handle, offset_encoding);
+            return types.Response{
+                .id = id,
+                .result = .{ .SemanticTokensFull = .{ .data = token_array } },
+            };
+        } else {
             logger.warn("Trying to get semantic tokens of non existent document {s}", .{req.params.textDocument.uri});
-            break :blk;
-        };
-
-        const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &document_store, handle, offset_encoding);
-        defer allocator.free(token_array);
-
-        return try send(arena, types.Response{
-            .id = id,
-            .result = .{ .SemanticTokensFull = .{ .data = token_array } },
-        });
+        }
     }
-    return try respondGeneric(arena, id, no_semantic_tokens_response);
+    return types.Response{ .id = id, .result = no_semantic_tokens_response };
 }
 
 fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
