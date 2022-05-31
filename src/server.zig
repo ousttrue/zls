@@ -1049,7 +1049,7 @@ fn completeDot(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *Do
     };
 }
 
-fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
 
     const req = try requests.fromDynamicTree(arena, requests.Initialize, tree.root);
@@ -1081,10 +1081,10 @@ fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
         }
     }
 
-    // logger.info("zls initialized", .{});
-    // logger.info("{}", .{client_capabilities});
-    // logger.info("Using offset encoding: {s}", .{std.meta.tagName(offset_encoding)});
-    const res = types.Response{
+    logger.info("zls initialized", .{});
+    logger.info("{}", .{client_capabilities});
+    logger.info("Using offset encoding: {s}", .{std.meta.tagName(offset_encoding)});
+    return types.Response{
         .id = id,
         .result = .{
             .InitializeResult = .{
@@ -1156,12 +1156,10 @@ fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
             },
         },
     };
-
-    try send(arena, res);
 }
 
 pub var keep_running = true;
-fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !void {
+fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     _ = arena;
 
@@ -1169,25 +1167,22 @@ fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.
 
     keep_running = false;
     // Technically we should deinitialize first and send possible errors to the client
-    const res = nullResponse(id);
-    try send(arena, res);
+    return nullResponse(id);
 }
 
-fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
 
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     try notifyDiagnostics(arena, handle.*, config);
 
-    const res = if (client_capabilities.supports_semantic_tokens)
+    return if (client_capabilities.supports_semantic_tokens)
         (semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
     else
         types.Response{ .id = id, .result = no_semantic_tokens_response };
-
-    try send(arena, res);
 }
 
-fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.ChangeDocument, tree.root);
 
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
@@ -1197,36 +1192,33 @@ fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: 
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
     }
 
-    const res = nullResponse(id);
-    try send(arena, res);
+    return nullResponse(id);
 }
 
-fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
-    _ = id;
     _ = arena;
-
     const req = try requests.fromDynamicTree(arena, requests.SaveDocument, tree.root);
-
-    const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
+    if(document_store.getHandle(req.params.textDocument.uri))|handle|{
+        try document_store.applySave(handle);
+    }
+    else{
         logger.warn("Trying to save non existent document {s}", .{req.params.textDocument.uri});
-        return;
-    };
-    try document_store.applySave(handle);
+    }
+    return nullResponse(id);
 }
 
-fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
-    _ = id;
     _ = arena;
     const req = try requests.fromDynamicTree(arena, requests.CloseDocument, tree.root);
     document_store.closeDocument(req.params.textDocument.uri);
+    return nullResponse(id);
 }
 
-fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.SemanticTokensFull, tree.root);
-    const res = try semanticTokensFullHandlerReq(arena, config, id, req);
-    try send(arena, res);
+    return try semanticTokensFullHandlerReq(arena, config, id, req);
 }
 
 fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.SemanticTokensFull) !types.Response {
@@ -1268,10 +1260,9 @@ fn getCompletion(arena: *std.heap.ArenaAllocator, config: Config, id: types.Requ
     return types.Response{ .id = id, .result = no_completions_response };
 }
 
-fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Completion, tree.root);
-    const res = try getCompletion(arena, config, id, req);
-    try send(arena, res);
+    return try getCompletion(arena, config, id, req);
 }
 
 fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SignatureHelp) !types.Response {
@@ -1305,11 +1296,10 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reque
     return types.Response{ .id = id, .result = no_signatures_response };
 }
 
-fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.SignatureHelp, tree.root);
-    const res = try getSignature(arena, id, req);
-    try send(arena, res);
+    return try getSignature(arena, id, req);
 }
 
 fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config, resolve_alias: bool) !types.Response {
@@ -1334,16 +1324,14 @@ fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reques
     };
 }
 
-fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.GotoDefinition, tree.root);
-    const res = try gotoHandler(arena, id, req, config, true);
-    try send(arena, res);
+    return try gotoHandler(arena, id, req, config, true);
 }
 
-fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.GotoDeclaration, tree.root);
-    const res = try gotoHandler(arena, id, req, config, false);
-    try send(arena, res);
+    return try gotoHandler(arena, id, req, config, false);
 }
 
 fn getHover(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Hover) !types.Response {
@@ -1367,10 +1355,9 @@ fn getHover(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
     };
 }
 
-fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Hover, tree.root);
-    const res = try getHover(arena, config, id, req);
-    try send(arena, res);
+    return try getHover(arena, config, id, req);
 }
 
 fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.DocumentSymbols) !types.Response {
@@ -1385,11 +1372,10 @@ fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: 
     };
 }
 
-fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.DocumentSymbols, tree.root);
-    const res = try getDocumentSymbol(arena, id, req);
-    try send(arena, res);
+    return try getDocumentSymbol(arena, id, req);
 }
 
 fn doFormat(config: Config, id: types.RequestId, req: requests.Formatting) !types.Response {
@@ -1434,10 +1420,9 @@ fn doFormat(config: Config, id: types.RequestId, req: requests.Formatting) !type
     return nullResponse(id);
 }
 
-fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Formatting, tree.root);
-    const res = try doFormat(config, id, req);
-    try send(arena, res);
+    return try doFormat(config, id, req);
 }
 
 fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Rename) !types.Response
@@ -1462,10 +1447,9 @@ fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
     };
 }
 
-fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Rename, tree.root);
-    const res = try doRename(arena, config, id, req);
-    try send(arena, res);
+    return try doRename(arena, config, id, req);
 }
 
 fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.References)!types.Response
@@ -1491,13 +1475,12 @@ fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.Reque
     };
 }
 
-fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
-    const res = try getReference(arena, config, id, req);
-    try send(arena, res);
+    return try getReference(arena, config, id, req);
 }
 
-const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!void;
+const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
 
 var method_map: std.StringHashMap(RequestProto) = undefined;
 
@@ -1529,24 +1512,25 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
     }
 
     const start_time = std.time.milliTimestamp();
-    defer {
-        const end_time = std.time.milliTimestamp();
-        logger.debug("Took {}ms to process method {s}", .{ end_time - start_time, method });
-    }
-    // .{"initialized"},
-    // .{"$/cancelRequest"},
-    // .{"textDocument/willSave"},
 
     if (method_map.get(method)) |handler| {
-        try handler(arena, config, tree, id);
-        return;
+        if(handler(arena, config, tree, id))|res|
+        {
+            try send(arena, res);
+            const end_time = std.time.milliTimestamp();
+            logger.debug("[{}] Took {}ms to process method {s}", .{ id, end_time - start_time, method });
+        }
+        else |err|
+        {
+            logger.warn("[{}] handler error: {s}", .{id, @errorName(err)});
+            return try respondError(arena, id, not_implemented_response);
+        }
     }
-
-    if (tree.root.Object.get("id")) |_| {
+    else{
+        // no method
+        logger.warn("[{}] unknown method: {s}", .{id, method});
         return try respondError(arena, id, not_implemented_response);
     }
-    logger.debug("Method without return value not implemented: {s}", .{method});
-    return try respondGeneric(arena, id, null_result_response);
 }
 
 pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
