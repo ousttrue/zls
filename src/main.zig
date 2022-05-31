@@ -50,9 +50,7 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
                 .message = message,
             },
         },
-    }) catch |err| {
-        std.debug.print("Failed to send show message notification (error: {}).\n", .{err});
-    };
+    });
 }
 
 fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
@@ -91,6 +89,8 @@ fn loadConfigInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Co
 }
 
 pub fn main() anyerror!void {
+    server.stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
+
     // allocator = &gpa_state.allocator;
     // @TODO Using the GPA here, realloc calls hang currently for some reason
     const allocator = std.heap.page_allocator;
@@ -301,6 +301,6 @@ pub fn main() anyerror!void {
             arena.state = .{};
         }
 
-        try server.processJsonRpc(&arena, config, tree);
+        server.processJsonRpc(&arena, config, tree);
     }
 }

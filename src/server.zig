@@ -26,7 +26,7 @@ const data = switch (build_options.data_version) {
 const logger = std.log.scoped(.main);
 
 // Code is largely based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
-var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
+pub var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
 var allocator: std.mem.Allocator = undefined;
 
 var document_store: DocumentStore = undefined;
@@ -72,14 +72,14 @@ const no_semantic_tokens_response = types.ResponseParams{
 };
 
 /// Sends a request or response
-pub fn send(arena: *std.heap.ArenaAllocator, reqOrRes: anytype) !void {
+pub fn send(arena: *std.heap.ArenaAllocator, reqOrRes: anytype) void {
     var arr = std.ArrayList(u8).init(arena.allocator());
-    try std.json.stringify(reqOrRes, .{}, arr.writer());
+    std.json.stringify(reqOrRes, .{}, arr.writer()) catch @panic("stringify");
 
     const stdout_stream = stdout.writer();
-    try stdout_stream.print("Content-Length: {}\r\n\r\n", .{arr.items.len});
-    try stdout_stream.writeAll(arr.items);
-    try stdout.flush();
+    stdout_stream.print("Content-Length: {}\r\n\r\n", .{arr.items.len}) catch @panic("send");
+    stdout_stream.writeAll(arr.items) catch @panic("send");
+    stdout.flush() catch @panic("send");
 }
 
 fn truncateCompletions(list: []types.CompletionItem, max_detail_length: usize) void {
@@ -92,8 +92,8 @@ fn truncateCompletions(list: []types.CompletionItem, max_detail_length: usize) v
     }
 }
 
-fn respondError(arena: *std.heap.ArenaAllocator, id: types.RequestId, e: types.ResponseError) !void {
-    try send(arena, types.Response{ .id = id, .result = null_result_response, .@"error" = e });
+fn respondError(arena: *std.heap.ArenaAllocator, id: types.RequestId, e: types.ResponseError) void {
+    send(arena, types.Response{ .id = id, .result = null_result_response, .@"error" = e });
 }
 
 fn nullResponse(id: types.RequestId) types.Response {
@@ -199,7 +199,7 @@ fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Hand
         }
     }
 
-    try send(arena, types.Notification{
+    send(arena, types.Notification{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .PublishDiagnostics = .{
@@ -1484,44 +1484,50 @@ const NotifyProto = fn(arena: *std.heap.ArenaAllocator, config: Config, tree: st
 var request_map: std.StringHashMap(RequestProto) = undefined;
 var notify_map: std.StringHashMap(NotifyProto) = undefined;
 
-fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) !void
+fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void
 {
     if (request_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
         if(handler(arena, config, tree, id))|res|
         {
-            try send(arena, res);
+            send(arena, res);
             const end_time = std.time.milliTimestamp();
             logger.debug("[{}] Took {}ms to process method {s}", .{ id, end_time - start_time, method });
         }
         else |err|
         {
             logger.warn("[{}] handler error: {s}", .{id, @errorName(err)});
-            try respondError(arena, id, not_implemented_response);
+            respondError(arena, id, not_implemented_response);
         }
     }
     else{
         // no method
         logger.warn("[{}] unknown method: {s}", .{id, method});
         const res = nullResponse(id);
-        try send(arena, res);
+        send(arena, res);
     }
 }
 
-fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) !void
+fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) void
 {
     if (notify_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
-        try handler(arena, config, tree);
-        const end_time = std.time.milliTimestamp();
-        logger.debug("Took {}ms to process notify {s}", .{ end_time - start_time, method });
+        if(handler(arena, config, tree))
+        {
+            const end_time = std.time.milliTimestamp();
+            logger.debug("Took {}ms to process notify {s}", .{ end_time - start_time, method });
+        }
+        else|err|
+        {
+            logger.warn("notify error: {s}", .{@errorName(err)});
+        }
     }
     else{
         logger.warn("unknown notify: {s}", .{method});
     }
 }
 
-pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) void {
     // request: id, method, ?params
     // reponse: id, ?result, ?error
     // notify: method, ?params
@@ -1529,8 +1535,8 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
         if(tree.root.Object.get("method")) |method| {
             // request
             switch (id) {
-                .Integer => |int| try request(arena, config, tree, types.RequestId{ .Integer = int }, method.String),
-                .String => |str| try request(arena, config, tree, types.RequestId{ .String = str }, method.String),
+                .Integer => |int| request(arena, config, tree, types.RequestId{ .Integer = int }, method.String),
+                .String => |str| request(arena, config, tree, types.RequestId{ .String = str }, method.String),
                 else => unreachable,
             }
         }
@@ -1542,7 +1548,7 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
     else{
         if(tree.root.Object.get("method")) |method| {
             // notify
-            try notify(arena, config, tree, method.String);
+            notify(arena, config, tree, method.String);
         }
         else{
             // invalid            
@@ -1554,7 +1560,6 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
 pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
     allocator = a;
     analysis.init(allocator);
-    stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
     try document_store.init(
         allocator,
         config.zig_exe_path,
