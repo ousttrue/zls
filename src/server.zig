@@ -767,8 +767,8 @@ fn renameDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, h
     };
 }
 
-fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !void {
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return try respondGeneric(arena, id, null_result_response);
+fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !types.Response {
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
     var locs = std.ArrayList(types.Location).init(arena.allocator());
     try references.symbolReferences(
         arena,
@@ -780,30 +780,30 @@ fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.Request
         std.ArrayList(types.Location).append,
         skip_std_references,
     );
-    try send(arena, types.Response{
+    return types.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
-    });
+    };
 }
 
-fn referencesDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool, config: Config) !void {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return try respondGeneric(arena, id, null_result_response);
+fn referencesDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool, config: Config) !types.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
     var locs = std.ArrayList(types.Location).init(arena.allocator());
     try references.symbolReferences(arena, &document_store, decl, offset_encoding, include_decl, &locs, std.ArrayList(types.Location).append, config.skip_std_references);
-    try send(arena, types.Response{
+    return types.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
-    });
+    };
 }
 
-fn referencesDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool) !void {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return try respondGeneric(arena, id, null_result_response);
+fn referencesDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool) !types.Response {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
     var locs = std.ArrayList(types.Location).init(arena.allocator());
     try references.labelReferences(arena, decl, offset_encoding, include_decl, &locs, std.ArrayList(types.Location).append);
-    try send(arena, types.Response{
+    return types.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
-    });
+    };
 }
 
 fn hasComment(tree: Ast.Tree, start_token: Ast.TokenIndex, end_token: Ast.TokenIndex) bool {
@@ -1468,27 +1468,33 @@ fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json
     try send(arena, res);
 }
 
-fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
-    const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
+fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.References)!types.Response
+{
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get references in non existent document {s}", .{req.params.textDocument.uri});
-        return try respondGeneric(arena, id, null_result_response);
+        return nullResponse(id);
     };
 
-    if (req.params.position.character >= 0) {
-        const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-        const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
-
-        const include_decl = req.params.context.includeDeclaration;
-        switch (pos_context) {
-            .var_access => try referencesDefinitionGlobal(arena, id, handle, doc_position.absolute_index, include_decl, config.skip_std_references),
-            .field_access => |range| try referencesDefinitionFieldAccess(arena, id, handle, doc_position, range, include_decl, config),
-            .label => try referencesDefinitionLabel(arena, id, handle, doc_position.absolute_index, include_decl),
-            else => try respondGeneric(arena, id, null_result_response),
-        }
-    } else {
-        try respondGeneric(arena, id, null_result_response);
+    if (req.params.position.character < 0) {
+        return nullResponse(id);
     }
+
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
+
+    const include_decl = req.params.context.includeDeclaration;
+    return switch (pos_context) {
+        .var_access => try referencesDefinitionGlobal(arena, id, handle, doc_position.absolute_index, include_decl, config.skip_std_references),
+        .field_access => |range| try referencesDefinitionFieldAccess(arena, id, handle, doc_position, range, include_decl, config),
+        .label => try referencesDefinitionLabel(arena, id, handle, doc_position.absolute_index, include_decl),
+        else => nullResponse(id),
+    };
+}
+
+fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
+    const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
+    const res = try getReference(arena, config, id, req);
+    try send(arena, res);
 }
 
 const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!void;
