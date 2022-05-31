@@ -483,7 +483,7 @@ fn isSymbolChar(char: u8) bool {
     return std.ascii.isAlNum(char) or char == '_';
 }
 
-fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !void {
+fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !types.Response {
     var handle = decl_handle.handle;
 
     const location = switch (decl_handle.decl.*) {
@@ -491,18 +491,18 @@ fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, de
             if (resolve_alias) {
                 if (try analysis.resolveVarDeclAlias(&document_store, arena, .{ .node = node, .handle = handle })) |result| {
                     handle = result.handle;
-                    break :block result.location(offset_encoding) catch return;
+                    break :block try result.location(offset_encoding);
                 }
             }
 
             const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
-                return try respondGeneric(arena, id, null_result_response);
-            break :block offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding) catch return;
+                return nullResponse(id);
+            break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
         },
-        else => decl_handle.location(offset_encoding) catch return,
+        else => try decl_handle.location(offset_encoding),
     };
 
-    try send(arena, types.Response{
+    return types.Response{
         .id = id,
         .result = .{
             .Location = .{
@@ -519,10 +519,10 @@ fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, de
                 },
             },
         },
-    });
+    };
 }
 
-fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle) (std.os.WriteError || error{OutOfMemory})!void {
+fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle) (std.os.WriteError || error{OutOfMemory})!types.Response {
     const handle = decl_handle.handle;
     const tree = handle.tree;
 
@@ -546,7 +546,7 @@ fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle
                 break :def analysis.getContainerFieldSignature(tree, field);
             } else {
                 break :def analysis.nodeToString(tree, node) orelse
-                    return try respondGeneric(arena, id, null_result_response);
+                    return nullResponse(id);
             }
         },
         .param_decl => |param| def: {
@@ -586,14 +586,14 @@ fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle
             def_str;
     }
 
-    try send(arena, types.Response{
+    return types.Response{
         .id = id,
         .result = .{
             .Hover = .{
                 .contents = .{ .value = hover_text },
             },
         },
-    });
+    };
 }
 
 fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
@@ -610,34 +610,33 @@ fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, pos_index: usize, handle: *D
     return try analysis.lookupSymbolGlobal(&document_store, arena, handle, name, pos_index);
 }
 
-fn gotoDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !void {
+fn gotoDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return try respondGeneric(arena, id, null_result_response);
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
     return try gotoDefinitionSymbol(id, arena, decl, false);
 }
 
-fn gotoDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config, resolve_alias: bool) !void {
+fn gotoDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config, resolve_alias: bool) !types.Response {
     _ = config;
-
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return try respondGeneric(arena, id, null_result_response);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
     return try gotoDefinitionSymbol(id, arena, decl, resolve_alias);
 }
 
-fn hoverDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !void {
+fn hoverDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return try respondGeneric(arena, id, null_result_response);
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
     return try hoverSymbol(id, arena, decl);
 }
 
-fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !void {
+fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
     const name = identifierFromPosition(pos_index, handle.*);
-    if (name.len == 0) return try respondGeneric(arena, id, null_result_response);
+    if (name.len == 0) return nullResponse(id);
 
     inline for (data.builtins) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
-            try send(arena, types.Response{
+            return types.Response{
                 .id = id,
                 .result = .{
                     .Hover = .{
@@ -650,15 +649,17 @@ fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, 
                         },
                     },
                 },
-            });
+            };
         }
     }
+
+    unreachable;
 }
 
-fn hoverDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !void {
+fn hoverDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return try respondGeneric(arena, id, null_result_response);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
     return try hoverSymbol(id, arena, decl);
 }
 
@@ -691,29 +692,29 @@ fn getSymbolFieldAccess(handle: *DocumentStore.Handle, arena: *std.heap.ArenaAll
     return null;
 }
 
-fn gotoDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, config: Config, resolve_alias: bool) !void {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return try respondGeneric(arena, id, null_result_response);
+fn gotoDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, config: Config, resolve_alias: bool) !types.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
     return try gotoDefinitionSymbol(id, arena, decl, resolve_alias);
 }
 
-fn hoverDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, config: Config) !void {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return try respondGeneric(arena, id, null_result_response);
+fn hoverDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, config: Config) !types.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
     return try hoverSymbol(id, arena, decl);
 }
 
-fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !void {
+fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
     const tree = handle.tree;
 
-    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return try respondGeneric(arena, id, null_result_response);
+    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return nullResponse(id);
     const uri = (try document_store.uriFromImportStr(
         arena.allocator(),
         handle.*,
         import_str,
-    )) orelse return try respondGeneric(arena, id, null_result_response);
+    )) orelse return nullResponse(id);
 
-    try send(arena, types.Response{
+    return types.Response{
         .id = id,
         .result = .{
             .Location = .{
@@ -724,7 +725,7 @@ fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, po
                 },
             },
         },
-    });
+    };
 }
 
 fn renameDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !void {
@@ -1318,58 +1319,65 @@ fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: s
     try send(arena, res);
 }
 
-fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config, resolve_alias: bool) !void {
+fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config, resolve_alias: bool) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to go to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return try respondGeneric(arena, id, null_result_response);
+        return types.Response{ .id = id, .result = null_result_response };
     };
 
-    if (req.params.position.character >= 0) {
-        const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-        const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
-
-        switch (pos_context) {
-            .var_access => try gotoDefinitionGlobal(arena, id, doc_position.absolute_index, handle, config, resolve_alias),
-            .field_access => |range| try gotoDefinitionFieldAccess(arena, id, handle, doc_position, range, config, resolve_alias),
-            .string_literal => try gotoDefinitionString(arena, id, doc_position.absolute_index, handle, config),
-            .label => try gotoDefinitionLabel(arena, id, doc_position.absolute_index, handle, config),
-            else => try respondGeneric(arena, id, null_result_response),
-        }
-    } else {
-        try respondGeneric(arena, id, null_result_response);
+    if (req.params.position.character < 0) {
+        return types.Response{ .id = id, .result = null_result_response };
     }
+
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
+
+    return switch (pos_context) {
+        .var_access => try gotoDefinitionGlobal(arena, id, doc_position.absolute_index, handle, config, resolve_alias),
+        .field_access => |range| try gotoDefinitionFieldAccess(arena, id, handle, doc_position, range, config, resolve_alias),
+        .string_literal => try gotoDefinitionString(arena, id, doc_position.absolute_index, handle, config),
+        .label => try gotoDefinitionLabel(arena, id, doc_position.absolute_index, handle, config),
+        else => nullResponse(id),
+    };
 }
 
 fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     const req = try requests.fromDynamicTree(arena, requests.GotoDefinition, tree.root);
-    try gotoHandler(arena, id, req, config, true);
+    const res = try gotoHandler(arena, id, req, config, true);
+    try send(arena, res);
 }
 
 fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     const req = try requests.fromDynamicTree(arena, requests.GotoDeclaration, tree.root);
-    try gotoHandler(arena, id, req, config, false);
+    const res = try gotoHandler(arena, id, req, config, false);
+    try send(arena, res);
+}
+
+fn getHover(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Hover) !types.Response {
+    const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
+        logger.warn("Trying to get hover in non existent document {s}", .{req.params.textDocument.uri});
+        return nullResponse(id);
+    };
+
+    if (req.params.position.character < 0) {
+        return nullResponse(id);
+    }
+
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
+    return switch (pos_context) {
+        .builtin => try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, handle),
+        .var_access => try hoverDefinitionGlobal(arena, id, doc_position.absolute_index, handle, config),
+        .field_access => |range| try hoverDefinitionFieldAccess(arena, id, handle, doc_position, range, config),
+        .label => try hoverDefinitionLabel(arena, id, doc_position.absolute_index, handle, config),
+        else => nullResponse(id),
+    };
 }
 
 fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     const req = try requests.fromDynamicTree(arena, requests.Hover, tree.root);
-    const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to get hover in non existent document {s}", .{req.params.textDocument.uri});
-        return try respondGeneric(arena, id, null_result_response);
-    };
-
-    if (req.params.position.character >= 0) {
-        const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-        const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
-        switch (pos_context) {
-            .builtin => try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, handle),
-            .var_access => try hoverDefinitionGlobal(arena, id, doc_position.absolute_index, handle, config),
-            .field_access => |range| try hoverDefinitionFieldAccess(arena, id, handle, doc_position, range, config),
-            .label => try hoverDefinitionLabel(arena, id, doc_position.absolute_index, handle, config),
-            else => try respondGeneric(arena, id, null_result_response),
-        }
-    } else {
-        try respondGeneric(arena, id, null_result_response);
-    }
+    const res = try getHover(arena, config, id, req);
+    try send(arena, res);
 }
 
 fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
