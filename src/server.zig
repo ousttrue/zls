@@ -12,6 +12,7 @@ const offsets = @import("./offsets.zig");
 const semantic_tokens = @import("./semantic_tokens.zig");
 const shared = @import("./shared.zig");
 const Ast = std.zig.Ast;
+const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 
 const data = switch (build_options.data_version) {
     .master => @import("data/master.zig"),
@@ -1279,39 +1280,42 @@ fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
     try send(arena, res);
 }
 
+fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SignatureHelp) !types.Response {
+    if (req.params.position.character == 0)
+        return types.Response{ .id = id, .result = no_signatures_response };
+
+    if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
+        const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+        if (try getSignatureInfo(
+            &document_store,
+            arena,
+            handle,
+            doc_position.absolute_index,
+            data,
+        )) |sig_info| {
+            return types.Response{
+                .id = id,
+                .result = .{
+                    .SignatureHelp = .{
+                        .signatures = &[1]types.SignatureInformation{sig_info},
+                        .activeSignature = 0,
+                        .activeParameter = sig_info.activeParameter,
+                    },
+                },
+            };
+        }
+    } else {
+        logger.warn("Trying to get signature help in non existent document {s}", .{req.params.textDocument.uri});
+    }
+
+    return types.Response{ .id = id, .result = no_signatures_response };
+}
+
 fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.SignatureHelp, tree.root);
-
-    const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
-    const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to get signature help in non existent document {s}", .{req.params.textDocument.uri});
-        return try respondGeneric(arena, id, no_signatures_response);
-    };
-
-    if (req.params.position.character == 0)
-        return try respondGeneric(arena, id, no_signatures_response);
-
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    if (try getSignatureInfo(
-        &document_store,
-        arena,
-        handle,
-        doc_position.absolute_index,
-        data,
-    )) |sig_info| {
-        return try send(arena, types.Response{
-            .id = id,
-            .result = .{
-                .SignatureHelp = .{
-                    .signatures = &[1]types.SignatureInformation{sig_info},
-                    .activeSignature = 0,
-                    .activeParameter = sig_info.activeParameter,
-                },
-            },
-        });
-    }
-    return try respondGeneric(arena, id, no_signatures_response);
+    const res = try getSignature(arena, id, req);
+    try send(arena, res);
 }
 
 fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config, resolve_alias: bool) !void {
