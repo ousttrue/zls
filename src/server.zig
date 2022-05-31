@@ -1197,10 +1197,9 @@ fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     _ = config;
     _ = arena;
     const req = try requests.fromDynamicTree(arena, requests.SaveDocument, tree.root);
-    if(document_store.getHandle(req.params.textDocument.uri))|handle|{
+    if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applySave(handle);
-    }
-    else{
+    } else {
         logger.warn("Trying to save non existent document {s}", .{req.params.textDocument.uri});
     }
 }
@@ -1398,17 +1397,18 @@ fn doFormat(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
 
     const stdout_bytes = try process.stdout.?.reader().readAllAlloc(arena.allocator(), std.math.maxInt(usize));
 
+    var edits = try arena.allocator().alloc(types.TextEdit, 1);
+    edits[0] = .{
+        .range = try offsets.documentRange(handle.document, offset_encoding),
+        .newText = stdout_bytes,
+    };
+
     switch (try process.wait()) {
         .Exited => |code| if (code == 0) {
             return types.Response{
                 .id = id,
                 .result = .{
-                    .TextEdits = &[1]types.TextEdit{
-                        .{
-                            .range = try offsets.documentRange(handle.document, offset_encoding),
-                            .newText = stdout_bytes,
-                        },
-                    },
+                    .TextEdits = edits,
                 },
             };
         },
@@ -1423,8 +1423,7 @@ fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
     return try doFormat(arena, config, id, req);
 }
 
-fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Rename) !types.Response
-{
+fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Rename) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to rename in non existent document {s}", .{req.params.textDocument.uri});
         return nullResponse(id);
@@ -1450,8 +1449,7 @@ fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json
     return try doRename(arena, config, id, req);
 }
 
-fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.References)!types.Response
-{
+fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.References) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get references in non existent document {s}", .{req.params.textDocument.uri});
         return nullResponse(id);
@@ -1479,50 +1477,40 @@ fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
 }
 
 const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
-const NotifyProto = fn(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) anyerror!void;
+const NotifyProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) anyerror!void;
 
 var request_map: std.StringHashMap(RequestProto) = undefined;
 var notify_map: std.StringHashMap(NotifyProto) = undefined;
 
-fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void
-{
+fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void {
     if (request_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
-        if(handler(arena, config, tree, id))|res|
-        {
+        if (handler(arena, config, tree, id)) |res| {
             send(arena, res);
             const end_time = std.time.milliTimestamp();
             logger.debug("[{}] Took {}ms to process method {s}", .{ id, end_time - start_time, method });
-        }
-        else |err|
-        {
-            logger.warn("[{}] handler error: {s}", .{id, @errorName(err)});
+        } else |err| {
+            logger.warn("[{}] handler error: {s}", .{ id, @errorName(err) });
             respondError(arena, id, not_implemented_response);
         }
-    }
-    else{
+    } else {
         // no method
-        logger.warn("[{}] unknown method: {s}", .{id, method});
+        logger.warn("[{}] unknown method: {s}", .{ id, method });
         const res = nullResponse(id);
         send(arena, res);
     }
 }
 
-fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) void
-{
+fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) void {
     if (notify_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
-        if(handler(arena, config, tree))
-        {
+        if (handler(arena, config, tree)) {
             const end_time = std.time.milliTimestamp();
             logger.debug("Took {}ms to process notify {s}", .{ end_time - start_time, method });
-        }
-        else|err|
-        {
+        } else |err| {
             logger.warn("notify error: {s}", .{@errorName(err)});
         }
-    }
-    else{
+    } else {
         logger.warn("unknown notify: {s}", .{method});
     }
 }
@@ -1532,26 +1520,23 @@ pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std
     // reponse: id, ?result, ?error
     // notify: method, ?params
     if (tree.root.Object.get("id")) |id| {
-        if(tree.root.Object.get("method")) |method| {
+        if (tree.root.Object.get("method")) |method| {
             // request
             switch (id) {
                 .Integer => |int| request(arena, config, tree, types.RequestId{ .Integer = int }, method.String),
                 .String => |str| request(arena, config, tree, types.RequestId{ .String = str }, method.String),
                 else => unreachable,
             }
-        }
-        else{
+        } else {
             // response
             unreachable;
         }
-    }
-    else{
-        if(tree.root.Object.get("method")) |method| {
+    } else {
+        if (tree.root.Object.get("method")) |method| {
             // notify
             notify(arena, config, tree, method.String);
-        }
-        else{
-            // invalid            
+        } else {
+            // invalid
             unreachable;
         }
     }
