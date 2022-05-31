@@ -129,7 +129,7 @@ fn astLocationToRange(loc: Ast.Location) types.Range {
     };
 }
 
-fn publishDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle, config: Config) !void {
+fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle, config: Config) !void {
     const tree = handle.tree;
 
     var diagnostics = std.ArrayList(types.Diagnostic).init(arena.allocator());
@@ -1182,7 +1182,7 @@ fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
 
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
-    try publishDiagnostics(arena, handle.*, config);
+    try notifyDiagnostics(arena, handle.*, config);
 
     const res = if (client_capabilities.supports_semantic_tokens)
         (semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
@@ -1193,17 +1193,17 @@ fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
 }
 
 fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
-    _ = id;
-
     const req = try requests.fromDynamicTree(arena, requests.ChangeDocument, tree.root);
 
-    const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
+    if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
+        try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
+        try notifyDiagnostics(arena, handle.*, config);
+    } else {
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
-        return;
-    };
+    }
 
-    try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-    try publishDiagnostics(arena, handle.*, config);
+    const res = nullResponse(id);
+    try send(arena, res);
 }
 
 fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !void {
