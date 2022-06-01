@@ -1,6 +1,7 @@
 const std = @import("std");
 const Config = @import("./Config.zig");
 const types = @import("./types.zig");
+const readRequestHeader = @import("./header.zig").readRequestHeader;
 
 const logger = std.log.scoped(.jsonrpc);
 pub var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
@@ -97,5 +98,51 @@ pub fn process(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.V
             // invalid
             return RpcError.Format;
         }
+    }
+}
+
+pub var keep_running = true;
+pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
+    _ = config;
+    _ = arena;
+
+    logger.info("Server closing...", .{});
+
+    keep_running = false;
+    // Technically we should deinitialize first and send possible errors to the client
+    return types.Response.createNull(id);
+}
+
+pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, config: Config) void {
+    const reader = r.reader();
+
+    // Arena used for temporary allocations while handling a request
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    // This JSON parser is passed to processJsonRpc and reset.
+    var json_parser = std.json.Parser.init(allocator, false);
+    defer json_parser.deinit();
+
+    while (keep_running) {
+        const headers = readRequestHeader(arena.allocator(), reader) catch @panic("readRequestHeader");
+        const buf = arena.allocator().alloc(u8, headers.content_length) catch @panic("arena.alloc");
+        reader.readNoEof(buf) catch @panic("readNoEof");
+
+        var tree = json_parser.parse(buf) catch @panic("jason.parse");
+        defer {
+            tree.deinit();
+            json_parser.reset();
+            arena.deinit();
+            arena.state = .{};
+        }
+
+        process(&arena, config, tree) catch |err|
+            {
+            switch (err) {
+                RpcError.Format => @panic("jsonrpc: format"),
+                RpcError.NotImplemented => @panic("jsonrpc: not implemented"),
+            }
+        };
     }
 }

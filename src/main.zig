@@ -6,7 +6,6 @@ const server = @import("server.zig");
 const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
-const readRequestHeader = @import("./header.zig").readRequestHeader;
 const jsonrpc = @import("./jsonrpc.zig");
 
 
@@ -26,7 +25,7 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
         return;
     }
     // After shutdown, pipe output to stderr
-    if (!server.keep_running) {
+    if (!jsonrpc.keep_running) {
         std.debug.print("[{s}-{s}] " ++ format ++ "\n", .{ @tagName(message_level), @tagName(scope) } ++ args);
         return;
     }
@@ -279,18 +278,10 @@ pub fn main() anyerror!void {
     try server.init(allocator, config, build_runner_path, build_runner_cache_path);
     defer server.deinit();
 
-    // This JSON parser is passed to processJsonRpc and reset.
-    var json_parser = std.json.Parser.init(allocator, false);
-    defer json_parser.deinit();
-
-    // Arena used for temporary allocations while handling a request
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-
     jsonrpc.request_map = std.StringHashMap(jsonrpc.RequestProto).init(allocator);
     defer jsonrpc.request_map.deinit();
     try jsonrpc.request_map.put("initialize", server.initializeHandler);
-    try jsonrpc.request_map.put("shutdown", server.shutdownHandler);
+    try jsonrpc.request_map.put("shutdown", jsonrpc.shutdownHandler);
     try jsonrpc.request_map.put("textDocument/semanticTokens/full", server.semanticTokensFullHandler);
     try jsonrpc.request_map.put("textDocument/completion", server.completionHandler);
     try jsonrpc.request_map.put("textDocument/signatureHelp", server.signatureHelpHandler);
@@ -311,30 +302,5 @@ pub fn main() anyerror!void {
     try jsonrpc.notify_map.put("textDocument/didChange", server.changeDocumentHandler);
     try jsonrpc.notify_map.put("textDocument/didClose", server.closeDocumentHandler);
 
-    const reader = std.io.getStdIn().reader();
-    while (server.keep_running) {
-        const headers = readRequestHeader(arena.allocator(), reader) catch |err| {
-            logger.err("{s}; exiting!", .{@errorName(err)});
-            return;
-        };
-        const buf = try arena.allocator().alloc(u8, headers.content_length);
-        try reader.readNoEof(buf);
-
-        var tree = try json_parser.parse(buf);
-        defer {
-            tree.deinit();
-            json_parser.reset();
-            arena.deinit();
-            arena.state = .{};
-        }
-
-        jsonrpc.process(&arena, config, tree) catch |err|
-        {
-            switch(err)
-            {
-                jsonrpc.RpcError.Format => @panic("jsonrpc: format"),
-                jsonrpc.RpcError.NotImplemented => @panic("jsonrpc: not implemented"),
-            }
-        };
-    }
+    jsonrpc.readloop(allocator, std.io.getStdIn(), config);
 }

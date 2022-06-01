@@ -1114,18 +1114,6 @@ pub fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: 
     };
 }
 
-pub var keep_running = true;
-pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
-    _ = config;
-    _ = arena;
-
-    logger.info("Server closing...", .{});
-
-    keep_running = false;
-    // Technically we should deinitialize first and send possible errors to the client
-    return types.Response.createNull(id);
-}
-
 pub fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
@@ -1458,7 +1446,6 @@ pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8,
 }
 
 pub fn deinit() void {
-    keep_running = false;
     analysis.deinit();
     document_store.deinit();
     if (builtin_completions) |compls| {
