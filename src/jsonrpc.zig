@@ -110,7 +110,7 @@ pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree
     return types.Response.createNull(id);
 }
 
-pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File) void {
+pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, notifyQueue: *std.ArrayList(types.Notification)) void {
     stdout = std.io.bufferedWriter(w.writer());
     keep_running = true;
     const reader = r.reader();
@@ -143,5 +143,11 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File) vo
                 RpcError.NotImplemented => @panic("jsonrpc: not implemented"),
             }
         };
+
+        for (notifyQueue.items) |*message| {
+            send(&arena, message.*);
+            logger.debug("notify...", .{});
+        }
+        notifyQueue.resize(0) catch @panic("resize");
     }
 }

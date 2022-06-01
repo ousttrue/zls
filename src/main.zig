@@ -298,5 +298,5 @@ pub fn main() anyerror!void {
     try jsonrpc.notify_map.put("textDocument/didChange", server.changeDocumentHandler);
     try jsonrpc.notify_map.put("textDocument/didClose", server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut());
+    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut(), &server.notifyQueue);
 }

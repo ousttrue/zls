@@ -23,11 +23,12 @@ const data = switch (build_options.data_version) {
     .@"0.9.0" => @import("data/0.9.0.zig"),
 };
 
-pub var config = Config{};
 const logger = std.log.scoped(.main);
+pub var config = Config{};
 
 // Code is largely based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
 var allocator: std.mem.Allocator = undefined;
+pub var notifyQueue: std.ArrayList(types.Notification) = undefined;
 
 var document_store: DocumentStore = undefined;
 
@@ -86,85 +87,87 @@ fn astLocationToRange(loc: Ast.Location) types.Range {
     };
 }
 
-// fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle) !void {
-//     const tree = handle.tree;
+fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle) !void {
+    const tree = handle.tree;
 
-//     var diagnostics = std.ArrayList(types.Diagnostic).init(arena.allocator());
+    var diagnostics = std.ArrayList(types.Diagnostic).init(arena.allocator());
 
-//     for (tree.errors) |err| {
-//         const loc = tree.tokenLocation(0, err.token);
+    for (tree.errors) |err| {
+        const loc = tree.tokenLocation(0, err.token);
 
-//         var mem_buffer: [256]u8 = undefined;
-//         var fbs = std.io.fixedBufferStream(&mem_buffer);
-//         try tree.renderError(err, fbs.writer());
+        var mem_buffer: [256]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&mem_buffer);
+        try tree.renderError(err, fbs.writer());
 
-//         try diagnostics.append(.{
-//             .range = astLocationToRange(loc),
-//             .severity = .Error,
-//             .code = @tagName(err.tag),
-//             .source = "zls",
-//             .message = try arena.allocator().dupe(u8, fbs.getWritten()),
-//             // .relatedInformation = undefined
-//         });
-//     }
+        try diagnostics.append(.{
+            .range = astLocationToRange(loc),
+            .severity = .Error,
+            .code = @tagName(err.tag),
+            .source = "zls",
+            .message = try arena.allocator().dupe(u8, fbs.getWritten()),
+            // .relatedInformation = undefined
+        });
+    }
 
-//     // TODO: style warnings for types, values and declarations below root scope
-//     if (tree.errors.len == 0) {
-//         for (tree.rootDecls()) |decl_idx| {
-//             const decl = tree.nodes.items(.tag)[decl_idx];
-//             switch (decl) {
-//                 .fn_proto,
-//                 .fn_proto_multi,
-//                 .fn_proto_one,
-//                 .fn_proto_simple,
-//                 .fn_decl,
-//                 => blk: {
-//                     var buf: [1]Ast.Node.Index = undefined;
-//                     const func = ast.fnProto(tree, decl_idx, &buf).?;
-//                     if (func.extern_export_inline_token != null) break :blk;
+    // TODO: style warnings for types, values and declarations below root scope
+    if (tree.errors.len == 0) {
+        for (tree.rootDecls()) |decl_idx| {
+            const decl = tree.nodes.items(.tag)[decl_idx];
+            switch (decl) {
+                .fn_proto,
+                .fn_proto_multi,
+                .fn_proto_one,
+                .fn_proto_simple,
+                .fn_decl,
+                => blk: {
+                    var buf: [1]Ast.Node.Index = undefined;
+                    const func = ast.fnProto(tree, decl_idx, &buf).?;
+                    if (func.extern_export_inline_token != null) break :blk;
 
-//                     if (config.warn_style) {
-//                         if (func.name_token) |name_token| {
-//                             const loc = tree.tokenLocation(0, name_token);
+                    if (config.warn_style) {
+                        if (func.name_token) |name_token| {
+                            const loc = tree.tokenLocation(0, name_token);
 
-//                             const is_type_function = analysis.isTypeFunction(tree, func);
+                            const is_type_function = analysis.isTypeFunction(tree, func);
 
-//                             const func_name = tree.tokenSlice(name_token);
-//                             if (!is_type_function and !analysis.isCamelCase(func_name)) {
-//                                 try diagnostics.append(.{
-//                                     .range = astLocationToRange(loc),
-//                                     .severity = .Information,
-//                                     .code = "BadStyle",
-//                                     .source = "zls",
-//                                     .message = "Functions should be camelCase",
-//                                 });
-//                             } else if (is_type_function and !analysis.isPascalCase(func_name)) {
-//                                 try diagnostics.append(.{
-//                                     .range = astLocationToRange(loc),
-//                                     .severity = .Information,
-//                                     .code = "BadStyle",
-//                                     .source = "zls",
-//                                     .message = "Type functions should be PascalCase",
-//                                 });
-//                             }
-//                         }
-//                     }
-//                 },
-//                 else => {},
-//             }
-//         }
-//     }
+                            const func_name = tree.tokenSlice(name_token);
+                            if (!is_type_function and !analysis.isCamelCase(func_name)) {
+                                try diagnostics.append(.{
+                                    .range = astLocationToRange(loc),
+                                    .severity = .Information,
+                                    .code = "BadStyle",
+                                    .source = "zls",
+                                    .message = "Functions should be camelCase",
+                                });
+                            } else if (is_type_function and !analysis.isPascalCase(func_name)) {
+                                try diagnostics.append(.{
+                                    .range = astLocationToRange(loc),
+                                    .severity = .Information,
+                                    .code = "BadStyle",
+                                    .source = "zls",
+                                    .message = "Type functions should be PascalCase",
+                                });
+                            }
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
 
-//     send(arena, types.Notification{
-//         .method = "textDocument/publishDiagnostics",
-//         .params = .{
-//             .PublishDiagnostics = .{
-//                 .uri = handle.uri(),
-//                 .diagnostics = diagnostics.items,
-//             },
-//         },
-//     });
-// }
+    const notification = types.Notification{
+        .method = "textDocument/publishDiagnostics",
+        .params = .{
+            .PublishDiagnostics = .{
+                .uri = handle.uri(),
+                .diagnostics = diagnostics.items,
+            },
+        },
+    };
+
+    try notifyQueue.insert(0, notification);
+}
 
 fn typeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(types.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *DocumentStore.Handle) error{OutOfMemory}!void {
     const type_handle = field_access.original;
@@ -1097,13 +1100,7 @@ pub fn openDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.Value
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     _ = handle;
 
-    // TODO:
-    // try notifyDiagnostics(arena, handle.*);
-
-    // return if (client_capabilities.supports_semantic_tokens)
-    //     (semanticTokensFullHandlerReq(arena, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
-    // else
-    //     types.Response{ .id = id, .result = no_semantic_tokens_response };
+    try notifyDiagnostics(arena, handle.*);
 }
 
 pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) !void {
@@ -1112,7 +1109,7 @@ pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.Val
 
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-        // try notifyDiagnostics(arena, handle.*);
+        try notifyDiagnostics(arena, handle.*);
     } else {
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
     }
@@ -1404,6 +1401,7 @@ pub fn referencesHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTr
 pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
     allocator = a;
     analysis.init(allocator);
+    notifyQueue = std.ArrayList(types.Notification).init(allocator);
     try document_store.init(
         allocator,
         config.zig_exe_path,
@@ -1423,6 +1421,7 @@ pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_ca
 
 pub fn deinit() void {
     analysis.deinit();
+    notifyQueue.deinit();
     document_store.deinit();
     if (builtin_completions) |compls| {
         allocator.free(compls);
