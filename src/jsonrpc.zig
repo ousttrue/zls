@@ -1,5 +1,4 @@
 const std = @import("std");
-const Config = @import("./Config.zig");
 const types = @import("./types.zig");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
 
@@ -11,8 +10,8 @@ pub const RpcError = error{
     NotImplemented,
 };
 
-pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
-pub const NotifyProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) anyerror!void;
+pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
+pub const NotifyProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void;
 
 pub var request_map: std.StringHashMap(RequestProto) = undefined;
 pub var notify_map: std.StringHashMap(NotifyProto) = undefined;
@@ -40,10 +39,10 @@ fn showMessage(message_type: types.MessageType, message: []const u8) !void {
     });
 }
 
-fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void {
+fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void {
     if (request_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
-        if (handler(arena, config, tree, id)) |res| {
+        if (handler(arena, tree, id)) |res| {
             send(arena, res);
             const end_time = std.time.milliTimestamp();
             logger.debug("id[{}] {s} => {}ms", .{ id.toInt(i64), method, end_time - start_time });
@@ -60,10 +59,10 @@ fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.Value
     }
 }
 
-fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) void {
+fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, method: []const u8) void {
     if (notify_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
-        if (handler(arena, config, tree)) {
+        if (handler(arena, tree)) {
             const end_time = std.time.milliTimestamp();
             logger.debug("{s} => {}ms", .{ method, end_time - start_time });
         } else |err| {
@@ -74,7 +73,7 @@ fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueT
     }
 }
 
-pub fn process(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) RpcError!void {
+pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) RpcError!void {
     // request: id, method, ?params
     // reponse: id, ?result, ?error
     // notify: method, ?params
@@ -82,7 +81,7 @@ pub fn process(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.V
         if (tree.root.Object.get("method")) |method| {
             // request
             if (types.RequestId.fromJson(idValue)) |id| {
-                request(arena, config, tree, id, method.String);
+                request(arena, tree, id, method.String);
             } else {
                 return RpcError.Format;
             }
@@ -93,7 +92,7 @@ pub fn process(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.V
     } else {
         if (tree.root.Object.get("method")) |method| {
             // notify
-            notify(arena, config, tree, method.String);
+            notify(arena, tree, method.String);
         } else {
             // invalid
             return RpcError.Format;
@@ -102,18 +101,16 @@ pub fn process(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.V
 }
 
 pub var keep_running = false;
-pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
-    _ = config;
+pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = arena;
-
+    _ = tree;
     logger.info("Server closing...", .{});
-
     keep_running = false;
     // Technically we should deinitialize first and send possible errors to the client
     return types.Response.createNull(id);
 }
 
-pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, config: Config) void {
+pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File) void {
     stdout = std.io.bufferedWriter(w.writer());
     keep_running = true;
     const reader = r.reader();
@@ -139,7 +136,7 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, co
             arena.state = .{};
         }
 
-        process(&arena, config, tree) catch |err|
+        process(&arena, tree) catch |err|
             {
             switch (err) {
                 RpcError.Format => @panic("jsonrpc: format"),

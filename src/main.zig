@@ -8,7 +8,6 @@ const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
 const jsonrpc = @import("./jsonrpc.zig");
 
-
 const logger = std.log.scoped(.main);
 
 // Always set this to debug to make std.log call into our handler, then control the runtime
@@ -131,14 +130,13 @@ pub fn main() anyerror!void {
 
     // Read the configuration, if any.
     const config_parse_options = std.json.ParseOptions{ .allocator = allocator };
-    var config = Config{};
-    defer std.json.parseFree(Config, config, config_parse_options);
+    defer std.json.parseFree(Config, server.config, config_parse_options);
 
     config_read: {
         if (config_path) |path| {
             defer allocator.free(path);
             if (loadConfigFile(allocator, path)) |conf| {
-                config = conf;
+                server.config = conf;
                 break :config_read;
             }
             std.debug.print("Could not open configuration file '{s}'\n", .{path});
@@ -147,14 +145,14 @@ pub fn main() anyerror!void {
         if (try known_folders.getPath(allocator, .local_configuration)) |path| {
             config_path = path;
             if (loadConfigInFolder(allocator, path)) |conf| {
-                config = conf;
+                server.config = conf;
                 break :config_read;
             }
         }
         if (try known_folders.getPath(allocator, .global_configuration)) |path| {
             config_path = path;
             if (loadConfigInFolder(allocator, path)) |conf| {
-                config = conf;
+                server.config = conf;
                 break :config_read;
             }
         }
@@ -164,7 +162,7 @@ pub fn main() anyerror!void {
 
     // Find the zig executable in PATH
     find_zig: {
-        if (config.zig_exe_path) |exe_path| {
+        if (server.config.zig_exe_path) |exe_path| {
             if (std.fs.path.isAbsolute(exe_path)) not_valid: {
                 std.fs.cwd().access(exe_path, .{}) catch break :not_valid;
                 break :find_zig;
@@ -172,13 +170,13 @@ pub fn main() anyerror!void {
             logger.debug("zig path `{s}` is not absolute, will look in path", .{exe_path});
             allocator.free(exe_path);
         }
-        config.zig_exe_path = try setup.findZig(allocator);
+        server.config.zig_exe_path = try setup.findZig(allocator);
     }
 
-    if (config.zig_exe_path) |exe_path| {
+    if (server.config.zig_exe_path) |exe_path| {
         logger.info("Using zig executable {s}", .{exe_path});
 
-        if (config.zig_lib_path == null) find_lib_path: {
+        if (server.config.zig_lib_path == null) find_lib_path: {
             // Use `zig env` to find the lib path
             const zig_env_result = try std.ChildProcess.exec(.{
                 .allocator = allocator,
@@ -211,9 +209,9 @@ pub fn main() anyerror!void {
                         };
                         defer std.json.parseFree(Env, json_env, .{ .allocator = allocator });
                         // We know this is allocated with `allocator`, we just steal it!
-                        config.zig_lib_path = json_env.lib_dir.?;
+                        server.config.zig_lib_path = json_env.lib_dir.?;
                         json_env.lib_dir = null;
-                        logger.info("Using zig lib path '{s}'", .{config.zig_lib_path});
+                        logger.info("Using zig lib path '{s}'", .{server.config.zig_lib_path});
                     }
                 },
                 else => logger.err("zig env invocation failed", .{}),
@@ -223,15 +221,15 @@ pub fn main() anyerror!void {
         logger.warn("Zig executable path not specified in zls.json and could not be found in PATH", .{});
     }
 
-    if (config.zig_lib_path == null) {
+    if (server.config.zig_lib_path == null) {
         logger.warn("Zig standard library path not specified in zls.json and could not be resolved from the zig executable", .{});
     }
 
-    if (config.builtin_path == null and config.zig_exe_path != null and config_path != null) blk: {
+    if (server.config.builtin_path == null and server.config.zig_exe_path != null and config_path != null) blk: {
         const result = try std.ChildProcess.exec(.{
             .allocator = allocator,
             .argv = &.{
-                config.zig_exe_path.?,
+                server.config.zig_exe_path.?,
                 "build-exe",
                 "--show-builtin",
             },
@@ -251,10 +249,10 @@ pub fn main() anyerror!void {
 
         try f.writer().writeAll(result.stdout);
 
-        config.builtin_path = try std.fs.path.join(allocator, &.{ config_path.?, "builtin.zig" });
+        server.config.builtin_path = try std.fs.path.join(allocator, &.{ config_path.?, "builtin.zig" });
     }
 
-    const build_runner_path = if (config.build_runner_path) |p|
+    const build_runner_path = if (server.config.build_runner_path) |p|
         try allocator.dupe(u8, p)
     else blk: {
         var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
@@ -262,7 +260,7 @@ pub fn main() anyerror!void {
         break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
     };
 
-    const build_runner_cache_path = if (config.build_runner_cache_path) |p|
+    const build_runner_cache_path = if (server.config.build_runner_cache_path) |p|
         try allocator.dupe(u8, p)
     else blk: {
         const cache_dir_path = (try known_folders.getPath(allocator, .cache)) orelse {
@@ -273,7 +271,7 @@ pub fn main() anyerror!void {
         break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
     };
 
-    try server.init(allocator, config, build_runner_path, build_runner_cache_path);
+    try server.init(allocator, build_runner_path, build_runner_cache_path);
     defer server.deinit();
 
     jsonrpc.request_map = std.StringHashMap(jsonrpc.RequestProto).init(allocator);
@@ -300,5 +298,5 @@ pub fn main() anyerror!void {
     try jsonrpc.notify_map.put("textDocument/didChange", server.changeDocumentHandler);
     try jsonrpc.notify_map.put("textDocument/didClose", server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut(), config);
+    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut());
 }
