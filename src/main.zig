@@ -91,8 +91,6 @@ fn loadConfigInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Co
 }
 
 pub fn main() anyerror!void {
-    jsonrpc.stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
-
     // allocator = &gpa_state.allocator;
     // @TODO Using the GPA here, realloc calls hang currently for some reason
     const allocator = std.heap.page_allocator;
@@ -302,5 +300,5 @@ pub fn main() anyerror!void {
     try jsonrpc.notify_map.put("textDocument/didChange", server.changeDocumentHandler);
     try jsonrpc.notify_map.put("textDocument/didClose", server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), config);
+    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut(), config);
 }

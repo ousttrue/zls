@@ -4,7 +4,7 @@ const types = @import("./types.zig");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
 
 const logger = std.log.scoped(.jsonrpc);
-pub var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
+var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
 
 pub const RpcError = error{
     Format,
@@ -101,7 +101,7 @@ pub fn process(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.V
     }
 }
 
-pub var keep_running = true;
+pub var keep_running = false;
 pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     _ = arena;
@@ -113,7 +113,9 @@ pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.j
     return types.Response.createNull(id);
 }
 
-pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, config: Config) void {
+pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, config: Config) void {
+    stdout = std.io.bufferedWriter(w.writer());
+    keep_running = true;
     const reader = r.reader();
 
     // Arena used for temporary allocations while handling a request
