@@ -21,9 +21,30 @@ pub const Location = struct {
 
 /// Id of a request
 pub const RequestId = union(enum) {
+    const Self = @This();
+
     String: string,
     Integer: i64,
     Float: f64,
+
+    pub fn fromJson(value: std.json.Value) ?RequestId
+    {
+        return switch(value){
+            .Integer => |int| .{.Integer=int},
+            .String => |str| .{.String=str},
+            else => null,
+        };
+    }
+
+    pub fn toInt(self: *const Self, comptime t: type) t
+    {
+        return switch(self.*)
+        {
+            .String => std.fmt.parseInt(t, self.String, 10) catch @panic("parseInt"),
+            .Integer => @intCast(t, self.Integer),
+            .Float => @floatToInt(t, self.Float),
+        };
+    }
 };
 
 /// Hover response
@@ -68,6 +89,10 @@ pub const Notification = struct {
     params: Params,
 };
 
+pub const null_result_response = ResponseParams{
+    .Null = null,
+};
+
 // "error":{"code":-32601,"message":"NotImplemented"}}
 pub const ResponseError = struct{
     code: i32, 
@@ -79,6 +104,24 @@ pub const Response = struct {
     id: RequestId,
     result: ResponseParams,
     @"error": ?ResponseError=null,
+
+    pub fn createNull(id: RequestId) Response
+    {
+        return Response{ .id = id, .result = null_result_response };
+    }
+
+    pub fn createError(id: RequestId, e: ResponseError) Response
+    {
+        return Response{ .id = id, .result = null_result_response, .@"error" = e };
+    }
+
+    pub fn createErrorNotImplemented(id: RequestId) Response
+    {
+        return createError(id, .{
+            .code = -32601,
+            .message = "NotImplemented",
+        });
+    }
 };
 
 /// Type of a debug message

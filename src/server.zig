@@ -26,7 +26,6 @@ const data = switch (build_options.data_version) {
 const logger = std.log.scoped(.main);
 
 // Code is largely based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
-pub var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
 var allocator: std.mem.Allocator = undefined;
 
 var document_store: DocumentStore = undefined;
@@ -40,15 +39,6 @@ const ClientCapabilities = struct {
 
 var client_capabilities = ClientCapabilities{};
 var offset_encoding = offsets.Encoding.utf16;
-
-const not_implemented_response = types.ResponseError{
-    .code = -32601,
-    .message = "NotImplemented",
-};
-
-const null_result_response = types.ResponseParams{
-    .Null = null,
-};
 
 const no_completions_response = types.ResponseParams{
     .CompletionList = .{
@@ -71,16 +61,6 @@ const no_semantic_tokens_response = types.ResponseParams{
     },
 };
 
-/// Sends a request or response
-pub fn send(arena: *std.heap.ArenaAllocator, reqOrRes: anytype) void {
-    var arr = std.ArrayList(u8).init(arena.allocator());
-    std.json.stringify(reqOrRes, .{}, arr.writer()) catch @panic("stringify");
-
-    const stdout_stream = stdout.writer();
-    stdout_stream.print("Content-Length: {}\r\n\r\n", .{arr.items.len}) catch @panic("send");
-    stdout_stream.writeAll(arr.items) catch @panic("send");
-    stdout.flush() catch @panic("send");
-}
 
 fn truncateCompletions(list: []types.CompletionItem, max_detail_length: usize) void {
     for (list) |*item| {
@@ -90,30 +70,6 @@ fn truncateCompletions(list: []types.CompletionItem, max_detail_length: usize) v
             }
         }
     }
-}
-
-fn respondError(arena: *std.heap.ArenaAllocator, id: types.RequestId, e: types.ResponseError) void {
-    send(arena, types.Response{ .id = id, .result = null_result_response, .@"error" = e });
-}
-
-fn nullResponse(id: types.RequestId) types.Response {
-    return types.Response{ .id = id, .result = null_result_response };
-}
-
-fn respondGeneric(arena: *std.heap.ArenaAllocator, id: types.RequestId, result: types.ResponseParams) !void {
-    try send(arena, types.Response{ .id = id, .result = result });
-}
-
-fn showMessage(message_type: types.MessageType, message: []const u8) !void {
-    try send(types.Notification{
-        .method = "window/showMessage",
-        .params = .{
-            .ShowMessageParams = .{
-                .type = message_type,
-                .message = message,
-            },
-        },
-    });
 }
 
 // TODO: Is this correct or can we get a better end?
@@ -130,85 +86,85 @@ fn astLocationToRange(loc: Ast.Location) types.Range {
     };
 }
 
-fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle, config: Config) !void {
-    const tree = handle.tree;
+// fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle, config: Config) !void {
+//     const tree = handle.tree;
 
-    var diagnostics = std.ArrayList(types.Diagnostic).init(arena.allocator());
+//     var diagnostics = std.ArrayList(types.Diagnostic).init(arena.allocator());
 
-    for (tree.errors) |err| {
-        const loc = tree.tokenLocation(0, err.token);
+//     for (tree.errors) |err| {
+//         const loc = tree.tokenLocation(0, err.token);
 
-        var mem_buffer: [256]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&mem_buffer);
-        try tree.renderError(err, fbs.writer());
+//         var mem_buffer: [256]u8 = undefined;
+//         var fbs = std.io.fixedBufferStream(&mem_buffer);
+//         try tree.renderError(err, fbs.writer());
 
-        try diagnostics.append(.{
-            .range = astLocationToRange(loc),
-            .severity = .Error,
-            .code = @tagName(err.tag),
-            .source = "zls",
-            .message = try arena.allocator().dupe(u8, fbs.getWritten()),
-            // .relatedInformation = undefined
-        });
-    }
+//         try diagnostics.append(.{
+//             .range = astLocationToRange(loc),
+//             .severity = .Error,
+//             .code = @tagName(err.tag),
+//             .source = "zls",
+//             .message = try arena.allocator().dupe(u8, fbs.getWritten()),
+//             // .relatedInformation = undefined
+//         });
+//     }
 
-    // TODO: style warnings for types, values and declarations below root scope
-    if (tree.errors.len == 0) {
-        for (tree.rootDecls()) |decl_idx| {
-            const decl = tree.nodes.items(.tag)[decl_idx];
-            switch (decl) {
-                .fn_proto,
-                .fn_proto_multi,
-                .fn_proto_one,
-                .fn_proto_simple,
-                .fn_decl,
-                => blk: {
-                    var buf: [1]Ast.Node.Index = undefined;
-                    const func = ast.fnProto(tree, decl_idx, &buf).?;
-                    if (func.extern_export_inline_token != null) break :blk;
+//     // TODO: style warnings for types, values and declarations below root scope
+//     if (tree.errors.len == 0) {
+//         for (tree.rootDecls()) |decl_idx| {
+//             const decl = tree.nodes.items(.tag)[decl_idx];
+//             switch (decl) {
+//                 .fn_proto,
+//                 .fn_proto_multi,
+//                 .fn_proto_one,
+//                 .fn_proto_simple,
+//                 .fn_decl,
+//                 => blk: {
+//                     var buf: [1]Ast.Node.Index = undefined;
+//                     const func = ast.fnProto(tree, decl_idx, &buf).?;
+//                     if (func.extern_export_inline_token != null) break :blk;
 
-                    if (config.warn_style) {
-                        if (func.name_token) |name_token| {
-                            const loc = tree.tokenLocation(0, name_token);
+//                     if (config.warn_style) {
+//                         if (func.name_token) |name_token| {
+//                             const loc = tree.tokenLocation(0, name_token);
 
-                            const is_type_function = analysis.isTypeFunction(tree, func);
+//                             const is_type_function = analysis.isTypeFunction(tree, func);
 
-                            const func_name = tree.tokenSlice(name_token);
-                            if (!is_type_function and !analysis.isCamelCase(func_name)) {
-                                try diagnostics.append(.{
-                                    .range = astLocationToRange(loc),
-                                    .severity = .Information,
-                                    .code = "BadStyle",
-                                    .source = "zls",
-                                    .message = "Functions should be camelCase",
-                                });
-                            } else if (is_type_function and !analysis.isPascalCase(func_name)) {
-                                try diagnostics.append(.{
-                                    .range = astLocationToRange(loc),
-                                    .severity = .Information,
-                                    .code = "BadStyle",
-                                    .source = "zls",
-                                    .message = "Type functions should be PascalCase",
-                                });
-                            }
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-    }
+//                             const func_name = tree.tokenSlice(name_token);
+//                             if (!is_type_function and !analysis.isCamelCase(func_name)) {
+//                                 try diagnostics.append(.{
+//                                     .range = astLocationToRange(loc),
+//                                     .severity = .Information,
+//                                     .code = "BadStyle",
+//                                     .source = "zls",
+//                                     .message = "Functions should be camelCase",
+//                                 });
+//                             } else if (is_type_function and !analysis.isPascalCase(func_name)) {
+//                                 try diagnostics.append(.{
+//                                     .range = astLocationToRange(loc),
+//                                     .severity = .Information,
+//                                     .code = "BadStyle",
+//                                     .source = "zls",
+//                                     .message = "Type functions should be PascalCase",
+//                                 });
+//                             }
+//                         }
+//                     }
+//                 },
+//                 else => {},
+//             }
+//         }
+//     }
 
-    send(arena, types.Notification{
-        .method = "textDocument/publishDiagnostics",
-        .params = .{
-            .PublishDiagnostics = .{
-                .uri = handle.uri(),
-                .diagnostics = diagnostics.items,
-            },
-        },
-    });
-}
+//     send(arena, types.Notification{
+//         .method = "textDocument/publishDiagnostics",
+//         .params = .{
+//             .PublishDiagnostics = .{
+//                 .uri = handle.uri(),
+//                 .diagnostics = diagnostics.items,
+//             },
+//         },
+//     });
+// }
 
 fn typeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(types.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *DocumentStore.Handle, config: Config) error{OutOfMemory}!void {
     const type_handle = field_access.original;
@@ -496,7 +452,7 @@ fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, de
             }
 
             const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
-                return nullResponse(id);
+                return types.Response.createNull(id);
             break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
         },
         else => try decl_handle.location(offset_encoding),
@@ -546,7 +502,7 @@ fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle
                 break :def analysis.getContainerFieldSignature(tree, field);
             } else {
                 break :def analysis.nodeToString(tree, node) orelse
-                    return nullResponse(id);
+                    return types.Response.createNull(id);
             }
         },
         .param_decl => |param| def: {
@@ -613,26 +569,26 @@ fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, pos_index: usize, handle: *D
 fn gotoDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
     return try gotoDefinitionSymbol(id, arena, decl, false);
 }
 
 fn gotoDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config, resolve_alias: bool) !types.Response {
     _ = config;
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
     return try gotoDefinitionSymbol(id, arena, decl, resolve_alias);
 }
 
 fn hoverDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
     return try hoverSymbol(id, arena, decl);
 }
 
 fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
     const name = identifierFromPosition(pos_index, handle.*);
-    if (name.len == 0) return nullResponse(id);
+    if (name.len == 0) return types.Response.createNull(id);
 
     inline for (data.builtins) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
@@ -659,7 +615,7 @@ fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, 
 fn hoverDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, config: Config) !types.Response {
     _ = config;
 
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
     return try hoverSymbol(id, arena, decl);
 }
 
@@ -693,12 +649,12 @@ fn getSymbolFieldAccess(handle: *DocumentStore.Handle, arena: *std.heap.ArenaAll
 }
 
 fn gotoDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, config: Config, resolve_alias: bool) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return types.Response.createNull(id);
     return try gotoDefinitionSymbol(id, arena, decl, resolve_alias);
 }
 
 fn hoverDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, config: Config) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return types.Response.createNull(id);
     return try hoverSymbol(id, arena, decl);
 }
 
@@ -707,12 +663,12 @@ fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, po
 
     const tree = handle.tree;
 
-    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return nullResponse(id);
+    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return types.Response.createNull(id);
     const uri = (try document_store.uriFromImportStr(
         arena.allocator(),
         handle.*,
         import_str,
-    )) orelse return nullResponse(id);
+    )) orelse return types.Response.createNull(id);
 
     return types.Response{
         .id = id,
@@ -729,7 +685,7 @@ fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, po
 }
 
 fn renameDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !types.Response {
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
 
     var workspace_edit = types.WorkspaceEdit{
         .changes = std.StringHashMap([]types.TextEdit).init(arena.allocator()),
@@ -742,7 +698,7 @@ fn renameDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, 
 }
 
 fn renameDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, new_name: []const u8, config: Config) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return types.Response.createNull(id);
 
     var workspace_edit = types.WorkspaceEdit{
         .changes = std.StringHashMap([]types.TextEdit).init(arena.allocator()),
@@ -755,7 +711,7 @@ fn renameDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.Reques
 }
 
 fn renameDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !types.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
 
     var workspace_edit = types.WorkspaceEdit{
         .changes = std.StringHashMap([]types.TextEdit).init(arena.allocator()),
@@ -768,7 +724,7 @@ fn renameDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, h
 }
 
 fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !types.Response {
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
     var locs = std.ArrayList(types.Location).init(arena.allocator());
     try references.symbolReferences(
         arena,
@@ -787,7 +743,7 @@ fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.Request
 }
 
 fn referencesDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool, config: Config) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return nullResponse(id);
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range, config)) orelse return types.Response.createNull(id);
     var locs = std.ArrayList(types.Location).init(arena.allocator());
     try references.symbolReferences(arena, &document_store, decl, offset_encoding, include_decl, &locs, std.ArrayList(types.Location).append, config.skip_std_references);
     return types.Response{
@@ -797,7 +753,7 @@ fn referencesDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.Re
 }
 
 fn referencesDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool) !types.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return nullResponse(id);
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
     var locs = std.ArrayList(types.Location).init(arena.allocator());
     try references.labelReferences(arena, decl, offset_encoding, include_decl, &locs, std.ArrayList(types.Location).append);
     return types.Response{
@@ -1049,7 +1005,7 @@ fn completeDot(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *Do
     };
 }
 
-fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
 
     const req = try requests.fromDynamicTree(arena, requests.Initialize, tree.root);
@@ -1159,7 +1115,7 @@ fn initializeHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
 }
 
 pub var keep_running = true;
-fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     _ = arena;
 
@@ -1167,14 +1123,18 @@ fn shutdownHandler(arena: *std.heap.ArenaAllocator, config: Config, _: std.json.
 
     keep_running = false;
     // Technically we should deinitialize first and send possible errors to the client
-    return nullResponse(id);
+    return types.Response.createNull(id);
 }
 
-fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+pub fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+    _ = config;
     const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
 
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
-    try notifyDiagnostics(arena, handle.*, config);
+    _ = handle;
+
+    // TODO:
+    // try notifyDiagnostics(arena, handle.*, config);
 
     // return if (client_capabilities.supports_semantic_tokens)
     //     (semanticTokensFullHandlerReq(arena, config, id, .{ .params = .{ .textDocument = .{ .uri = req.params.textDocument.uri } } }) catch types.Response{ .id = id, .result = no_semantic_tokens_response })
@@ -1182,18 +1142,19 @@ fn openDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     //     types.Response{ .id = id, .result = no_semantic_tokens_response };
 }
 
-fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+    _ = config;
     const req = try requests.fromDynamicTree(arena, requests.ChangeDocument, tree.root);
 
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-        try notifyDiagnostics(arena, handle.*, config);
+        // try notifyDiagnostics(arena, handle.*, config);
     } else {
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
     }
 }
 
-fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+pub fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     _ = config;
     _ = arena;
     const req = try requests.fromDynamicTree(arena, requests.SaveDocument, tree.root);
@@ -1204,14 +1165,14 @@ fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: st
     }
 }
 
-fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
+pub fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) !void {
     _ = config;
     _ = arena;
     const req = try requests.fromDynamicTree(arena, requests.CloseDocument, tree.root);
     document_store.closeDocument(req.params.textDocument.uri);
 }
 
-fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.SemanticTokensFull, tree.root);
     return try semanticTokensFullHandlerReq(arena, config, id, req);
 }
@@ -1255,7 +1216,7 @@ fn getCompletion(arena: *std.heap.ArenaAllocator, config: Config, id: types.Requ
     return types.Response{ .id = id, .result = no_completions_response };
 }
 
-fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn completionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Completion, tree.root);
     return try getCompletion(arena, config, id, req);
 }
@@ -1291,20 +1252,20 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reque
     return types.Response{ .id = id, .result = no_signatures_response };
 }
 
-fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.SignatureHelp, tree.root);
     return try getSignature(arena, id, req);
 }
 
-fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config, resolve_alias: bool) !types.Response {
+pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, config: Config, resolve_alias: bool) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to go to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response{ .id = id, .result = null_result_response };
+        return types.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return types.Response{ .id = id, .result = null_result_response };
+        return types.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1315,16 +1276,16 @@ fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reques
         .field_access => |range| try gotoDefinitionFieldAccess(arena, id, handle, doc_position, range, config, resolve_alias),
         .string_literal => try gotoDefinitionString(arena, id, doc_position.absolute_index, handle, config),
         .label => try gotoDefinitionLabel(arena, id, doc_position.absolute_index, handle, config),
-        else => nullResponse(id),
+        else => types.Response.createNull(id),
     };
 }
 
-fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.GotoDefinition, tree.root);
     return try gotoHandler(arena, id, req, config, true);
 }
 
-fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.GotoDeclaration, tree.root);
     return try gotoHandler(arena, id, req, config, false);
 }
@@ -1332,11 +1293,11 @@ fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, config: Config, tree:
 fn getHover(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Hover) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get hover in non existent document {s}", .{req.params.textDocument.uri});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return nullResponse(id);
+        return types.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1346,11 +1307,11 @@ fn getHover(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
         .var_access => try hoverDefinitionGlobal(arena, id, doc_position.absolute_index, handle, config),
         .field_access => |range| try hoverDefinitionFieldAccess(arena, id, handle, doc_position, range, config),
         .label => try hoverDefinitionLabel(arena, id, doc_position.absolute_index, handle, config),
-        else => nullResponse(id),
+        else => types.Response.createNull(id),
     };
 }
 
-fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Hover, tree.root);
     return try getHover(arena, config, id, req);
 }
@@ -1358,7 +1319,7 @@ fn hoverHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.
 fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.DocumentSymbols) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get document symbols in non existent document {s}", .{req.params.textDocument.uri});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
 
     return types.Response{
@@ -1367,7 +1328,7 @@ fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: 
     };
 }
 
-fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.DocumentSymbols, tree.root);
     return try getDocumentSymbol(arena, id, req);
@@ -1376,12 +1337,12 @@ fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, config: Config, tree:
 fn doFormat(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Formatting) !types.Response {
     const zig_exe_path = config.zig_exe_path orelse {
         logger.warn("no zig_exe_path", .{});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
 
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to got to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
 
     var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, allocator);
@@ -1389,7 +1350,7 @@ fn doFormat(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
     process.stdout_behavior = .Pipe;
     process.spawn() catch |err| {
         logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
     try process.stdin.?.writeAll(handle.document.text);
     process.stdin.?.close();
@@ -1415,10 +1376,10 @@ fn doFormat(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
         else => {},
     }
 
-    return nullResponse(id);
+    return types.Response.createNull(id);
 }
 
-fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Formatting, tree.root);
     return try doFormat(arena, config, id, req);
 }
@@ -1426,11 +1387,11 @@ fn formattingHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.
 fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.Rename) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to rename in non existent document {s}", .{req.params.textDocument.uri});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return nullResponse(id);
+        return types.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1440,11 +1401,11 @@ fn doRename(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId
         .var_access => try renameDefinitionGlobal(arena, id, handle, doc_position.absolute_index, req.params.newName),
         .field_access => |range| try renameDefinitionFieldAccess(arena, id, handle, doc_position, range, req.params.newName, config),
         .label => try renameDefinitionLabel(arena, id, handle, doc_position.absolute_index, req.params.newName),
-        else => nullResponse(id),
+        else => types.Response.createNull(id),
     };
 }
 
-fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.Rename, tree.root);
     return try doRename(arena, config, id, req);
 }
@@ -1452,11 +1413,11 @@ fn renameHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json
 fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.RequestId, req: requests.References) !types.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get references in non existent document {s}", .{req.params.textDocument.uri});
-        return nullResponse(id);
+        return types.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return nullResponse(id);
+        return types.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1467,79 +1428,13 @@ fn getReference(arena: *std.heap.ArenaAllocator, config: Config, id: types.Reque
         .var_access => try referencesDefinitionGlobal(arena, id, handle, doc_position.absolute_index, include_decl, config.skip_std_references),
         .field_access => |range| try referencesDefinitionFieldAccess(arena, id, handle, doc_position, range, include_decl, config),
         .label => try referencesDefinitionLabel(arena, id, handle, doc_position.absolute_index, include_decl),
-        else => nullResponse(id),
+        else => types.Response.createNull(id),
     };
 }
 
-fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn referencesHandler(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
     const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
     return try getReference(arena, config, id, req);
-}
-
-const RequestProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
-const NotifyProto = fn (arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) anyerror!void;
-
-var request_map: std.StringHashMap(RequestProto) = undefined;
-var notify_map: std.StringHashMap(NotifyProto) = undefined;
-
-fn request(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void {
-    if (request_map.get(method)) |handler| {
-        const start_time = std.time.milliTimestamp();
-        if (handler(arena, config, tree, id)) |res| {
-            send(arena, res);
-            const end_time = std.time.milliTimestamp();
-            logger.debug("[{}] Took {}ms to process method {s}", .{ id, end_time - start_time, method });
-        } else |err| {
-            logger.warn("[{}] handler error: {s}", .{ id, @errorName(err) });
-            respondError(arena, id, not_implemented_response);
-        }
-    } else {
-        // no method
-        logger.warn("[{}] unknown method: {s}", .{ id, method });
-        const res = nullResponse(id);
-        send(arena, res);
-    }
-}
-
-fn notify(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree, method: []const u8) void {
-    if (notify_map.get(method)) |handler| {
-        const start_time = std.time.milliTimestamp();
-        if (handler(arena, config, tree)) {
-            const end_time = std.time.milliTimestamp();
-            logger.debug("Took {}ms to process notify {s}", .{ end_time - start_time, method });
-        } else |err| {
-            logger.warn("notify error: {s}", .{@errorName(err)});
-        }
-    } else {
-        logger.warn("unknown notify: {s}", .{method});
-    }
-}
-
-pub fn processJsonRpc(arena: *std.heap.ArenaAllocator, config: Config, tree: std.json.ValueTree) void {
-    // request: id, method, ?params
-    // reponse: id, ?result, ?error
-    // notify: method, ?params
-    if (tree.root.Object.get("id")) |id| {
-        if (tree.root.Object.get("method")) |method| {
-            // request
-            switch (id) {
-                .Integer => |int| request(arena, config, tree, types.RequestId{ .Integer = int }, method.String),
-                .String => |str| request(arena, config, tree, types.RequestId{ .String = str }, method.String),
-                else => unreachable,
-            }
-        } else {
-            // response
-            unreachable;
-        }
-    } else {
-        if (tree.root.Object.get("method")) |method| {
-            // notify
-            notify(arena, config, tree, method.String);
-        } else {
-            // invalid
-            unreachable;
-        }
-    }
 }
 
 pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
@@ -1560,33 +1455,10 @@ pub fn init(a: std.mem.Allocator, config: Config, build_runner_path: []const u8,
         "ZLS_DONT_CARE",
         config.builtin_path,
     );
-
-    request_map = std.StringHashMap(RequestProto).init(allocator);
-    try request_map.put("initialize", initializeHandler);
-    try request_map.put("shutdown", shutdownHandler);
-    try request_map.put("textDocument/semanticTokens/full", semanticTokensFullHandler);
-    try request_map.put("textDocument/completion", completionHandler);
-    try request_map.put("textDocument/signatureHelp", signatureHelpHandler);
-    try request_map.put("textDocument/definition", gotoDefinitionHandler);
-    try request_map.put("textDocument/typeDefinition", gotoDefinitionHandler);
-    try request_map.put("textDocument/implementation", gotoDefinitionHandler);
-    try request_map.put("textDocument/declaration", gotoDeclarationHandler);
-    try request_map.put("textDocument/hover", hoverHandler);
-    try request_map.put("textDocument/documentSymbol", documentSymbolsHandler);
-    try request_map.put("textDocument/formatting", formattingHandler);
-    try request_map.put("textDocument/rename", renameHandler);
-    try request_map.put("textDocument/references", referencesHandler);
-
-    notify_map = std.StringHashMap(NotifyProto).init(allocator);
-    try notify_map.put("textDocument/didOpen", openDocumentHandler);
-    try notify_map.put("textDocument/didSave", saveDocumentHandler);
-    try notify_map.put("textDocument/didChange", changeDocumentHandler);
-    try notify_map.put("textDocument/didClose", closeDocumentHandler);
 }
 
 pub fn deinit() void {
     keep_running = false;
-    request_map.deinit();
     analysis.deinit();
     document_store.deinit();
     if (builtin_completions) |compls| {

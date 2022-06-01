@@ -7,6 +7,9 @@ const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
+const jsonrpc = @import("./jsonrpc.zig");
+
+
 const logger = std.log.scoped(.main);
 
 // Always set this to debug to make std.log call into our handler, then control the runtime
@@ -42,7 +45,7 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
         .warn => .Warning,
         .err => .Error,
     };
-    server.send(&arena, types.Notification{
+    jsonrpc.send(&arena, types.Notification{
         .method = "window/logMessage",
         .params = types.Notification.Params{
             .LogMessage = .{
@@ -89,7 +92,7 @@ fn loadConfigInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Co
 }
 
 pub fn main() anyerror!void {
-    server.stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
+    jsonrpc.stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
 
     // allocator = &gpa_state.allocator;
     // @TODO Using the GPA here, realloc calls hang currently for some reason
@@ -284,6 +287,30 @@ pub fn main() anyerror!void {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
 
+    jsonrpc.request_map = std.StringHashMap(jsonrpc.RequestProto).init(allocator);
+    defer jsonrpc.request_map.deinit();
+    try jsonrpc.request_map.put("initialize", server.initializeHandler);
+    try jsonrpc.request_map.put("shutdown", server.shutdownHandler);
+    try jsonrpc.request_map.put("textDocument/semanticTokens/full", server.semanticTokensFullHandler);
+    try jsonrpc.request_map.put("textDocument/completion", server.completionHandler);
+    try jsonrpc.request_map.put("textDocument/signatureHelp", server.signatureHelpHandler);
+    try jsonrpc.request_map.put("textDocument/definition", server.gotoDefinitionHandler);
+    try jsonrpc.request_map.put("textDocument/typeDefinition", server.gotoDefinitionHandler);
+    try jsonrpc.request_map.put("textDocument/implementation", server.gotoDefinitionHandler);
+    try jsonrpc.request_map.put("textDocument/declaration", server.gotoDeclarationHandler);
+    try jsonrpc.request_map.put("textDocument/hover", server.hoverHandler);
+    try jsonrpc.request_map.put("textDocument/documentSymbol", server.documentSymbolsHandler);
+    try jsonrpc.request_map.put("textDocument/formatting", server.formattingHandler);
+    try jsonrpc.request_map.put("textDocument/rename", server.renameHandler);
+    try jsonrpc.request_map.put("textDocument/references", server.referencesHandler);
+
+    jsonrpc.notify_map = std.StringHashMap(jsonrpc.NotifyProto).init(allocator);
+    defer jsonrpc.notify_map.deinit();
+    try jsonrpc.notify_map.put("textDocument/didOpen", server.openDocumentHandler);
+    try jsonrpc.notify_map.put("textDocument/didSave", server.saveDocumentHandler);
+    try jsonrpc.notify_map.put("textDocument/didChange", server.changeDocumentHandler);
+    try jsonrpc.notify_map.put("textDocument/didClose", server.closeDocumentHandler);
+
     const reader = std.io.getStdIn().reader();
     while (server.keep_running) {
         const headers = readRequestHeader(arena.allocator(), reader) catch |err| {
@@ -301,6 +328,13 @@ pub fn main() anyerror!void {
             arena.state = .{};
         }
 
-        server.processJsonRpc(&arena, config, tree);
+        jsonrpc.process(&arena, config, tree) catch |err|
+        {
+            switch(err)
+            {
+                jsonrpc.RpcError.Format => @panic("jsonrpc: format"),
+                jsonrpc.RpcError.NotImplemented => @panic("jsonrpc: not implemented"),
+            }
+        };
     }
 }
