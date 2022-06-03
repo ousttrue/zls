@@ -6,8 +6,11 @@ const logger = std.log.scoped(.jsonrpc);
 var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
 
 pub const RpcError = error{
-    Format,
-    NotImplemented,
+    // Parse,
+    InvalidRequest,
+    MethodNotFound,
+    InvalidParams,
+    InternalError,
 };
 
 pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) anyerror!lsp.Response;
@@ -39,41 +42,41 @@ fn showMessage(message_type: lsp.MessageType, message: []const u8) !void {
     });
 }
 
-fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId, method: []const u8) void {
+fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId, method: []const u8) RpcError!void {
     if (request_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
         if (handler(arena, tree, id)) |res| {
-            send(arena, res);
             const end_time = std.time.milliTimestamp();
-            logger.debug("id[{}] {s} => {}ms", .{ id.toInt(i64), method, end_time - start_time });
-        } else |err| {
-            logger.warn("id[{}] {s} => {s}", .{ id.toInt(i64), method, @errorName(err) });
-            const res = lsp.Response.createErrorNotImplemented(id);
+            logger.info("id[{}] {s} => {}ms", .{ id.toInt(i64), method, end_time - start_time });
             send(arena, res);
+        } else |err| {
+            logger.err("id[{}] {s} => {s}", .{ id.toInt(i64), method, @errorName(err) });
+            return RpcError.InternalError;
         }
     } else {
         // no method
-        logger.warn("id[{}] {s} => unknown request", .{ id.toInt(i64), method });
-        const res = lsp.Response.createNull(id);
-        send(arena, res);
+        logger.err("id[{}] {s} => unknown request", .{ id.toInt(i64), method });
+        return RpcError.MethodNotFound;
     }
 }
 
-fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, method: []const u8) void {
+fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, method: []const u8) RpcError!void {
     if (notify_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
         if (handler(arena, tree)) {
             const end_time = std.time.milliTimestamp();
-            logger.debug("{s} => {}ms", .{ method, end_time - start_time });
+            logger.info("{s} => {}ms", .{ method, end_time - start_time });
         } else |err| {
-            logger.warn("{s} => {s}", .{ method, @errorName(err) });
+            logger.err("{s} => {s}", .{ method, @errorName(err) });
+            return RpcError.InternalError;
         }
     } else {
-        logger.warn("{s} => unknown notify", .{method});
+        logger.err("{s} => unknown notify", .{method});
+        return RpcError.MethodNotFound;
     }
 }
 
-pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) RpcError!void {
+pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) void {
     // request: id, method, ?params
     // reponse: id, ?result, ?error
     // notify: method, ?params
@@ -81,21 +84,32 @@ pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) RpcErr
         if (tree.root.Object.get("method")) |method| {
             // request
             if (lsp.RequestId.fromJson(idValue)) |id| {
-                request(arena, tree, id, method.String);
+                request(arena, tree, id, method.String) catch |err| switch (err) {
+                    RpcError.InvalidRequest => send(arena, lsp.Response.createInvalidRequest(id)),
+                    RpcError.MethodNotFound => send(arena, lsp.Response.createMethodNotFound(id)),
+                    RpcError.InvalidParams => send(arena, lsp.Response.createInvalidParams(id)),
+                    RpcError.InternalError => send(arena, lsp.Response.createInternalError(id)),
+                };
             } else {
-                return RpcError.Format;
+                // invalid
+                send(arena, lsp.Response.createParseError());
             }
         } else {
             // response
-            return RpcError.NotImplemented;
+            @panic("NotImplemented");
         }
     } else {
         if (tree.root.Object.get("method")) |method| {
             // notify
-            notify(arena, tree, method.String);
+            notify(arena, tree, method.String) catch |err| switch (err) {
+                RpcError.InvalidRequest => send(arena, lsp.Response.createInvalidRequest(.{ .Null = null })),
+                RpcError.MethodNotFound => send(arena, lsp.Response.createMethodNotFound(.{ .Null = null })),
+                RpcError.InvalidParams => send(arena, lsp.Response.createInvalidParams(.{ .Null = null })),
+                RpcError.InternalError => send(arena, lsp.Response.createInternalError(.{ .Null = null })),
+            };
         } else {
             // invalid
-            return RpcError.Format;
+            send(arena, lsp.Response.createParseError());
         }
     }
 }
@@ -128,7 +142,11 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, no
         const buf = arena.allocator().alloc(u8, headers.content_length) catch @panic("arena.alloc");
         reader.readNoEof(buf) catch @panic("readNoEof");
 
-        var tree = json_parser.parse(buf) catch @panic("jason.parse");
+        var tree = json_parser.parse(buf) catch {
+            send(&arena, lsp.Response.createParseError());
+            return;
+        };
+
         defer {
             tree.deinit();
             json_parser.reset();
@@ -136,13 +154,7 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, no
             arena.state = .{};
         }
 
-        process(&arena, tree) catch |err|
-            {
-            switch (err) {
-                RpcError.Format => @panic("jsonrpc: format"),
-                RpcError.NotImplemented => @panic("jsonrpc: not implemented"),
-            }
-        };
+        process(&arena, tree);
 
         for (notifyQueue.items) |*message| {
             send(&arena, message.*);

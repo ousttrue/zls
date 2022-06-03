@@ -26,6 +26,7 @@ pub const RequestId = union(enum) {
     String: string,
     Integer: i64,
     Float: f64,
+    Null: ?*c_int,
 
     pub fn fromJson(value: std.json.Value) ?RequestId {
         return switch (value) {
@@ -40,6 +41,7 @@ pub const RequestId = union(enum) {
             .String => std.fmt.parseInt(t, self.String, 10) catch @panic("parseInt"),
             .Integer => @intCast(t, self.Integer),
             .Float => @floatToInt(t, self.Float),
+            .Null => -1,
         };
     }
 };

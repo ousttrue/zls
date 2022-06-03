@@ -19,10 +19,26 @@ pub const null_result_response = ResponseParams{
     .Null = null,
 };
 
-// "error":{"code":-32601,"message":"NotImplemented"}}
 pub const ResponseError = struct {
     code: i32,
     message: []const u8,
+
+    // Defined by JSON-RPC
+    pub fn createParseError() ResponseError {
+        return .{ .code = -32700, .message = "ParseError" };
+    }
+    pub fn createInvalidRequest() ResponseError {
+        return .{ .code = -32600, .message = "InvalidRequest" };
+    }
+    pub fn createMethodNotFound() ResponseError {
+        return .{ .code = -32601, .message = "MethodNotFound" };
+    }
+    pub fn createInvalidParams() ResponseError {
+        return .{ .code = -32602, .message = "InvalidParams" };
+    }
+    pub fn createInternalError() ResponseError {
+        return .{ .code = -32603, .message = "InternalError" };
+    }
 };
 
 /// JSONRPC response
@@ -36,14 +52,19 @@ pub const Response = struct {
         return Response{ .id = id, .result = null_result_response };
     }
 
-    pub fn createError(id: types.RequestId, e: ResponseError) Response {
-        return Response{ .id = id, .result = null_result_response, .@"error" = e };
+    pub fn createParseError() Response {
+        return .{ .id = .{ .Null = null }, .result = null_result_response, .@"error" = ResponseError.createParseError() };
     }
-
-    pub fn createErrorNotImplemented(id: types.RequestId) Response {
-        return createError(id, .{
-            .code = -32601,
-            .message = "NotImplemented",
-        });
+    pub fn createInvalidRequest(id: types.RequestId) Response {
+        return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createInvalidRequest() };
+    }
+    pub fn createMethodNotFound(id: types.RequestId) Response {
+        return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createMethodNotFound() };
+    }
+    pub fn createInvalidParams(id: types.RequestId) Response {
+        return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createInvalidParams() };
+    }
+    pub fn createInternalError(id: types.RequestId) Response {
+        return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createInternalError() };
     }
 };
