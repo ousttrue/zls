@@ -13,7 +13,7 @@ pub const RpcError = error{
     InternalError,
 };
 
-pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) anyerror!lsp.Response;
+pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) anyerror!lsp.Response;
 pub const NotifyProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void;
 
 pub var request_map: std.StringHashMap(RequestProto) = undefined;
@@ -42,20 +42,20 @@ fn showMessage(message_type: lsp.MessageType, message: []const u8) !void {
     });
 }
 
-fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId, method: []const u8) RpcError!void {
+fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64, method: []const u8) RpcError!void {
     if (request_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
         if (handler(arena, tree, id)) |res| {
             const end_time = std.time.milliTimestamp();
-            logger.info("id[{}] {s} => {}ms", .{ id.toInt(i64), method, end_time - start_time });
+            logger.info("id[{}] {s} => {}ms", .{ id, method, end_time - start_time });
             send(arena, res);
         } else |err| {
-            logger.err("id[{}] {s} => {s}", .{ id.toInt(i64), method, @errorName(err) });
+            logger.err("id[{}] {s} => {s}", .{ id, method, @errorName(err) });
             return RpcError.InternalError;
         }
     } else {
         // no method
-        logger.err("id[{}] {s} => unknown request", .{ id.toInt(i64), method });
+        logger.err("id[{}] {s} => unknown request", .{ id, method });
         return RpcError.MethodNotFound;
     }
 }
@@ -76,36 +76,51 @@ fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, method: []c
     }
 }
 
+pub fn getInt(value: std.json.Value, key: []const u8) ?i64 {
+    if (value.Object.get(key)) |child| {
+        switch (child) {
+            .Integer => |int| return int,
+            else => {},
+        }
+    }
+    return null;
+}
+
+pub fn getString(value: std.json.Value, key: []const u8) ?[]const u8 {
+    if (value.Object.get(key)) |child| {
+        switch (child) {
+            .String => |str| return str,
+            else => {},
+        }
+    }
+    return null;
+}
+
 pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) void {
     // request: id, method, ?params
     // reponse: id, ?result, ?error
     // notify: method, ?params
-    if (tree.root.Object.get("id")) |idValue| {
-        if (tree.root.Object.get("method")) |method| {
+    if (getInt(tree.root, "id")) |id| {
+        if (getString(tree.root, "method")) |method| {
             // request
-            if (lsp.RequestId.fromJson(idValue)) |id| {
-                request(arena, tree, id, method.String) catch |err| switch (err) {
-                    RpcError.InvalidRequest => send(arena, lsp.Response.createInvalidRequest(id)),
-                    RpcError.MethodNotFound => send(arena, lsp.Response.createMethodNotFound(id)),
-                    RpcError.InvalidParams => send(arena, lsp.Response.createInvalidParams(id)),
-                    RpcError.InternalError => send(arena, lsp.Response.createInternalError(id)),
-                };
-            } else {
-                // invalid
-                send(arena, lsp.Response.createParseError());
-            }
+            request(arena, tree, id, method) catch |err| switch (err) {
+                RpcError.InvalidRequest => send(arena, lsp.Response.createInvalidRequest(id)),
+                RpcError.MethodNotFound => send(arena, lsp.Response.createMethodNotFound(id)),
+                RpcError.InvalidParams => send(arena, lsp.Response.createInvalidParams(id)),
+                RpcError.InternalError => send(arena, lsp.Response.createInternalError(id)),
+            };
         } else {
             // response
             @panic("NotImplemented");
         }
     } else {
-        if (tree.root.Object.get("method")) |method| {
+        if (getString(tree.root, "method")) |method| {
             // notify
-            notify(arena, tree, method.String) catch |err| switch (err) {
-                RpcError.InvalidRequest => send(arena, lsp.Response.createInvalidRequest(.{ .Null = null })),
-                RpcError.MethodNotFound => send(arena, lsp.Response.createMethodNotFound(.{ .Null = null })),
-                RpcError.InvalidParams => send(arena, lsp.Response.createInvalidParams(.{ .Null = null })),
-                RpcError.InternalError => send(arena, lsp.Response.createInternalError(.{ .Null = null })),
+            notify(arena, tree, method) catch |err| switch (err) {
+                RpcError.InvalidRequest => send(arena, lsp.Response.createInvalidRequest(null)),
+                RpcError.MethodNotFound => send(arena, lsp.Response.createMethodNotFound(null)),
+                RpcError.InvalidParams => send(arena, lsp.Response.createInvalidParams(null)),
+                RpcError.InternalError => send(arena, lsp.Response.createInternalError(null)),
             };
         } else {
             // invalid
@@ -115,7 +130,7 @@ pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) void {
 }
 
 pub var keep_running = false;
-pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
+pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
     _ = arena;
     _ = tree;
     logger.info("Server closing...", .{});

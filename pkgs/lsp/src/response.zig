@@ -44,27 +44,27 @@ pub const ResponseError = struct {
 /// JSONRPC response
 pub const Response = struct {
     jsonrpc: types.string = "2.0",
-    id: types.RequestId,
+    id: ?i64,
     result: ResponseParams,
     @"error": ?ResponseError = null,
 
-    pub fn createNull(id: types.RequestId) Response {
+    pub fn createNull(id: i64) Response {
         return Response{ .id = id, .result = null_result_response };
     }
 
     pub fn createParseError() Response {
-        return .{ .id = .{ .Null = null }, .result = null_result_response, .@"error" = ResponseError.createParseError() };
+        return .{ .id = null, .result = null_result_response, .@"error" = ResponseError.createParseError() };
     }
-    pub fn createInvalidRequest(id: types.RequestId) Response {
+    pub fn createInvalidRequest(id: ?i64) Response {
         return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createInvalidRequest() };
     }
-    pub fn createMethodNotFound(id: types.RequestId) Response {
+    pub fn createMethodNotFound(id: ?i64) Response {
         return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createMethodNotFound() };
     }
-    pub fn createInvalidParams(id: types.RequestId) Response {
+    pub fn createInvalidParams(id: ?i64) Response {
         return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createInvalidParams() };
     }
-    pub fn createInternalError(id: types.RequestId) Response {
+    pub fn createInternalError(id: ?i64) Response {
         return .{ .id = id, .result = null_result_response, .@"error" = ResponseError.createInternalError() };
     }
 };

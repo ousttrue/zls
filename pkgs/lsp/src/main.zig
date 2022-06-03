@@ -15,8 +15,6 @@ pub const Location = types.Location;
 pub const SignatureHelp = types.SignatureHelp;
 pub const SignatureInformation = types.SignatureInformation;
 
-pub const RequestId = types.RequestId;
-
 pub const Notification = notification.Notification;
 pub const NotificationParams = notification.NotificationParams;
 pub const Diagnostic = notification.Diagnostic;

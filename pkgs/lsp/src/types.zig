@@ -19,33 +19,6 @@ pub const Location = struct {
     range: Range,
 };
 
-/// Id of a request
-pub const RequestId = union(enum) {
-    const Self = @This();
-
-    String: string,
-    Integer: i64,
-    Float: f64,
-    Null: ?*c_int,
-
-    pub fn fromJson(value: std.json.Value) ?RequestId {
-        return switch (value) {
-            .Integer => |int| .{ .Integer = int },
-            .String => |str| .{ .String = str },
-            else => null,
-        };
-    }
-
-    pub fn toInt(self: *const Self, comptime t: type) t {
-        return switch (self.*) {
-            .String => std.fmt.parseInt(t, self.String, 10) catch @panic("parseInt"),
-            .Integer => @intCast(t, self.Integer),
-            .Float => @floatToInt(t, self.Float),
-            .Null => -1,
-        };
-    }
-};
-
 /// Hover response
 pub const Hover = struct {
     contents: MarkupContent,
