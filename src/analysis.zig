@@ -1,7 +1,7 @@
 const std = @import("std");
 const DocumentStore = @import("./DocumentStore.zig");
 const Ast = std.zig.Ast;
-const types = @import("./types.zig");
+const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.analysis);
 const ast = @import("./ast.zig");
@@ -18,7 +18,7 @@ pub fn deinit() void {
 }
 
 /// Gets a declaration's doc comments. Caller owns returned memory.
-pub fn getDocComments(allocator: std.mem.Allocator, tree: Ast, node: Ast.Node.Index, format: types.MarkupContent.Kind) !?[]const u8 {
+pub fn getDocComments(allocator: std.mem.Allocator, tree: Ast, node: Ast.Node.Index, format: lsp.MarkupContent.Kind) !?[]const u8 {
     const base = tree.nodes.items(.main_token)[node];
     const base_kind = tree.nodes.items(.tag)[node];
     const tokens = tree.tokens.items(.tag);
@@ -67,7 +67,7 @@ pub fn getDocCommentTokenIndex(tokens: []std.zig.Token.Tag, base_token: Ast.Toke
     } else idx + 1;
 }
 
-pub fn collectDocComments(allocator: std.mem.Allocator, tree: Ast, doc_comments: Ast.TokenIndex, format: types.MarkupContent.Kind, container_doc: bool) ![]const u8 {
+pub fn collectDocComments(allocator: std.mem.Allocator, tree: Ast, doc_comments: Ast.TokenIndex, format: lsp.MarkupContent.Kind, container_doc: bool) ![]const u8 {
     var lines = std.ArrayList([]const u8).init(allocator);
     defer lines.deinit();
     const tokens = tree.tokens.items(.tag);
@@ -1445,7 +1445,7 @@ fn tokenRangeAppend(prev: SourceRange, token: std.zig.Token) SourceRange {
 
 const DocumentPosition = offsets.DocumentPosition;
 
-pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: types.TextDocument, doc_position: DocumentPosition) !PositionContext {
+pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) !PositionContext {
     _ = document;
 
     const line = doc_position.line;
@@ -1726,7 +1726,7 @@ const GetDocumentSymbolsContext = struct {
         .column = 0,
         .offset = 0,
     },
-    symbols: *std.ArrayList(types.DocumentSymbol),
+    symbols: *std.ArrayList(lsp.DocumentSymbol),
     encoding: offsets.Encoding,
 };
 
@@ -1749,7 +1749,7 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
         context.encoding,
     ));
     context.prev_loc = end_loc;
-    const range = types.Range{
+    const range = lsp.Range{
         .start = .{
             .line = @intCast(i64, start_loc.line),
             .character = @intCast(i64, start_loc.column),
@@ -1791,7 +1791,7 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
         .selectionRange = range,
         .detail = "",
         .children = ch: {
-            var children = std.ArrayList(types.DocumentSymbol).init(allocator);
+            var children = std.ArrayList(lsp.DocumentSymbol).init(allocator);
 
             var child_context = GetDocumentSymbolsContext{
                 .prev_loc = start_loc,
@@ -1824,8 +1824,8 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
     };
 }
 
-pub fn getDocumentSymbols(allocator: std.mem.Allocator, tree: Ast, encoding: offsets.Encoding) ![]types.DocumentSymbol {
-    var symbols = try std.ArrayList(types.DocumentSymbol).initCapacity(allocator, tree.rootDecls().len);
+pub fn getDocumentSymbols(allocator: std.mem.Allocator, tree: Ast, encoding: offsets.Encoding) ![]lsp.DocumentSymbol {
+    var symbols = try std.ArrayList(lsp.DocumentSymbol).initCapacity(allocator, tree.rootDecls().len);
 
     var context = GetDocumentSymbolsContext{
         .symbols = &symbols,
@@ -2290,12 +2290,12 @@ pub fn lookupSymbolContainer(
 }
 
 const CompletionContext = struct {
-    pub fn hash(self: @This(), item: types.CompletionItem) u32 {
+    pub fn hash(self: @This(), item: lsp.CompletionItem) u32 {
         _ = self;
         return @truncate(u32, std.hash.Wyhash.hash(0, item.label));
     }
 
-    pub fn eql(self: @This(), a: types.CompletionItem, b: types.CompletionItem, b_index: usize) bool {
+    pub fn eql(self: @This(), a: lsp.CompletionItem, b: lsp.CompletionItem, b_index: usize) bool {
         _ = self;
         _ = b_index;
         return std.mem.eql(u8, a.label, b.label);
@@ -2303,13 +2303,13 @@ const CompletionContext = struct {
 };
 
 pub const CompletionSet = std.ArrayHashMapUnmanaged(
-    types.CompletionItem,
+    lsp.CompletionItem,
     void,
     CompletionContext,
     false,
 );
 comptime {
-    std.debug.assert(@sizeOf(types.CompletionItem) == @sizeOf(CompletionSet.Data));
+    std.debug.assert(@sizeOf(lsp.CompletionItem) == @sizeOf(CompletionSet.Data));
 }
 
 pub const DocumentScope = struct {
@@ -2532,7 +2532,7 @@ fn makeInnerScope(allocator: std.mem.Allocator, context: ScopeContext, node_idx:
                     .insertText = name,
                     .insertTextFormat = .PlainText,
                     .documentation = if (try getDocComments(allocator, tree, decl, .Markdown)) |docs|
-                        types.MarkupContent{ .kind = .Markdown, .value = docs }
+                        lsp.MarkupContent{ .kind = .Markdown, .value = docs }
                     else
                         null,
                 }, {});

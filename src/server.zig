@@ -3,7 +3,7 @@ const build_options = @import("build_options");
 const Config = @import("./Config.zig");
 const DocumentStore = @import("./DocumentStore.zig");
 const requests = @import("./requests.zig");
-const types = @import("./types.zig");
+const lsp = @import("lsp");
 const analysis = @import("./analysis.zig");
 const ast = @import("./ast.zig");
 const references = @import("./references.zig");
@@ -28,7 +28,7 @@ pub var config = Config{};
 
 // Code is largely based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
 var allocator: std.mem.Allocator = undefined;
-pub var notifyQueue: std.ArrayList(types.Notification) = undefined;
+pub var notifyQueue: std.ArrayList(lsp.Notification) = undefined;
 
 var document_store: DocumentStore = undefined;
 
@@ -42,14 +42,14 @@ const ClientCapabilities = struct {
 var client_capabilities = ClientCapabilities{};
 var offset_encoding = offsets.Encoding.utf16;
 
-const no_completions_response = types.ResponseParams{
+const no_completions_response = lsp.ResponseParams{
     .CompletionList = .{
         .isIncomplete = false,
         .items = &.{},
     },
 };
 
-const no_signatures_response = types.ResponseParams{
+const no_signatures_response = lsp.ResponseParams{
     .SignatureHelp = .{
         .signatures = &.{},
         .activeSignature = null,
@@ -57,13 +57,13 @@ const no_signatures_response = types.ResponseParams{
     },
 };
 
-const no_semantic_tokens_response = types.ResponseParams{
+const no_semantic_tokens_response = lsp.ResponseParams{
     .SemanticTokensFull = .{
         .data = &.{},
     },
 };
 
-fn truncateCompletions(list: []types.CompletionItem, max_detail_length: usize) void {
+fn truncateCompletions(list: []lsp.CompletionItem, max_detail_length: usize) void {
     for (list) |*item| {
         if (item.detail) |det| {
             if (det.len > max_detail_length) {
@@ -74,7 +74,7 @@ fn truncateCompletions(list: []types.CompletionItem, max_detail_length: usize) v
 }
 
 // TODO: Is this correct or can we get a better end?
-fn astLocationToRange(loc: Ast.Location) types.Range {
+fn astLocationToRange(loc: Ast.Location) lsp.Range {
     return .{
         .start = .{
             .line = @intCast(i64, loc.line),
@@ -90,7 +90,7 @@ fn astLocationToRange(loc: Ast.Location) types.Range {
 fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle) !void {
     const tree = handle.tree;
 
-    var diagnostics = std.ArrayList(types.Diagnostic).init(arena.allocator());
+    var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
 
     for (tree.errors) |err| {
         const loc = tree.tokenLocation(0, err.token);
@@ -156,7 +156,7 @@ fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Hand
         }
     }
 
-    const notification = types.Notification{
+    const notification = lsp.Notification{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .PublishDiagnostics = .{
@@ -169,7 +169,7 @@ fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Hand
     try notifyQueue.insert(0, notification);
 }
 
-fn typeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(types.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *DocumentStore.Handle) error{OutOfMemory}!void {
+fn typeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(lsp.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *DocumentStore.Handle) error{OutOfMemory}!void {
     const type_handle = field_access.original;
     switch (type_handle.type.data) {
         .slice => {
@@ -205,14 +205,14 @@ fn typeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(types.
     }
 }
 
-fn nodeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(types.CompletionItem), node_handle: analysis.NodeWithHandle, unwrapped: ?analysis.TypeWithHandle, orig_handle: *DocumentStore.Handle, is_type_val: bool, parent_is_type_val: ?bool) error{OutOfMemory}!void {
+fn nodeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(lsp.CompletionItem), node_handle: analysis.NodeWithHandle, unwrapped: ?analysis.TypeWithHandle, orig_handle: *DocumentStore.Handle, is_type_val: bool, parent_is_type_val: ?bool) error{OutOfMemory}!void {
     const node = node_handle.node;
     const handle = node_handle.handle;
     const tree = handle.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
 
-    const doc_kind: types.MarkupContent.Kind = if (client_capabilities.completion_doc_supports_md)
+    const doc_kind: lsp.MarkupContent.Kind = if (client_capabilities.completion_doc_supports_md)
         .Markdown
     else
         .PlainText;
@@ -223,7 +223,7 @@ fn nodeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(types.
         node,
         doc_kind,
     )) |doc_comments|
-        types.MarkupContent{
+        lsp.MarkupContent{
             .kind = doc_kind,
             .value = doc_comments,
         }
@@ -424,7 +424,7 @@ fn isSymbolChar(char: u8) bool {
     return std.ascii.isAlNum(char) or char == '_';
 }
 
-fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !types.Response {
+fn gotoDefinitionSymbol(id: lsp.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !lsp.Response {
     var handle = decl_handle.handle;
 
     const location = switch (decl_handle.decl.*) {
@@ -437,13 +437,13 @@ fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, de
             }
 
             const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
-                return types.Response.createNull(id);
+                return lsp.Response.createNull(id);
             break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
         },
         else => try decl_handle.location(offset_encoding),
     };
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .Location = .{
@@ -463,11 +463,11 @@ fn gotoDefinitionSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, de
     };
 }
 
-fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle) (std.os.WriteError || error{OutOfMemory})!types.Response {
+fn hoverSymbol(id: lsp.RequestId, arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle) (std.os.WriteError || error{OutOfMemory})!lsp.Response {
     const handle = decl_handle.handle;
     const tree = handle.tree;
 
-    const hover_kind: types.MarkupContent.Kind = if (client_capabilities.hover_supports_md) .Markdown else .PlainText;
+    const hover_kind: lsp.MarkupContent.Kind = if (client_capabilities.hover_supports_md) .Markdown else .PlainText;
     var doc_str: ?[]const u8 = null;
 
     const def_str = switch (decl_handle.decl.*) {
@@ -487,7 +487,7 @@ fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle
                 break :def analysis.getContainerFieldSignature(tree, field);
             } else {
                 break :def analysis.nodeToString(tree, node) orelse
-                    return types.Response.createNull(id);
+                    return lsp.Response.createNull(id);
             }
         },
         .param_decl => |param| def: {
@@ -527,7 +527,7 @@ fn hoverSymbol(id: types.RequestId, arena: *std.heap.ArenaAllocator, decl_handle
             def_str;
     }
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .Hover = .{
@@ -551,28 +551,28 @@ fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, pos_index: usize, handle: *D
     return try analysis.lookupSymbolGlobal(&document_store, arena, handle, name, pos_index);
 }
 
-fn gotoDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
+fn gotoDefinitionLabel(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try gotoDefinitionSymbol(id, arena, decl, false);
 }
 
-fn gotoDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle, resolve_alias: bool) !types.Response {
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
+fn gotoDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle, resolve_alias: bool) !lsp.Response {
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try gotoDefinitionSymbol(id, arena, decl, resolve_alias);
 }
 
-fn hoverDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
+fn hoverDefinitionLabel(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try hoverSymbol(id, arena, decl);
 }
 
-fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
+fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
     const name = identifierFromPosition(pos_index, handle.*);
-    if (name.len == 0) return types.Response.createNull(id);
+    if (name.len == 0) return lsp.Response.createNull(id);
 
     inline for (data.builtins) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
-            return types.Response{
+            return lsp.Response{
                 .id = id,
                 .result = .{
                     .Hover = .{
@@ -592,10 +592,10 @@ fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: types.RequestId, 
     unreachable;
 }
 
-fn hoverDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
+fn hoverDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
     _ = config;
 
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try hoverSymbol(id, arena, decl);
 }
 
@@ -628,29 +628,29 @@ fn getSymbolFieldAccess(handle: *DocumentStore.Handle, arena: *std.heap.ArenaAll
     return null;
 }
 
-fn gotoDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, resolve_alias: bool) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return types.Response.createNull(id);
+fn gotoDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, resolve_alias: bool) !lsp.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return lsp.Response.createNull(id);
     return try gotoDefinitionSymbol(id, arena, decl, resolve_alias);
 }
 
-fn hoverDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return types.Response.createNull(id);
+fn hoverDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !lsp.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return lsp.Response.createNull(id);
     return try hoverSymbol(id, arena, decl);
 }
 
-fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
+fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
     _ = config;
 
     const tree = handle.tree;
 
-    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return types.Response.createNull(id);
+    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return lsp.Response.createNull(id);
     const uri = (try document_store.uriFromImportStr(
         arena.allocator(),
         handle.*,
         import_str,
-    )) orelse return types.Response.createNull(id);
+    )) orelse return lsp.Response.createNull(id);
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .Location = .{
@@ -664,48 +664,48 @@ fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, id: types.RequestId, po
     };
 }
 
-fn renameDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !types.Response {
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
+fn renameDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return lsp.Response.createNull(id);
 
-    var workspace_edit = types.WorkspaceEdit{
-        .changes = std.StringHashMap([]types.TextEdit).init(arena.allocator()),
+    var workspace_edit = lsp.WorkspaceEdit{
+        .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
     };
     try rename.renameSymbol(arena, &document_store, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{ .WorkspaceEdit = workspace_edit },
     };
 }
 
-fn renameDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return types.Response.createNull(id);
+fn renameDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return lsp.Response.createNull(id);
 
-    var workspace_edit = types.WorkspaceEdit{
-        .changes = std.StringHashMap([]types.TextEdit).init(arena.allocator()),
+    var workspace_edit = lsp.WorkspaceEdit{
+        .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
     };
     try rename.renameSymbol(arena, &document_store, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{ .WorkspaceEdit = workspace_edit },
     };
 }
 
-fn renameDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !types.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
+fn renameDefinitionLabel(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
 
-    var workspace_edit = types.WorkspaceEdit{
-        .changes = std.StringHashMap([]types.TextEdit).init(arena.allocator()),
+    var workspace_edit = lsp.WorkspaceEdit{
+        .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
     };
     try rename.renameLabel(arena, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{ .WorkspaceEdit = workspace_edit },
     };
 }
 
-fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !types.Response {
-    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return types.Response.createNull(id);
-    var locs = std.ArrayList(types.Location).init(arena.allocator());
+fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !lsp.Response {
+    const decl = (try getSymbolGlobal(arena, pos_index, handle)) orelse return lsp.Response.createNull(id);
+    var locs = std.ArrayList(lsp.Location).init(arena.allocator());
     try references.symbolReferences(
         arena,
         &document_store,
@@ -713,30 +713,30 @@ fn referencesDefinitionGlobal(arena: *std.heap.ArenaAllocator, id: types.Request
         offset_encoding,
         include_decl,
         &locs,
-        std.ArrayList(types.Location).append,
+        std.ArrayList(lsp.Location).append,
         skip_std_references,
     );
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
     };
 }
 
-fn referencesDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool) !types.Response {
-    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return types.Response.createNull(id);
-    var locs = std.ArrayList(types.Location).init(arena.allocator());
-    try references.symbolReferences(arena, &document_store, decl, offset_encoding, include_decl, &locs, std.ArrayList(types.Location).append, config.skip_std_references);
-    return types.Response{
+fn referencesDefinitionFieldAccess(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
+    const decl = (try getSymbolFieldAccess(handle, arena, position, range)) orelse return lsp.Response.createNull(id);
+    var locs = std.ArrayList(lsp.Location).init(arena.allocator());
+    try references.symbolReferences(arena, &document_store, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, config.skip_std_references);
+    return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
     };
 }
 
-fn referencesDefinitionLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool) !types.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return types.Response.createNull(id);
-    var locs = std.ArrayList(types.Location).init(arena.allocator());
-    try references.labelReferences(arena, decl, offset_encoding, include_decl, &locs, std.ArrayList(types.Location).append);
-    return types.Response{
+fn referencesDefinitionLabel(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool) !lsp.Response {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    var locs = std.ArrayList(lsp.Location).init(arena.allocator());
+    try references.labelReferences(arena, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
+    return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
     };
@@ -752,7 +752,7 @@ fn hasComment(tree: Ast.Tree, start_token: Ast.TokenIndex, end_token: Ast.TokenI
 }
 
 const DeclToCompletionContext = struct {
-    completions: *std.ArrayList(types.CompletionItem),
+    completions: *std.ArrayList(lsp.CompletionItem),
     config: *const Config,
     arena: *std.heap.ArenaAllocator,
     orig_handle: *DocumentStore.Handle,
@@ -772,9 +772,9 @@ fn declToCompletion(context: DeclToCompletionContext, decl_handle: analysis.Decl
             context.parent_is_type_val,
         ),
         .param_decl => |param| {
-            const doc_kind: types.MarkupContent.Kind = if (client_capabilities.completion_doc_supports_md) .Markdown else .PlainText;
+            const doc_kind: lsp.MarkupContent.Kind = if (client_capabilities.completion_doc_supports_md) .Markdown else .PlainText;
             const doc = if (param.first_doc_comment) |doc_comments|
-                types.MarkupContent{
+                lsp.MarkupContent{
                     .kind = doc_kind,
                     .value = try analysis.collectDocComments(context.arena.allocator(), tree, doc_comments, doc_kind, false),
                 }
@@ -839,8 +839,8 @@ fn declToCompletion(context: DeclToCompletionContext, decl_handle: analysis.Decl
     }
 }
 
-fn completeLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
-    var completions = std.ArrayList(types.CompletionItem).init(arena.allocator());
+fn completeLabel(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
     const context = DeclToCompletionContext{
         .completions = &completions,
@@ -851,7 +851,7 @@ fn completeLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index
     try analysis.iterateLabels(handle, pos_index, declToCompletion, context);
     truncateCompletions(completions.items, config.max_detail_length);
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionList = .{
@@ -862,12 +862,12 @@ fn completeLabel(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index
     };
 }
 
-var builtin_completions: ?[]types.CompletionItem = null;
-fn completeBuiltin(id: types.RequestId) !types.Response {
+var builtin_completions: ?[]lsp.CompletionItem = null;
+fn completeBuiltin(id: lsp.RequestId) !lsp.Response {
     if (builtin_completions == null) {
-        builtin_completions = try allocator.alloc(types.CompletionItem, data.builtins.len);
+        builtin_completions = try allocator.alloc(lsp.CompletionItem, data.builtins.len);
         for (data.builtins) |builtin, idx| {
-            builtin_completions.?[idx] = types.CompletionItem{
+            builtin_completions.?[idx] = lsp.CompletionItem{
                 .label = builtin.name,
                 .kind = .Function,
                 .filterText = builtin.name[1..],
@@ -894,7 +894,7 @@ fn completeBuiltin(id: types.RequestId) !types.Response {
         truncateCompletions(builtin_completions.?, config.max_detail_length);
     }
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionList = .{
@@ -905,8 +905,8 @@ fn completeBuiltin(id: types.RequestId) !types.Response {
     };
 }
 
-fn completeGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !types.Response {
-    var completions = std.ArrayList(types.CompletionItem).init(arena.allocator());
+fn completeGlobal(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
     const context = DeclToCompletionContext{
         .completions = &completions,
@@ -917,7 +917,7 @@ fn completeGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_inde
     try analysis.iterateSymbolsGlobal(&document_store, arena, handle, pos_index, declToCompletion, context);
     truncateCompletions(completions.items, config.max_detail_length);
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionList = .{
@@ -928,8 +928,8 @@ fn completeGlobal(arena: *std.heap.ArenaAllocator, id: types.RequestId, pos_inde
     };
 }
 
-fn completeFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !types.Response {
-    var completions = std.ArrayList(types.CompletionItem).init(arena.allocator());
+fn completeFieldAccess(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !lsp.Response {
+    var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
     var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
@@ -942,7 +942,7 @@ fn completeFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, han
         truncateCompletions(completions.items, config.max_detail_length);
     }
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionList = .{
@@ -953,12 +953,12 @@ fn completeFieldAccess(arena: *std.heap.ArenaAllocator, id: types.RequestId, han
     };
 }
 
-fn completeError(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle) !types.Response {
+fn completeError(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle) !lsp.Response {
     const completions = try document_store.errorCompletionItems(arena, handle);
     truncateCompletions(completions, config.max_detail_length);
     logger.debug("Completing error:", .{});
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionList = .{
@@ -969,11 +969,11 @@ fn completeError(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *
     };
 }
 
-fn completeDot(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *DocumentStore.Handle) !types.Response {
+fn completeDot(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, handle: *DocumentStore.Handle) !lsp.Response {
     var completions = try document_store.enumCompletionItems(arena, handle);
     truncateCompletions(completions, config.max_detail_length);
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionList = .{
@@ -984,7 +984,7 @@ fn completeDot(arena: *std.heap.ArenaAllocator, id: types.RequestId, handle: *Do
     };
 }
 
-pub fn initializeHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn initializeHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     _ = config;
 
     const req = try requests.fromDynamicTree(arena, requests.Initialize, tree.root);
@@ -1019,7 +1019,7 @@ pub fn initializeHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTr
     logger.info("zls initialized", .{});
     logger.info("{}", .{client_capabilities});
     logger.info("Using offset encoding: {s}", .{std.meta.tagName(offset_encoding)});
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .InitializeResult = .{
@@ -1133,16 +1133,16 @@ pub fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.Valu
     document_store.closeDocument(req.params.textDocument.uri);
 }
 
-pub fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.SemanticTokensFull, tree.root);
     return try semanticTokensFullHandlerReq(arena, id, req);
 }
 
-fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SemanticTokensFull) !types.Response {
+fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.SemanticTokensFull) !lsp.Response {
     if (config.enable_semantic_tokens) {
         if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
             const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &document_store, handle, offset_encoding);
-            return types.Response{
+            return lsp.Response{
                 .id = id,
                 .result = .{ .SemanticTokensFull = .{ .data = token_array } },
             };
@@ -1150,12 +1150,12 @@ fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, id: types.Reque
             logger.warn("Trying to get semantic tokens of non existent document {s}", .{req.params.textDocument.uri});
         }
     }
-    return types.Response{ .id = id, .result = no_semantic_tokens_response };
+    return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
 }
 
-fn getCompletion(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Completion) !types.Response {
+fn getCompletion(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.Completion) !lsp.Response {
     if (req.params.position.character < 0) {
-        return types.Response{ .id = id, .result = no_completions_response };
+        return lsp.Response{ .id = id, .result = no_completions_response };
     }
 
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
@@ -1169,22 +1169,22 @@ fn getCompletion(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requ
             .global_error_set => try completeError(arena, id, handle),
             .enum_literal => try completeDot(arena, id, handle),
             .label => try completeLabel(arena, id, doc_position.absolute_index, handle),
-            else => types.Response{ .id = id, .result = no_completions_response },
+            else => lsp.Response{ .id = id, .result = no_completions_response },
         };
     }
 
     logger.warn("Trying to complete in non existent document {s}", .{req.params.textDocument.uri});
-    return types.Response{ .id = id, .result = no_completions_response };
+    return lsp.Response{ .id = id, .result = no_completions_response };
 }
 
-pub fn completionHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn completionHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.Completion, tree.root);
     return try getCompletion(arena, id, req);
 }
 
-fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.SignatureHelp) !types.Response {
+fn getSignature(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.SignatureHelp) !lsp.Response {
     if (req.params.position.character == 0)
-        return types.Response{ .id = id, .result = no_signatures_response };
+        return lsp.Response{ .id = id, .result = no_signatures_response };
 
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1195,11 +1195,11 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reque
             doc_position.absolute_index,
             data,
         )) |sig_info| {
-            return types.Response{
+            return lsp.Response{
                 .id = id,
                 .result = .{
                     .SignatureHelp = .{
-                        .signatures = &[1]types.SignatureInformation{sig_info},
+                        .signatures = &[1]lsp.SignatureInformation{sig_info},
                         .activeSignature = 0,
                         .activeParameter = sig_info.activeParameter,
                     },
@@ -1210,23 +1210,23 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reque
         logger.warn("Trying to get signature help in non existent document {s}", .{req.params.textDocument.uri});
     }
 
-    return types.Response{ .id = id, .result = no_signatures_response };
+    return lsp.Response{ .id = id, .result = no_signatures_response };
 }
 
-pub fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.SignatureHelp, tree.root);
     return try getSignature(arena, id, req);
 }
 
-pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.GotoDefinition, resolve_alias: bool) !types.Response {
+pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to go to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1237,28 +1237,28 @@ pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: re
         .field_access => |range| try gotoDefinitionFieldAccess(arena, id, handle, doc_position, range, resolve_alias),
         .string_literal => try gotoDefinitionString(arena, id, doc_position.absolute_index, handle),
         .label => try gotoDefinitionLabel(arena, id, doc_position.absolute_index, handle),
-        else => types.Response.createNull(id),
+        else => lsp.Response.createNull(id),
     };
 }
 
-pub fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.GotoDefinition, tree.root);
     return try gotoHandler(arena, id, req, true);
 }
 
-pub fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.GotoDeclaration, tree.root);
     return try gotoHandler(arena, id, req, false);
 }
 
-fn getHover(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Hover) !types.Response {
+fn getHover(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.Hover) !lsp.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get hover in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1268,42 +1268,42 @@ fn getHover(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.
         .var_access => try hoverDefinitionGlobal(arena, id, doc_position.absolute_index, handle),
         .field_access => |range| try hoverDefinitionFieldAccess(arena, id, handle, doc_position, range),
         .label => try hoverDefinitionLabel(arena, id, doc_position.absolute_index, handle),
-        else => types.Response.createNull(id),
+        else => lsp.Response.createNull(id),
     };
 }
 
-pub fn hoverHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn hoverHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.Hover, tree.root);
     return try getHover(arena, id, req);
 }
 
-fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.DocumentSymbols) !types.Response {
+fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.DocumentSymbols) !lsp.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get document symbols in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
-    return types.Response{
+    return lsp.Response{
         .id = id,
         .result = .{ .DocumentSymbols = try analysis.getDocumentSymbols(arena.allocator(), handle.tree, offset_encoding) },
     };
 }
 
-pub fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     _ = config;
     const req = try requests.fromDynamicTree(arena, requests.DocumentSymbols, tree.root);
     return try getDocumentSymbol(arena, id, req);
 }
 
-fn doFormat(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Formatting) !types.Response {
+fn doFormat(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.Formatting) !lsp.Response {
     const zig_exe_path = config.zig_exe_path orelse {
         logger.warn("no zig_exe_path", .{});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to got to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
     var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, allocator);
@@ -1311,7 +1311,7 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.
     process.stdout_behavior = .Pipe;
     process.spawn() catch |err| {
         logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
     try process.stdin.?.writeAll(handle.document.text);
     process.stdin.?.close();
@@ -1319,7 +1319,7 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.
 
     const stdout_bytes = try process.stdout.?.reader().readAllAlloc(arena.allocator(), std.math.maxInt(usize));
 
-    var edits = try arena.allocator().alloc(types.TextEdit, 1);
+    var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
         .range = try offsets.documentRange(handle.document, offset_encoding),
         .newText = stdout_bytes,
@@ -1327,7 +1327,7 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.
 
     switch (try process.wait()) {
         .Exited => |code| if (code == 0) {
-            return types.Response{
+            return lsp.Response{
                 .id = id,
                 .result = .{
                     .TextEdits = edits,
@@ -1337,22 +1337,22 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.
         else => {},
     }
 
-    return types.Response.createNull(id);
+    return lsp.Response.createNull(id);
 }
 
-pub fn formattingHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn formattingHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.Formatting, tree.root);
     return try doFormat(arena, id, req);
 }
 
-fn doRename(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.Rename) !types.Response {
+fn doRename(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.Rename) !lsp.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to rename in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1362,23 +1362,23 @@ fn doRename(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.
         .var_access => try renameDefinitionGlobal(arena, id, handle, doc_position.absolute_index, req.params.newName),
         .field_access => |range| try renameDefinitionFieldAccess(arena, id, handle, doc_position, range, req.params.newName),
         .label => try renameDefinitionLabel(arena, id, handle, doc_position.absolute_index, req.params.newName),
-        else => types.Response.createNull(id),
+        else => lsp.Response.createNull(id),
     };
 }
 
-pub fn renameHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn renameHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.Rename, tree.root);
     return try doRename(arena, id, req);
 }
 
-fn getReference(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: requests.References) !types.Response {
+fn getReference(arena: *std.heap.ArenaAllocator, id: lsp.RequestId, req: requests.References) !lsp.Response {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse {
         logger.warn("Trying to get references in non existent document {s}", .{req.params.textDocument.uri});
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     };
 
     if (req.params.position.character < 0) {
-        return types.Response.createNull(id);
+        return lsp.Response.createNull(id);
     }
 
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1389,11 +1389,11 @@ fn getReference(arena: *std.heap.ArenaAllocator, id: types.RequestId, req: reque
         .var_access => try referencesDefinitionGlobal(arena, id, handle, doc_position.absolute_index, include_decl, config.skip_std_references),
         .field_access => |range| try referencesDefinitionFieldAccess(arena, id, handle, doc_position, range, include_decl),
         .label => try referencesDefinitionLabel(arena, id, handle, doc_position.absolute_index, include_decl),
-        else => types.Response.createNull(id),
+        else => lsp.Response.createNull(id),
     };
 }
 
-pub fn referencesHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn referencesHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
     return try getReference(arena, id, req);
 }
@@ -1401,7 +1401,7 @@ pub fn referencesHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTr
 pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
     allocator = a;
     analysis.init(allocator);
-    notifyQueue = std.ArrayList(types.Notification).init(allocator);
+    notifyQueue = std.ArrayList(lsp.Notification).init(allocator);
     try document_store.init(
         allocator,
         config.zig_exe_path,

@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("./types.zig");
+const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 
 pub const Encoding = enum {
@@ -13,7 +13,7 @@ pub const DocumentPosition = struct {
     absolute_index: usize,
 };
 
-pub fn documentPosition(doc: types.TextDocument, position: types.Position, encoding: Encoding) !DocumentPosition {
+pub fn documentPosition(doc: lsp.TextDocument, position: lsp.Position, encoding: Encoding) !DocumentPosition {
     var split_iterator = std.mem.split(u8, doc.text, "\n");
 
     var line_idx: i64 = 0;
@@ -181,7 +181,7 @@ pub fn tokenLocation(tree: Ast, token_index: Ast.TokenIndex) Loc {
     return .{ .start = token.loc.start, .end = token.loc.end };
 }
 
-pub fn documentRange(doc: types.TextDocument, encoding: Encoding) !types.Range {
+pub fn documentRange(doc: lsp.TextDocument, encoding: Encoding) !lsp.Range {
     var line_idx: i64 = 0;
     var curr_line: []const u8 = doc.text;
 
@@ -191,7 +191,7 @@ pub fn documentRange(doc: types.TextDocument, encoding: Encoding) !types.Range {
     }
 
     if (encoding == .utf8) {
-        return types.Range{
+        return lsp.Range{
             .start = .{
                 .line = 0,
                 .character = 0,
@@ -214,7 +214,7 @@ pub fn documentRange(doc: types.TextDocument, encoding: Encoding) !types.Range {
             }
             line_utf8_idx += n;
         }
-        return types.Range{
+        return lsp.Range{
             .start = .{
                 .line = 0,
                 .character = 0,

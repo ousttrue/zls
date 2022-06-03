@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("./types.zig");
+const lsp = @import("lsp");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
 
 const logger = std.log.scoped(.jsonrpc);
@@ -10,7 +10,7 @@ pub const RpcError = error{
     NotImplemented,
 };
 
-pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) anyerror!types.Response;
+pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) anyerror!lsp.Response;
 pub const NotifyProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void;
 
 pub var request_map: std.StringHashMap(RequestProto) = undefined;
@@ -27,8 +27,8 @@ pub fn send(arena: *std.heap.ArenaAllocator, reqOrRes: anytype) void {
     stdout.flush() catch @panic("send");
 }
 
-fn showMessage(message_type: types.MessageType, message: []const u8) !void {
-    try send(types.Notification{
+fn showMessage(message_type: lsp.MessageType, message: []const u8) !void {
+    try send(lsp.Notification{
         .method = "window/showMessage",
         .params = .{
             .ShowMessageParams = .{
@@ -39,7 +39,7 @@ fn showMessage(message_type: types.MessageType, message: []const u8) !void {
     });
 }
 
-fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId, method: []const u8) void {
+fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId, method: []const u8) void {
     if (request_map.get(method)) |handler| {
         const start_time = std.time.milliTimestamp();
         if (handler(arena, tree, id)) |res| {
@@ -48,13 +48,13 @@ fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.
             logger.debug("id[{}] {s} => {}ms", .{ id.toInt(i64), method, end_time - start_time });
         } else |err| {
             logger.warn("id[{}] {s} => {s}", .{ id.toInt(i64), method, @errorName(err) });
-            const res = types.Response.createErrorNotImplemented(id);
+            const res = lsp.Response.createErrorNotImplemented(id);
             send(arena, res);
         }
     } else {
         // no method
         logger.warn("id[{}] {s} => unknown request", .{ id.toInt(i64), method });
-        const res = types.Response.createNull(id);
+        const res = lsp.Response.createNull(id);
         send(arena, res);
     }
 }
@@ -80,7 +80,7 @@ pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) RpcErr
     if (tree.root.Object.get("id")) |idValue| {
         if (tree.root.Object.get("method")) |method| {
             // request
-            if (types.RequestId.fromJson(idValue)) |id| {
+            if (lsp.RequestId.fromJson(idValue)) |id| {
                 request(arena, tree, id, method.String);
             } else {
                 return RpcError.Format;
@@ -101,16 +101,16 @@ pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) RpcErr
 }
 
 pub var keep_running = false;
-pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: types.RequestId) !types.Response {
+pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: lsp.RequestId) !lsp.Response {
     _ = arena;
     _ = tree;
     logger.info("Server closing...", .{});
     keep_running = false;
     // Technically we should deinitialize first and send possible errors to the client
-    return types.Response.createNull(id);
+    return lsp.Response.createNull(id);
 }
 
-pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, notifyQueue: *std.ArrayList(types.Notification)) void {
+pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File, notifyQueue: *std.ArrayList(lsp.Notification)) void {
     stdout = std.io.bufferedWriter(w.writer());
     keep_running = true;
     const reader = r.reader();

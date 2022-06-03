@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("./types.zig");
+const lsp = @import("lsp");
 const URI = @import("./uri.zig");
 const analysis = @import("./analysis.zig");
 const offsets = @import("./offsets.zig");
@@ -28,7 +28,7 @@ const BuildFile = struct {
 };
 
 pub const Handle = struct {
-    document: types.TextDocument,
+    document: lsp.TextDocument,
     count: usize,
     /// Contains one entry for every import in the document
     import_uris: []const []const u8,
@@ -544,12 +544,12 @@ pub fn applyChanges(self: *DocumentStore, handle: *Handle, content_changes: std.
 
             // TODO: add tests and validate the JSON
             const start_obj = range.Object.get("start").?.Object;
-            const start_pos = types.Position{
+            const start_pos = lsp.Position{
                 .line = start_obj.get("line").?.Integer,
                 .character = start_obj.get("character").?.Integer,
             };
             const end_obj = range.Object.get("end").?.Object;
-            const end_pos = types.Position{
+            const end_pos = lsp.Position{
                 .line = end_obj.get("line").?.Integer,
                 .character = end_obj.get("character").?.Integer,
             };
@@ -768,7 +768,7 @@ pub fn deinit(self: *DocumentStore) void {
     self.build_files.deinit(self.allocator);
 }
 
-fn tagStoreCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle, comptime name: []const u8) ![]types.CompletionItem {
+fn tagStoreCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle, comptime name: []const u8) ![]lsp.CompletionItem {
     // TODO Better solution for deciding what tags to include
     var max_len: usize = @field(base.document_scope, name).count();
     for (base.imports_used.items) |uri| {
@@ -790,10 +790,10 @@ fn tagStoreCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator,
     return result_set.entries.items(.key);
 }
 
-pub fn errorCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle) ![]types.CompletionItem {
+pub fn errorCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "error_completions");
 }
 
-pub fn enumCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle) ![]types.CompletionItem {
+pub fn enumCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "enum_completions");
 }

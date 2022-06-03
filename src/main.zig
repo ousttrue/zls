@@ -1,12 +1,13 @@
 const std = @import("std");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
-const types = @import("./types.zig");
+// const types = @import("./types.zig");
 const server = @import("server.zig");
 const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
 const jsonrpc = @import("./jsonrpc.zig");
+const lsp = @import("lsp");
 
 const logger = std.log.scoped(.main);
 
@@ -37,17 +38,16 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
         return;
     };
 
-    const message_type: types.MessageType = switch (message_level) {
-        .debug => .Log,
-        .info => .Info,
-        .warn => .Warning,
-        .err => .Error,
-    };
-    jsonrpc.send(&arena, types.Notification{
+    jsonrpc.send(&arena, lsp.Notification{
         .method = "window/logMessage",
-        .params = types.Notification.Params{
+        .params = lsp.Notification.Params{
             .LogMessage = .{
-                .type = message_type,
+                .type = switch (message_level) {
+                    .debug => .Log,
+                    .info => .Info,
+                    .warn => .Warning,
+                    .err => .Error,
+                },
                 .message = message,
             },
         },

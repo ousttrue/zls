@@ -2,14 +2,14 @@ const std = @import("std");
 const analysis = @import("./analysis.zig");
 const offsets = @import("./offsets.zig");
 const DocumentStore = @import("./DocumentStore.zig");
-const types = @import("./types.zig");
+const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const identifierFromPosition = @import("./server.zig").identifierFromPosition;
 const ast = @import("./ast.zig");
 
-fn fnProtoToSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAllocator, commas: u32, skip_self_param: bool, handle: *DocumentStore.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !types.SignatureInformation {
-    const ParameterInformation = types.SignatureInformation.ParameterInformation;
+fn fnProtoToSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAllocator, commas: u32, skip_self_param: bool, handle: *DocumentStore.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
+    const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
 
     const tree = handle.tree;
     const token_starts = tree.tokens.items(.start);
@@ -56,18 +56,18 @@ fn fnProtoToSignatureInfo(document_store: *DocumentStore, arena: *std.heap.Arena
         const param_label = tree.source[param_label_start..param_label_end];
         try params.append(alloc, .{
             .label = param_label,
-            .documentation = types.MarkupContent{ .value = param_comments },
+            .documentation = lsp.MarkupContent{ .value = param_comments },
         });
     }
-    return types.SignatureInformation{
+    return lsp.SignatureInformation{
         .label = label,
-        .documentation = types.MarkupContent{ .value = proto_comments },
+        .documentation = lsp.MarkupContent{ .value = proto_comments },
         .parameters = params.items,
         .activeParameter = arg_idx,
     };
 }
 
-pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAllocator, handle: *DocumentStore.Handle, absolute_index: usize, comptime data: type) !?types.SignatureInformation {
+pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAllocator, handle: *DocumentStore.Handle, absolute_index: usize, comptime data: type) !?lsp.SignatureInformation {
     const innermost_block = analysis.innermostBlockScope(handle.*, absolute_index);
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);
@@ -188,7 +188,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
                     for (data.builtins) |builtin| {
                         if (std.mem.eql(u8, builtin.name, tree.tokenSlice(expr_last_token))) {
                             const param_infos = try alloc.alloc(
-                                types.SignatureInformation.ParameterInformation,
+                                lsp.SignatureInformation.ParameterInformation,
                                 builtin.arguments.len,
                             );
                             for (param_infos) |*info, i| {
@@ -197,7 +197,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
                                     .documentation = null,
                                 };
                             }
-                            return types.SignatureInformation{
+                            return lsp.SignatureInformation{
                                 .label = builtin.signature,
                                 .documentation = .{
                                     .value = builtin.documentation,
