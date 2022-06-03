@@ -1,9 +1,10 @@
 const types = @import("./types.zig");
+const response = @import("./response.zig");
+const notification = @import("./notification.zig");
 
 pub const TextDocument = types.TextDocument;
 pub const TextEdit = types.TextEdit;
 pub const CompletionItem = types.CompletionItem;
-pub const Diagnostic = types.Diagnostic;
 pub const Range = types.Range;
 pub const Position = types.Position;
 pub const MarkupContent = types.MarkupContent;
@@ -15,6 +16,10 @@ pub const SignatureHelp = types.SignatureHelp;
 pub const SignatureInformation = types.SignatureInformation;
 
 pub const RequestId = types.RequestId;
-pub const Notification = types.Notification;
-pub const ResponseParams = types.ResponseParams;
-pub const Response = types.Response;
+
+pub const Notification = notification.Notification;
+pub const NotificationParams = notification.NotificationParams;
+pub const Diagnostic = notification.Diagnostic;
+
+pub const Response = response.Response;
+pub const ResponseParams = response.ResponseParams;

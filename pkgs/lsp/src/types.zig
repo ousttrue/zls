@@ -1,5 +1,5 @@
 const std = @import("std");
-const string = []const u8;
+pub const string = []const u8;
 
 // LSP types
 // https://microsoft.github.io/language-server-protocol/specifications/specification-3-16/
@@ -27,19 +27,16 @@ pub const RequestId = union(enum) {
     Integer: i64,
     Float: f64,
 
-    pub fn fromJson(value: std.json.Value) ?RequestId
-    {
-        return switch(value){
-            .Integer => |int| .{.Integer=int},
-            .String => |str| .{.String=str},
+    pub fn fromJson(value: std.json.Value) ?RequestId {
+        return switch (value) {
+            .Integer => |int| .{ .Integer = int },
+            .String => |str| .{ .String = str },
             else => null,
         };
     }
 
-    pub fn toInt(self: *const Self, comptime t: type) t
-    {
-        return switch(self.*)
-        {
+    pub fn toInt(self: *const Self, comptime t: type) t {
+        return switch (self.*) {
             .String => std.fmt.parseInt(t, self.String, 10) catch @panic("parseInt"),
             .Integer => @intCast(t, self.Integer),
             .Float => @floatToInt(t, self.Float),
@@ -50,109 +47,6 @@ pub const RequestId = union(enum) {
 /// Hover response
 pub const Hover = struct {
     contents: MarkupContent,
-};
-
-/// Params of a response (result)
-pub const ResponseParams = union(enum) {
-    SignatureHelp: SignatureHelp,
-    CompletionList: CompletionList,
-    Location: Location,
-    Hover: Hover,
-    DocumentSymbols: []DocumentSymbol,
-    SemanticTokensFull: struct { data: []const u32 },
-    TextEdits: []TextEdit,
-    Locations: []Location,
-    WorkspaceEdit: WorkspaceEdit,
-    InitializeResult: InitializeResult,
-    Null: ?struct{},
-};
-
-/// JSONRPC notifications
-pub const Notification = struct {
-    pub const Params = union(enum) {
-        LogMessage: struct {
-            type: MessageType,
-            message: string,
-        },
-        PublishDiagnostics: struct {
-            uri: string,
-            diagnostics: []Diagnostic,
-        },
-        ShowMessage: struct {
-            type: MessageType,
-            message: string,
-        },
-    };
-
-    jsonrpc: string = "2.0",
-    method: string,
-    params: Params,
-};
-
-pub const null_result_response = ResponseParams{
-    .Null = null,
-};
-
-// "error":{"code":-32601,"message":"NotImplemented"}}
-pub const ResponseError = struct{
-    code: i32, 
-    message: []const u8,
-};
-/// JSONRPC response
-pub const Response = struct {
-    jsonrpc: string = "2.0",
-    id: RequestId,
-    result: ResponseParams,
-    @"error": ?ResponseError=null,
-
-    pub fn createNull(id: RequestId) Response
-    {
-        return Response{ .id = id, .result = null_result_response };
-    }
-
-    pub fn createError(id: RequestId, e: ResponseError) Response
-    {
-        return Response{ .id = id, .result = null_result_response, .@"error" = e };
-    }
-
-    pub fn createErrorNotImplemented(id: RequestId) Response
-    {
-        return createError(id, .{
-            .code = -32601,
-            .message = "NotImplemented",
-        });
-    }
-};
-
-/// Type of a debug message
-pub const MessageType = enum(i64) {
-    Error = 1,
-    Warning = 2,
-    Info = 3,
-    Log = 4,
-
-    pub fn jsonStringify(value: MessageType, options: std.json.StringifyOptions, out_stream: anytype) !void {
-        try std.json.stringify(@enumToInt(value), options, out_stream);
-    }
-};
-
-pub const DiagnosticSeverity = enum(i64) {
-    Error = 1,
-    Warning = 2,
-    Information = 3,
-    Hint = 4,
-
-    pub fn jsonStringify(value: DiagnosticSeverity, options: std.json.StringifyOptions, out_stream: anytype) !void {
-        try std.json.stringify(@enumToInt(value), options, out_stream);
-    }
-};
-
-pub const Diagnostic = struct {
-    range: Range,
-    severity: DiagnosticSeverity,
-    code: string,
-    source: string,
-    message: string,
 };
 
 pub const TextDocument = struct {
@@ -361,7 +255,7 @@ pub const SignatureHelp = struct {
 };
 
 // Only includes options we set in our initialize result.
-const InitializeResult = struct {
+pub const InitializeResult = struct {
     offsetEncoding: string,
     capabilities: struct {
         signatureHelpProvider: struct {

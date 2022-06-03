@@ -40,7 +40,7 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
 
     jsonrpc.send(&arena, lsp.Notification{
         .method = "window/logMessage",
-        .params = lsp.Notification.Params{
+        .params = lsp.NotificationParams{
             .LogMessage = .{
                 .type = switch (message_level) {
                     .debug => .Log,
