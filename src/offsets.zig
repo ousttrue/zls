@@ -1,15 +1,23 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
+const Session = @import("./session.zig").Session;
+const DocumentStore = @import("./DocumentStore.zig");
+const analysis = @import("./analysis.zig");
+
+const logger = std.log.scoped(.offset);
 
 pub const OffsetError = error{
     PositionNegativeCharacter,
+    NotImplemented,
+    NoSymbolName,
 };
 
 pub const Encoding = enum {
     utf8,
     utf16,
 };
+pub var offset_encoding = Encoding.utf16;
 
 pub const DocumentPosition = struct {
     line: []const u8,
@@ -418,5 +426,163 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
                 break :block PositionContext{ .var_access = tok.loc };
         }
         break :block .empty;
+    };
+}
+
+fn isSymbolChar(char: u8) bool {
+    return std.ascii.isAlNum(char) or char == '_';
+}
+
+pub fn identifierFromPosition(pos_index: usize, handle: DocumentStore.Handle) []const u8 {
+    const text = handle.document.text;
+
+    if (pos_index + 1 >= text.len) return "";
+    var start_idx = pos_index;
+
+    while (start_idx > 0 and isSymbolChar(text[start_idx - 1])) {
+        start_idx -= 1;
+    }
+
+    var end_idx = pos_index;
+    while (end_idx < handle.document.text.len and isSymbolChar(text[end_idx])) {
+        end_idx += 1;
+    }
+
+    if (end_idx <= start_idx) return "";
+    return text[start_idx..end_idx];
+}
+
+pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
+    const name = identifierFromPosition(pos_index, handle.*);
+    if (name.len == 0){
+        return OffsetError.NoSymbolName;
+    }
+
+    return try analysis.lookupSymbolGlobal(session, handle, name, pos_index);
+}
+
+pub fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
+    const name = identifierFromPosition(pos_index, handle.*);
+    if (name.len == 0) return null;
+
+    return try analysis.lookupLabel(handle, name, pos_index);
+}
+
+fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !lsp.Response {
+    var handle = decl_handle.handle;
+
+    const location = switch (decl_handle.decl.*) {
+        .ast_node => |node| block: {
+            if (resolve_alias) {
+                if (try analysis.resolveVarDeclAlias(session, .{ .node = node, .handle = handle })) |result| {
+                    handle = result.handle;
+                    break :block try result.location(offset_encoding);
+                }
+            }
+
+            const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
+                return lsp.Response.createNull(id);
+            break :block try tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
+        },
+        else => try decl_handle.location(offset_encoding),
+    };
+
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .Location = .{
+                .uri = handle.document.uri,
+                .range = .{
+                    .start = .{
+                        .line = @intCast(i64, location.line),
+                        .character = @intCast(i64, location.column),
+                    },
+                    .end = .{
+                        .line = @intCast(i64, location.line),
+                        .character = @intCast(i64, location.column),
+                    },
+                },
+            },
+        },
+    };
+}
+
+pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !?analysis.DeclWithHandle {
+    const name = identifierFromPosition(position.absolute_index, handle.*);
+    if (name.len == 0) return null;
+
+    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
+    var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
+    var tokenizer = std.zig.Tokenizer.init(held_range.data());
+
+    errdefer held_range.release();
+    if (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) |result| {
+        held_range.release();
+        const container_handle = result.unwrapped orelse result.original;
+        const container_handle_node = switch (container_handle.type.data) {
+            .other => |n| n,
+            else => return null,
+        };
+        return try analysis.lookupSymbolContainer(
+            session,
+            .{ .node = container_handle_node, .handle = container_handle.handle },
+            name,
+            true,
+        );
+    }
+    return null;
+}
+
+fn gotoDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange, resolve_alias: bool) !lsp.Response {
+    const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
+    return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
+}
+
+fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    const tree = handle.tree;
+
+    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return lsp.Response.createNull(id);
+    const uri = (try session.document_store.uriFromImportStr(
+        session.arena.allocator(),
+        handle.*,
+        import_str,
+    )) orelse return lsp.Response.createNull(id);
+
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .Location = .{
+                .uri = uri,
+                .range = .{
+                    .start = .{ .line = 0, .character = 0 },
+                    .end = .{ .line = 0, .character = 0 },
+                },
+            },
+        },
+    };
+}
+
+fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    return try gotoDefinitionSymbol(session, id, decl, false);
+}
+
+pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
+    const handle = try session.getHandle(req.params.textDocument.uri);
+    const doc_position = try documentPosition(handle.document, req.params.position, offset_encoding);
+    const pos_context = documentPositionContext(session.arena, handle.document, doc_position);
+
+    return switch (pos_context) {
+        .var_access => {
+            const decl = (try getSymbolGlobal(session, doc_position.absolute_index, handle)) orelse return lsp.Response.createNull(id);
+            return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
+        },
+        .field_access => |range| try gotoDefinitionFieldAccess(session, id, handle, doc_position, range, resolve_alias),
+        .string_literal => try gotoDefinitionString(session, id, doc_position.absolute_index, handle),
+        .label => try gotoDefinitionLabel(session, id, doc_position.absolute_index, handle),
+        else => {
+            logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
+            return OffsetError.NotImplemented;
+        },
     };
 }

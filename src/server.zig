@@ -25,7 +25,6 @@ const ClientCapabilities = struct {
 };
 
 var client_capabilities = ClientCapabilities{};
-var offset_encoding = offsets.Encoding.utf16;
 
 const no_completions_response = lsp.ResponseParams{
     .CompletionList = .{
@@ -376,68 +375,6 @@ fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
     }
 }
 
-pub fn identifierFromPosition(pos_index: usize, handle: DocumentStore.Handle) []const u8 {
-    const text = handle.document.text;
-
-    if (pos_index + 1 >= text.len) return "";
-    var start_idx = pos_index;
-
-    while (start_idx > 0 and isSymbolChar(text[start_idx - 1])) {
-        start_idx -= 1;
-    }
-
-    var end_idx = pos_index;
-    while (end_idx < handle.document.text.len and isSymbolChar(text[end_idx])) {
-        end_idx += 1;
-    }
-
-    if (end_idx <= start_idx) return "";
-    return text[start_idx..end_idx];
-}
-
-fn isSymbolChar(char: u8) bool {
-    return std.ascii.isAlNum(char) or char == '_';
-}
-
-fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !lsp.Response {
-    var handle = decl_handle.handle;
-
-    const location = switch (decl_handle.decl.*) {
-        .ast_node => |node| block: {
-            if (resolve_alias) {
-                if (try analysis.resolveVarDeclAlias(session, .{ .node = node, .handle = handle })) |result| {
-                    handle = result.handle;
-                    break :block try result.location(offset_encoding);
-                }
-            }
-
-            const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
-                return lsp.Response.createNull(id);
-            break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
-        },
-        else => try decl_handle.location(offset_encoding),
-    };
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .Location = .{
-                .uri = handle.document.uri,
-                .range = .{
-                    .start = .{
-                        .line = @intCast(i64, location.line),
-                        .character = @intCast(i64, location.column),
-                    },
-                    .end = .{
-                        .line = @intCast(i64, location.line),
-                        .character = @intCast(i64, location.column),
-                    },
-                },
-            },
-        },
-    };
-}
-
 fn hoverSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle) (std.os.WriteError || error{OutOfMemory})!lsp.Response {
     const handle = decl_handle.handle;
     const tree = handle.tree;
@@ -513,37 +450,13 @@ fn hoverSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle)
     };
 }
 
-fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
-    const name = identifierFromPosition(pos_index, handle.*);
-    if (name.len == 0) return null;
-
-    return try analysis.lookupLabel(handle, name, pos_index);
-}
-
-fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
-    const name = identifierFromPosition(pos_index, handle.*);
-    if (name.len == 0) return null;
-
-    return try analysis.lookupSymbolGlobal(session, handle, name, pos_index);
-}
-
-fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
-    return try gotoDefinitionSymbol(session, id, decl, false);
-}
-
-fn gotoDefinitionGlobal(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle, resolve_alias: bool) !lsp.Response {
-    const decl = (try getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
-    return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
-}
-
 fn hoverDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try hoverSymbol(session, id, decl);
 }
 
 fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const name = identifierFromPosition(pos_index, handle.*);
+    const name = offsets.identifierFromPosition(pos_index, handle.*);
     if (name.len == 0) return lsp.Response.createNull(id);
 
     inline for (builtin_completions.data.builtins) |builtin| {
@@ -569,77 +482,22 @@ fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: 
 }
 
 fn hoverDefinitionGlobal(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const decl = (try getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try hoverSymbol(session, id, decl);
-}
-
-fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !?analysis.DeclWithHandle {
-    const name = identifierFromPosition(position.absolute_index, handle.*);
-    if (name.len == 0) return null;
-
-    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
-    var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
-    var tokenizer = std.zig.Tokenizer.init(held_range.data());
-
-    errdefer held_range.release();
-    if (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) |result| {
-        held_range.release();
-        const container_handle = result.unwrapped orelse result.original;
-        const container_handle_node = switch (container_handle.type.data) {
-            .other => |n| n,
-            else => return null,
-        };
-        return try analysis.lookupSymbolContainer(
-            session,
-            .{ .node = container_handle_node, .handle = container_handle.handle },
-            name,
-            true,
-        );
-    }
-    return null;
-}
-
-fn gotoDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, resolve_alias: bool) !lsp.Response {
-    const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
-    return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
 }
 
 fn hoverDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !lsp.Response {
-    const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
     return try hoverSymbol(session, id, decl);
 }
 
-fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const tree = handle.tree;
-
-    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return lsp.Response.createNull(id);
-    const uri = (try session.document_store.uriFromImportStr(
-        session.arena.allocator(),
-        handle.*,
-        import_str,
-    )) orelse return lsp.Response.createNull(id);
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .Location = .{
-                .uri = uri,
-                .range = .{
-                    .start = .{ .line = 0, .character = 0 },
-                    .end = .{ .line = 0, .character = 0 },
-                },
-            },
-        },
-    };
-}
-
 fn renameDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
-    const decl = (try getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
 
     var workspace_edit = lsp.WorkspaceEdit{
         .changes = std.StringHashMap([]lsp.TextEdit).init(session.arena.allocator()),
     };
-    try rename.renameSymbol(session, decl, new_name, &workspace_edit.changes.?, offset_encoding);
+    try rename.renameSymbol(session, decl, new_name, &workspace_edit.changes.?, offsets.offset_encoding);
     return lsp.Response{
         .id = id,
         .result = .{ .WorkspaceEdit = workspace_edit },
@@ -647,12 +505,12 @@ fn renameDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore.Han
 }
 
 fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
-    const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
 
     var workspace_edit = lsp.WorkspaceEdit{
         .changes = std.StringHashMap([]lsp.TextEdit).init(session.arena.allocator()),
     };
-    try rename.renameSymbol(session, decl, new_name, &workspace_edit.changes.?, offset_encoding);
+    try rename.renameSymbol(session, decl, new_name, &workspace_edit.changes.?, offsets.offset_encoding);
     return lsp.Response{
         .id = id,
         .result = .{ .WorkspaceEdit = workspace_edit },
@@ -660,12 +518,12 @@ fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStor
 }
 
 fn renameDefinitionLabel(session: *Session, id: i64, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
 
     var workspace_edit = lsp.WorkspaceEdit{
         .changes = std.StringHashMap([]lsp.TextEdit).init(session.arena.allocator()),
     };
-    try rename.renameLabel(session, decl, new_name, &workspace_edit.changes.?, offset_encoding);
+    try rename.renameLabel(session, decl, new_name, &workspace_edit.changes.?, offsets.offset_encoding);
     return lsp.Response{
         .id = id,
         .result = .{ .WorkspaceEdit = workspace_edit },
@@ -673,12 +531,12 @@ fn renameDefinitionLabel(session: *Session, id: i64, handle: *DocumentStore.Hand
 }
 
 fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !lsp.Response {
-    const decl = (try getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getSymbolGlobal(session, pos_index, handle)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
     try references.symbolReferences(
         session,
         decl,
-        offset_encoding,
+        offsets.offset_encoding,
         include_decl,
         &locs,
         std.ArrayList(lsp.Location).append,
@@ -691,9 +549,9 @@ fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore
 }
 
 fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
-    const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
-    try references.symbolReferences(session, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, session.config.skip_std_references);
+    try references.symbolReferences(session, decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, session.config.skip_std_references);
     return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
@@ -701,9 +559,9 @@ fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *Document
 }
 
 fn referencesDefinitionLabel(session: *Session, id: i64, handle: *DocumentStore.Handle, pos_index: usize, include_decl: bool) !lsp.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
-    try references.labelReferences(decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
+    try references.labelReferences(decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
     return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
@@ -914,7 +772,7 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 
     for (req.params.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
-            offset_encoding = .utf8;
+            offsets.offset_encoding = .utf8;
         }
     }
 
@@ -941,12 +799,12 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 
     logger.info("zls initialized", .{});
     logger.info("{}", .{client_capabilities});
-    logger.info("Using offset encoding: {s}", .{std.meta.tagName(offset_encoding)});
+    logger.info("Using offset encoding: {s}", .{@tagName(offsets.offset_encoding)});
     return lsp.Response{
         .id = id,
         .result = .{
             .InitializeResult = .{
-                .offsetEncoding = if (offset_encoding == .utf8)
+                .offsetEncoding = if (offsets.offset_encoding == .utf8)
                     @as([]const u8, "utf-8")
                 else
                     "utf-16",
@@ -1025,7 +883,7 @@ pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void 
 
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
     const handle = try session.getHandle(req.params.textDocument.uri);
-    try session.document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
+    try session.document_store.applyChanges(handle, req.params.contentChanges.Array, offsets.offset_encoding);
     if (createNotifyDiagnostics(session, handle)) |notification| {
         session.send(notification);
     } else |_| {}
@@ -1047,7 +905,7 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
 fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
     if (session.config.enable_semantic_tokens) {
         const handle = try session.getHandle(req.params.textDocument.uri);
-        const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offset_encoding);
+        const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offsets.offset_encoding);
         return lsp.Response{
             .id = id,
             .result = .{ .SemanticTokensFull = .{ .data = token_array } },
@@ -1059,7 +917,7 @@ fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.Semant
 fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
     var arena = session.arena;
     const handle = try session.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = offsets.documentPositionContext(arena, handle.document, doc_position);
 
     return switch (pos_context) {
@@ -1083,7 +941,7 @@ fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Re
     }
 
     const handle = try session.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     if (try getSignatureInfo(
         session,
         handle,
@@ -1109,31 +967,17 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
     return try getSignature(session, id, req);
 }
 
-pub fn gotoHandler(session: *Session, id: i64, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
-    const handle = try session.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
-
-    return switch (pos_context) {
-        .var_access => try gotoDefinitionGlobal(session, id, doc_position.absolute_index, handle, resolve_alias),
-        .field_access => |range| try gotoDefinitionFieldAccess(session, id, handle, doc_position, range, resolve_alias),
-        .string_literal => try gotoDefinitionString(session, id, doc_position.absolute_index, handle),
-        .label => try gotoDefinitionLabel(session, id, doc_position.absolute_index, handle),
-        else => lsp.Response.createNull(id),
-    };
-}
-
 pub fn gotoDefinitionHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try gotoHandler(session, id, req, true);
+    return try offsets.gotoHandler(session, id, req, true);
 }
 
 pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try gotoHandler(session, id, req, false);
+    return try offsets.gotoHandler(session, id, req, false);
 }
 
 fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
     return switch (pos_context) {
         .builtin => try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle),
@@ -1153,7 +997,7 @@ fn getDocumentSymbol(session: *Session, id: i64, req: requests.DocumentSymbols) 
 
     return lsp.Response{
         .id = id,
-        .result = .{ .DocumentSymbols = try analysis.getDocumentSymbols(session.arena.allocator(), handle.tree, offset_encoding) },
+        .result = .{ .DocumentSymbols = try analysis.getDocumentSymbols(session.arena.allocator(), handle.tree, offsets.offset_encoding) },
     };
 }
 
@@ -1183,7 +1027,7 @@ fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response 
 
     var edits = try session.arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
-        .range = try offsets.documentRange(handle.document, offset_encoding),
+        .range = try offsets.documentRange(handle.document, offsets.offset_encoding),
         .newText = stdout_bytes,
     };
 
@@ -1208,7 +1052,7 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
 
     return switch (pos_context) {
@@ -1225,7 +1069,7 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
 
     const include_decl = req.params.context.includeDeclaration;

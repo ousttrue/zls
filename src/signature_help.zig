@@ -5,7 +5,6 @@ const DocumentStore = @import("./DocumentStore.zig");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
-const identifierFromPosition = @import("./server.zig").identifierFromPosition;
 const ast = @import("./ast.zig");
 const Session = @import("./session.zig").Session;
 
@@ -284,7 +283,7 @@ pub fn getSignatureInfo(session: *Session, handle: *DocumentStore.Handle, absolu
                         );
                     }
 
-                    const name = identifierFromPosition(expr_end - 1, handle.*);
+                    const name = offsets.identifierFromPosition(expr_end - 1, handle.*);
                     if (name.len == 0) {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;
