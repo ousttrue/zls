@@ -15,6 +15,7 @@ const logger = std.log.scoped(.main);
 // Always set this to debug to make std.log call into our handler, then control the runtime
 // value in the definition below.
 pub const log_level = .debug;
+var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
 
 var actual_log_level: std.log.Level = switch (zig_builtin.mode) {
     .Debug => .debug,
@@ -34,25 +35,33 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    // var message = std.fmt.allocPrint(arena.allocator(), "[{s}-{s}] " ++ format, .{ @tagName(message_level), @tagName(scope) } ++ args) catch {
-    //     std.debug.print("Failed to allocPrint message.\n", .{});
-    //     return;
-    // };
+    var message = std.fmt.allocPrint(arena.allocator(), "[{s}-{s}] " ++ format, .{ @tagName(message_level), @tagName(scope) } ++ args) catch {
+        std.debug.print("Failed to allocPrint message.\n", .{});
+        return;
+    };
 
-    // jsonrpc.send(&arena, lsp.Notification{
-    //     .method = "window/logMessage",
-    //     .params = lsp.NotificationParams{
-    //         .LogMessage = .{
-    //             .type = switch (message_level) {
-    //                 .debug => .Log,
-    //                 .info => .Info,
-    //                 .warn => .Warning,
-    //                 .err => .Error,
-    //             },
-    //             .message = message,
-    //         },
-    //     },
-    // });
+    const notification = lsp.Notification{
+        .method = "window/logMessage",
+        .params = lsp.NotificationParams{
+            .LogMessage = .{
+                .type = switch (message_level) {
+                    .debug => .Log,
+                    .info => .Info,
+                    .warn => .Warning,
+                    .err => .Error,
+                },
+                .message = message,
+            },
+        },
+    };
+
+    var arr = std.ArrayList(u8).init(arena.allocator());
+    std.json.stringify(notification, .{}, arr.writer()) catch @panic("stringify");
+
+    const stdout_stream = stdout.writer();
+    stdout_stream.print("Content-Length: {}\r\n\r\n", .{arr.items.len}) catch @panic("send");
+    stdout_stream.writeAll(arr.items) catch @panic("send");
+    stdout.flush() catch @panic("send");
 }
 
 fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
@@ -94,6 +103,7 @@ pub fn main() anyerror!void {
     // allocator = &gpa_state.allocator;
     // @TODO Using the GPA here, realloc calls hang currently for some reason
     const allocator = std.heap.page_allocator;
+    stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
 
     // Check arguments.
     var args_it = try std.process.ArgIterator.initWithAllocator(allocator);
@@ -295,8 +305,8 @@ pub fn main() anyerror!void {
 
     jsonrpc.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
     jsonrpc.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
-    jsonrpc.registerNotify("textDocument/didChange",requests.ChangeDocument, server.changeDocumentHandler);
-    jsonrpc.registerNotify("textDocument/didClose",requests.CloseDocument, server.closeDocumentHandler);
+    jsonrpc.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
+    jsonrpc.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut());
+    jsonrpc.readloop(allocator, std.io.getStdIn(), stdout);
 }

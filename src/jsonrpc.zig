@@ -4,7 +4,6 @@ const requests = lsp.requests;
 const Session = @import("./session.zig").Session;
 
 const logger = std.log.scoped(.jsonrpc);
-var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
 
 pub const RpcError = error{
     // Parse,
@@ -140,8 +139,7 @@ pub fn shutdownHandler(session: *Session, id: i64, _: void) !lsp.Response {
     return lsp.Response.createNull(id);
 }
 
-pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, w: std.fs.File) void {
-    stdout = std.io.bufferedWriter(w.writer());
+pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, stdout: anytype) void {
     keep_running = true;
     const reader = r.reader();
 
