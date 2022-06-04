@@ -1152,8 +1152,16 @@ pub fn getFieldAccessType(session: *Session, handle: *DocumentStore.Handle, sour
                     tokenizer.buffer[tok.loc.start..tok.loc.end],
                     source_index,
                 )) |child| {
-                    current_type = (try child.resolveType(session, &bound_type_params)) orelse return null;
-                } else return null;
+                    if (try child.resolveType(session, &bound_type_params)) |child_type| {
+                        current_type = child_type;
+                    } else {
+                        log.warn("fail to child.resolveType: {}", .{child.decl});
+                        return null;
+                    }
+                } else {
+                    log.warn("fail to lookupSymbolGlobal: {}", .{tok});
+                    return null;
+                }
             },
             .period => {
                 const after_period = tokenizer.next();
@@ -1384,9 +1392,6 @@ pub fn getImportStr(tree: Ast, node: Ast.Node.Index, source_index: usize) ?[]con
 }
 
 pub const SourceRange = std.zig.Token.Loc;
-
-
-
 
 fn addOutlineNodes(allocator: std.mem.Allocator, tree: Ast, child: Ast.Node.Index, context: *GetDocumentSymbolsContext) anyerror!void {
     switch (tree.nodes.items(.tag)[child]) {
