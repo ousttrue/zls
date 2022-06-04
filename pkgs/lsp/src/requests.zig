@@ -3,7 +3,7 @@
 //! We only define what we actually use.
 
 const std = @import("std");
-const lsp = @import("lsp");
+const types = @import("./types.zig");
 
 /// Only check for the field's existence.
 const Exists = struct {
@@ -166,15 +166,15 @@ pub const Initialize = struct {
 
     params: struct {
         capabilities: ClientCapabilities,
-        workspaceFolders: ?[]const lsp.WorkspaceFolder,
+        workspaceFolders: ?[]const types.WorkspaceFolder,
     },
 };
 
 pub const WorkspaceFoldersChange = struct {
     params: struct {
         event: struct {
-            added: []const lsp.WorkspaceFolder,
-            removed: []const lsp.WorkspaceFolder,
+            added: []const types.WorkspaceFolder,
+            removed: []const types.WorkspaceFolder,
         },
     },
 };
@@ -212,14 +212,14 @@ pub const SemanticTokensFull = TextDocumentIdentifierRequest;
 const TextDocumentIdentifierPositionRequest = struct {
     params: struct {
         textDocument: TextDocumentIdentifier,
-        position: lsp.Position,
+        position: types.Position,
     },
 };
 
 pub const SignatureHelp = struct {
     params: struct {
         textDocument: TextDocumentIdentifier,
-        position: lsp.Position,
+        position: types.Position,
         context: ?struct {
             triggerKind: enum(u32) {
                 invoked = 1,
@@ -228,7 +228,7 @@ pub const SignatureHelp = struct {
             },
             triggerCharacter: ?[]const u8,
             isRetrigger: bool,
-            activeSignatureHelp: ?lsp.SignatureHelp,
+            activeSignatureHelp: ?types.SignatureHelp,
         },
     },
 };
@@ -242,7 +242,7 @@ pub const Formatting = TextDocumentIdentifierRequest;
 pub const Rename = struct {
     params: struct {
         textDocument: TextDocumentIdentifier,
-        position: lsp.Position,
+        position: types.Position,
         newName: []const u8,
     },
 };
@@ -250,7 +250,7 @@ pub const Rename = struct {
 pub const References = struct {
     params: struct {
         textDocument: TextDocumentIdentifier,
-        position: lsp.Position,
+        position: types.Position,
         context: struct {
             includeDeclaration: bool,
         },

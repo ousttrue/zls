@@ -1,7 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
-const requests = @import("./requests.zig");
+const requests = @import("lsp").requests;
 
 const logger = std.log.scoped(.jsonrpc);
 var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;

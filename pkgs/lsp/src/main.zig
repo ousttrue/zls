@@ -1,6 +1,7 @@
 const types = @import("./types.zig");
 const response = @import("./response.zig");
 const notification = @import("./notification.zig");
+pub const requests = @import("./requests.zig");
 
 pub const TextDocument = types.TextDocument;
 pub const TextEdit = types.TextEdit;

@@ -7,7 +7,7 @@ const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
 const jsonrpc = @import("./jsonrpc.zig");
-const requests = @import("./requests.zig");
+const requests = @import("lsp").requests;
 const lsp = @import("lsp");
 
 const logger = std.log.scoped(.main);
