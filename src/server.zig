@@ -1060,7 +1060,7 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
     var arena = session.arena;
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
+    const pos_context = offsets.documentPositionContext(arena, handle.document, doc_position);
 
     return switch (pos_context) {
         .builtin => try session.completion.completeBuiltin(id, session.config),
@@ -1112,7 +1112,7 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
 pub fn gotoHandler(session: *Session, id: i64, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
 
     return switch (pos_context) {
         .var_access => try gotoDefinitionGlobal(session, id, doc_position.absolute_index, handle, resolve_alias),
@@ -1134,7 +1134,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
     return switch (pos_context) {
         .builtin => try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle),
         .var_access => try hoverDefinitionGlobal(session, id, doc_position.absolute_index, handle),
@@ -1209,7 +1209,7 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
 
     return switch (pos_context) {
         .var_access => try renameDefinitionGlobal(session, id, handle, doc_position.absolute_index, req.params.newName),
@@ -1226,7 +1226,7 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
 
     const include_decl = req.params.context.includeDeclaration;
     return switch (pos_context) {
