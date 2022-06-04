@@ -11,6 +11,9 @@ pub const OffsetError = error{
     PositionNegativeCharacter,
     NotImplemented,
     NoSymbolName,
+    NoFieldAccessType,
+    SymbolNotFound,
+    NodeNotFound,
 };
 
 pub const Encoding = enum {
@@ -452,13 +455,13 @@ pub fn identifierFromPosition(pos_index: usize, handle: DocumentStore.Handle) []
     return text[start_idx..end_idx];
 }
 
-pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
+pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !analysis.DeclWithHandle {
     const name = identifierFromPosition(pos_index, handle.*);
-    if (name.len == 0){
+    if (name.len == 0) {
         return OffsetError.NoSymbolName;
     }
 
-    return try analysis.lookupSymbolGlobal(session, handle, name, pos_index);
+    return (try analysis.lookupSymbolGlobal(session, handle, name, pos_index)) orelse return OffsetError.SymbolNotFound;
 }
 
 pub fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
@@ -507,35 +510,30 @@ fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWi
     };
 }
 
-pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !?analysis.DeclWithHandle {
+pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
     const name = identifierFromPosition(position.absolute_index, handle.*);
-    if (name.len == 0) return null;
+    if (name.len == 0) {
+        return OffsetError.NoSymbolName;
+    }
 
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
     var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
     errdefer held_range.release();
-    if (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) |result| {
-        held_range.release();
-        const container_handle = result.unwrapped orelse result.original;
-        const container_handle_node = switch (container_handle.type.data) {
-            .other => |n| n,
-            else => return null,
-        };
-        return try analysis.lookupSymbolContainer(
-            session,
-            .{ .node = container_handle_node, .handle = container_handle.handle },
-            name,
-            true,
-        );
-    }
-    return null;
-}
-
-fn gotoDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange, resolve_alias: bool) !lsp.Response {
-    const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
-    return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
+    const result = (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
+    held_range.release();
+    const container_handle = result.unwrapped orelse result.original;
+    const container_handle_node = switch (container_handle.type.data) {
+        .other => |n| n,
+        else => return OffsetError.NodeNotFound,
+    };
+    return (try analysis.lookupSymbolContainer(
+        session,
+        .{ .node = container_handle_node, .handle = container_handle.handle },
+        name,
+        true,
+    )) orelse return OffsetError.SymbolNotFound;
 }
 
 fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
@@ -574,10 +572,13 @@ pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition,
 
     return switch (pos_context) {
         .var_access => {
-            const decl = (try getSymbolGlobal(session, doc_position.absolute_index, handle)) orelse return lsp.Response.createNull(id);
+            const decl = try getSymbolGlobal(session, doc_position.absolute_index, handle);
             return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
         },
-        .field_access => |range| try gotoDefinitionFieldAccess(session, id, handle, doc_position, range, resolve_alias),
+        .field_access => |range| {
+            const decl = try getSymbolFieldAccess(session, handle, doc_position, range);
+            return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
+        },
         .string_literal => try gotoDefinitionString(session, id, doc_position.absolute_index, handle),
         .label => try gotoDefinitionLabel(session, id, doc_position.absolute_index, handle),
         else => {
