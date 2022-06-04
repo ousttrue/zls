@@ -4,6 +4,7 @@ const requests = lsp.requests;
 const Session = @import("./session.zig").Session;
 const DocumentStore = @import("./DocumentStore.zig");
 const Config = @import("./Config.zig");
+const Completion = @import("./builtin_completions.zig").Completion;
 
 const logger = std.log.scoped(.jsonrpc);
 
@@ -169,8 +170,11 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, stdout: anytype, c
     ) catch @panic("DocumentStore.init");
     defer document_store.deinit();
 
+    var completion = Completion.init(allocator);
+    defer completion.deinit();
+
     while (keep_running) {
-        var session = Session.init(&arena, reader, &json_parser, stdout, &document_store);
+        var session = Session.init(allocator, &arena, reader, &json_parser, stdout, &document_store, &completion);
         defer session.deinit();
 
         dispatch(&session);

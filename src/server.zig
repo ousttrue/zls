@@ -1,5 +1,4 @@
 const std = @import("std");
-const build_options = @import("build_options");
 const Config = @import("./Config.zig");
 const DocumentStore = @import("./DocumentStore.zig");
 const requests = @import("lsp").requests;
@@ -14,25 +13,14 @@ const shared = @import("./shared.zig");
 const Ast = std.zig.Ast;
 const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 const Session = @import("./session.zig").Session;
+const builtin_completions = @import("./builtin_completions.zig");
 
 const DocumentError = error{
     NotExists,
 };
 
-const data = switch (build_options.data_version) {
-    .master => @import("data/master.zig"),
-    .@"0.7.0" => @import("data/0.7.0.zig"),
-    .@"0.7.1" => @import("data/0.7.1.zig"),
-    .@"0.8.0" => @import("data/0.8.0.zig"),
-    .@"0.8.1" => @import("data/0.8.1.zig"),
-    .@"0.9.0" => @import("data/0.9.0.zig"),
-};
-
 const logger = std.log.scoped(.main);
 pub var config = Config{};
-
-// Code is largely based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
-var allocator: std.mem.Allocator = undefined;
 
 const ClientCapabilities = struct {
     supports_snippets: bool = false,
@@ -64,16 +52,6 @@ const no_semantic_tokens_response = lsp.ResponseParams{
         .data = &.{},
     },
 };
-
-fn truncateCompletions(list: []lsp.CompletionItem, max_detail_length: usize) void {
-    for (list) |*item| {
-        if (item.detail) |det| {
-            if (det.len > max_detail_length) {
-                item.detail = det[0..max_detail_length];
-            }
-        }
-    }
-}
 
 // TODO: Is this correct or can we get a better end?
 fn astLocationToRange(loc: Ast.Location) lsp.Range {
@@ -573,7 +551,7 @@ fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: 
     const name = identifierFromPosition(pos_index, handle.*);
     if (name.len == 0) return lsp.Response.createNull(id);
 
-    inline for (data.builtins) |builtin| {
+    inline for (builtin_completions.data.builtins) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
             return lsp.Response{
                 .id = id,
@@ -846,7 +824,7 @@ fn completeLabel(session: *Session, id: i64, pos_index: usize, handle: *Document
         .orig_handle = handle,
     };
     try analysis.iterateLabels(session, handle, pos_index, declToCompletion, context);
-    truncateCompletions(completions.items, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
 
     return lsp.Response{
         .id = id,
@@ -854,49 +832,6 @@ fn completeLabel(session: *Session, id: i64, pos_index: usize, handle: *Document
             .CompletionList = .{
                 .isIncomplete = false,
                 .items = completions.items,
-            },
-        },
-    };
-}
-
-var builtin_completions: ?[]lsp.CompletionItem = null;
-fn completeBuiltin(id: i64) !lsp.Response {
-    if (builtin_completions == null) {
-        builtin_completions = try allocator.alloc(lsp.CompletionItem, data.builtins.len);
-        for (data.builtins) |builtin, idx| {
-            builtin_completions.?[idx] = lsp.CompletionItem{
-                .label = builtin.name,
-                .kind = .Function,
-                .filterText = builtin.name[1..],
-                .detail = builtin.signature,
-                .documentation = .{
-                    .kind = .Markdown,
-                    .value = builtin.documentation,
-                },
-            };
-
-            var insert_text: []const u8 = undefined;
-            if (config.enable_snippets) {
-                insert_text = builtin.snippet;
-                builtin_completions.?[idx].insertTextFormat = .Snippet;
-            } else {
-                insert_text = builtin.name;
-            }
-            builtin_completions.?[idx].insertText =
-                if (config.include_at_in_builtins)
-                insert_text
-            else
-                insert_text[1..];
-        }
-        truncateCompletions(builtin_completions.?, config.max_detail_length);
-    }
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = builtin_completions.?,
             },
         },
     };
@@ -912,7 +847,7 @@ fn completeGlobal(session: *Session, id: i64, pos_index: usize, handle: *Documen
         .orig_handle = handle,
     };
     try analysis.iterateSymbolsGlobal(session, handle, pos_index, declToCompletion, context);
-    truncateCompletions(completions.items, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
 
     return lsp.Response{
         .id = id,
@@ -936,7 +871,7 @@ fn completeFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle
     if (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) |result| {
         held_range.release();
         try typeToCompletion(session, &completions, result, handle);
-        truncateCompletions(completions.items, config.max_detail_length);
+        builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
 
     return lsp.Response{
@@ -952,7 +887,7 @@ fn completeFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle
 
 fn completeError(session: *Session, id: i64, handle: *DocumentStore.Handle) !lsp.Response {
     const completions = try session.document_store.errorCompletionItems(session.arena, handle);
-    truncateCompletions(completions, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions, config.max_detail_length);
     logger.debug("Completing error:", .{});
 
     return lsp.Response{
@@ -968,7 +903,7 @@ fn completeError(session: *Session, id: i64, handle: *DocumentStore.Handle) !lsp
 
 fn completeDot(session: *Session, id: i64, handle: *DocumentStore.Handle) !lsp.Response {
     var completions = try session.document_store.enumCompletionItems(session.arena, handle);
-    truncateCompletions(completions, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions, config.max_detail_length);
 
     return lsp.Response{
         .id = id,
@@ -1142,7 +1077,7 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
         const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
 
         return switch (pos_context) {
-            .builtin => try completeBuiltin(id),
+            .builtin => try session.completion.completeBuiltin(id, &config),
             .var_access, .empty => try completeGlobal(session, id, doc_position.absolute_index, handle),
             .field_access => |range| try completeFieldAccess(session, id, handle, doc_position, range),
             .global_error_set => try completeError(session, id, handle),
@@ -1170,7 +1105,7 @@ fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Re
             session,
             handle,
             doc_position.absolute_index,
-            data,
+            builtin_completions.data,
         )) |sig_info| {
             return lsp.Response{
                 .id = id,
@@ -1277,7 +1212,7 @@ fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response 
         return lsp.Response.createNull(id);
     };
 
-    var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, allocator);
+    var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, session.arena.allocator());
     process.stdin_behavior = .Pipe;
     process.stdout_behavior = .Pipe;
     process.spawn() catch |err| {
@@ -1364,16 +1299,4 @@ fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Respo
 
 pub fn referencesHandler(session: *Session, id: i64, req: requests.References) !lsp.Response {
     return try getReference(session, id, req);
-}
-
-pub fn init(a: std.mem.Allocator) anyerror!void {
-    allocator = a;
-    analysis.init(allocator);
-}
-
-pub fn deinit() void {
-    analysis.deinit();
-    if (builtin_completions) |compls| {
-        allocator.free(compls);
-    }
 }

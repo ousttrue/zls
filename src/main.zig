@@ -1,7 +1,6 @@
 const std = @import("std");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
-// const types = @import("./types.zig");
 const server = @import("server.zig");
 const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
@@ -9,6 +8,7 @@ const known_folders = @import("known-folders");
 const jsonrpc = @import("./jsonrpc.zig");
 const requests = @import("lsp").requests;
 const lsp = @import("lsp");
+const analysis = @import("./analysis.zig");
 
 const logger = std.log.scoped(.main);
 
@@ -280,8 +280,8 @@ pub fn main() anyerror!void {
         server.config.build_runner_cache_path = try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
     }
 
-    try server.init(allocator);
-    defer server.deinit();
+    analysis.init(allocator);
+    defer analysis.deinit();
 
     jsonrpc.init(allocator);
     defer jsonrpc.deinit();
