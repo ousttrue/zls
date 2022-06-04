@@ -78,7 +78,7 @@ fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
     @setEvalBranchQuota(3000);
     // TODO: Better errors? Doesn't seem like std.json can provide us positions or context.
     var config = std.json.parse(Config, &std.json.TokenStream.init(file_buf), std.json.ParseOptions{ .allocator = allocator }) catch |err| {
-        logger.warn("Error while parsing configuration file: {}", .{err});
+        logger.warn("Error while parsing configuration file: {s} {}", .{file_path, err});
         return null;
     };
 
@@ -264,13 +264,11 @@ pub fn main() anyerror!void {
         config.builtin_path = try std.fs.path.join(allocator, &.{ config_path.?, "builtin.zig" });
     }
 
-    config.build_runner_path = if (config.build_runner_path) |p|
-        try allocator.dupe(u8, p)
-    else blk: {
+    if(config.build_runner_path == null){
         var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
         const exe_dir_path = try std.fs.selfExeDirPath(&exe_dir_bytes);
-        break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
-    };
+        config.build_runner_path = try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
+    }
 
     if (config.build_runner_cache_path == null) {
         const cache_dir_path = (try known_folders.getPath(allocator, .cache)) orelse {

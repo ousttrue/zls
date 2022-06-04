@@ -186,6 +186,9 @@ fn loadPackages(context: LoadPackagesContext) !void {
                         };
                     }
                 }
+            } else {
+                log.debug("{s} => {s}", .{ build_file.uri, zig_run_result.stderr });
+                return error.RunFailed;
             }
         },
         else => return error.RunFailed,
@@ -225,7 +228,7 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
     // TODO: Better logic for detecting std or subdirectories?
     const in_std = std.mem.indexOf(u8, uri, "/std/") != null;
     if (self.zig_exe_path != null and std.mem.endsWith(u8, uri, "/build.zig") and !in_std) {
-        log.debug("Document is a build file, extracting packages...", .{});
+        log.debug("{s} => extracting packages...", .{uri});
         // This is a build file.
         var build_file = try self.allocator.create(BuildFile);
         errdefer build_file.destroy(self.allocator);
@@ -239,9 +242,12 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
         const build_file_path = try URI.parse(self.allocator, build_file.uri);
         defer self.allocator.free(build_file_path);
 
-        loadBuildAssociatedConfiguration(self.allocator, build_file, build_file_path) catch |err| {
+        if (loadBuildAssociatedConfiguration(self.allocator, build_file, build_file_path)) {
+            log.info("{s} => loadBuildAssociatedConfiguration", .{build_file.uri});
+        } else |err| {
             log.debug("Failed to load config associated with build file {s} (error: {})", .{ build_file.uri, err });
-        };
+        }
+
         if (build_file.builtin_uri == null) {
             if (self.builtin_path != null) {
                 build_file.builtin_uri = try URI.fromPath(self.allocator, self.builtin_path.?);
@@ -251,7 +257,7 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
 
         // TODO: Do this in a separate thread?
         // It can take quite long.
-        loadPackages(.{
+        if (loadPackages(.{
             .build_file = build_file,
             .allocator = self.allocator,
             .build_runner_path = self.build_runner_path,
@@ -260,9 +266,11 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
             .build_file_path = build_file_path,
             .cache_root = self.zig_cache_root,
             .global_cache_root = self.zig_global_cache_root,
-        }) catch |err| {
-            log.debug("Failed to load packages of build file {s} (error: {})", .{ build_file.uri, err });
-        };
+        })) {
+            log.info("{s} => loadPackages", .{build_file.uri});
+        } else |err| {
+            log.debug("{s} => {}", .{ build_file.uri, err });
+        }
 
         try self.build_files.append(self.allocator, build_file);
         handle.is_build_file = build_file;

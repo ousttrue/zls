@@ -2,8 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const shared = @import("./src/shared.zig");
 
-const lspPkg = @import("./pkgs/lsp/pkg.zig").pkg;
-
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
 
