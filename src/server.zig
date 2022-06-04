@@ -15,6 +15,10 @@ const Ast = std.zig.Ast;
 const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 const Session = @import("./session.zig").Session;
 
+const DocumentError = error{
+    NotExists,
+};
+
 const data = switch (build_options.data_version) {
     .master => @import("data/master.zig"),
     .@"0.7.0" => @import("data/0.7.0.zig"),
@@ -29,7 +33,6 @@ pub var config = Config{};
 
 // Code is largely based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
 var allocator: std.mem.Allocator = undefined;
-pub var notifyQueue: std.ArrayList(lsp.Notification) = undefined;
 
 var document_store: DocumentStore = undefined;
 
@@ -88,7 +91,7 @@ fn astLocationToRange(loc: Ast.Location) lsp.Range {
     };
 }
 
-fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Handle) !void {
+fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const DocumentStore.Handle) !lsp.Notification {
     const tree = handle.tree;
 
     var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
@@ -157,7 +160,7 @@ fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Hand
         }
     }
 
-    const notification = lsp.Notification{
+    return lsp.Notification{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .PublishDiagnostics = .{
@@ -167,7 +170,7 @@ fn notifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: DocumentStore.Hand
         },
     };
 
-    try notifyQueue.insert(0, notification);
+    // try notifyQueue.insert(0, notification);
 }
 
 fn typeToCompletion(arena: *std.heap.ArenaAllocator, list: *std.ArrayList(lsp.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *DocumentStore.Handle) error{OutOfMemory}!void {
@@ -1092,27 +1095,25 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
     };
 }
 
-pub fn openDocumentHandler(session:*Session, req: requests.OpenDocument) !void {
-    const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
-    try notifyDiagnostics(&session.arena, handle.*);
+pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
+    const handle = document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text) catch return DocumentError.NotExists;
+    if (createNotifyDiagnostics(&session.arena, handle)) |notification| {
+        session.send(notification);
+    } else |_| {}
 }
 
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
-    if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
-        try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-        try notifyDiagnostics(&session.arena, handle.*);
-    } else {
-        logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
-    }
+    const handle = document_store.getHandle(req.params.textDocument.uri) orelse return DocumentError.NotExists;
+    try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
+    if (createNotifyDiagnostics(&session.arena, handle)) |notification| {
+        session.send(notification);
+    } else |_| {}
 }
 
 pub fn saveDocumentHandler(session: *Session, req: requests.SaveDocument) !void {
-    _  = session;
-    if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
-        try document_store.applySave(handle);
-    } else {
-        logger.warn("Trying to save non existent document {s}", .{req.params.textDocument.uri});
-    }
+    _ = session;
+    const handle = document_store.getHandle(req.params.textDocument.uri) orelse return DocumentError.NotExists;
+    try document_store.applySave(handle);
 }
 
 pub fn closeDocumentHandler(session: *Session, req: requests.CloseDocument) !void {
@@ -1378,7 +1379,6 @@ pub fn referencesHandler(session: *Session, id: i64, req: requests.References) !
 pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
     allocator = a;
     analysis.init(allocator);
-    notifyQueue = std.ArrayList(lsp.Notification).init(allocator);
     try document_store.init(
         allocator,
         config.zig_exe_path,
@@ -1398,7 +1398,6 @@ pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_ca
 
 pub fn deinit() void {
     analysis.deinit();
-    notifyQueue.deinit();
     document_store.deinit();
     if (builtin_completions) |compls| {
         allocator.free(compls);
