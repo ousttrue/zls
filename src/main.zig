@@ -34,25 +34,25 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    var message = std.fmt.allocPrint(arena.allocator(), "[{s}-{s}] " ++ format, .{ @tagName(message_level), @tagName(scope) } ++ args) catch {
-        std.debug.print("Failed to allocPrint message.\n", .{});
-        return;
-    };
+    // var message = std.fmt.allocPrint(arena.allocator(), "[{s}-{s}] " ++ format, .{ @tagName(message_level), @tagName(scope) } ++ args) catch {
+    //     std.debug.print("Failed to allocPrint message.\n", .{});
+    //     return;
+    // };
 
-    jsonrpc.send(&arena, lsp.Notification{
-        .method = "window/logMessage",
-        .params = lsp.NotificationParams{
-            .LogMessage = .{
-                .type = switch (message_level) {
-                    .debug => .Log,
-                    .info => .Info,
-                    .warn => .Warning,
-                    .err => .Error,
-                },
-                .message = message,
-            },
-        },
-    });
+    // jsonrpc.send(&arena, lsp.Notification{
+    //     .method = "window/logMessage",
+    //     .params = lsp.NotificationParams{
+    //         .LogMessage = .{
+    //             .type = switch (message_level) {
+    //                 .debug => .Log,
+    //                 .info => .Info,
+    //                 .warn => .Warning,
+    //                 .err => .Error,
+    //             },
+    //             .message = message,
+    //         },
+    //     },
+    // });
 }
 
 fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
@@ -278,25 +278,25 @@ pub fn main() anyerror!void {
     jsonrpc.init(allocator);
     defer jsonrpc.deinit();
 
-    jsonrpc.register_request("initialize", requests.Initialize, server.initializeHandler);
-    jsonrpc.register_request("shutdown", void, jsonrpc.shutdownHandler);
-    jsonrpc.register_request("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
-    jsonrpc.register_request("textDocument/completion", requests.Completion, server.completionHandler);
-    jsonrpc.register_request("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
-    jsonrpc.register_request("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
-    jsonrpc.register_request("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
-    jsonrpc.register_request("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
-    jsonrpc.register_request("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
-    jsonrpc.register_request("textDocument/hover", requests.Hover, server.hoverHandler);
-    jsonrpc.register_request("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
-    jsonrpc.register_request("textDocument/formatting", requests.Formatting, server.formattingHandler);
-    jsonrpc.register_request("textDocument/rename", requests.Rename, server.renameHandler);
-    jsonrpc.register_request("textDocument/references", requests.References, server.referencesHandler);
+    jsonrpc.registerRequest("initialize", requests.Initialize, server.initializeHandler);
+    jsonrpc.registerRequest("shutdown", void, jsonrpc.shutdownHandler);
+    jsonrpc.registerRequest("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
+    jsonrpc.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
+    jsonrpc.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
+    jsonrpc.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    jsonrpc.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    jsonrpc.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
+    jsonrpc.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
+    jsonrpc.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
+    jsonrpc.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
+    jsonrpc.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
+    jsonrpc.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
+    jsonrpc.registerRequest("textDocument/references", requests.References, server.referencesHandler);
 
-    jsonrpc.register_notify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
-    jsonrpc.register_notify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
-    jsonrpc.register_notify("textDocument/didChange",requests.ChangeDocument, server.changeDocumentHandler);
-    jsonrpc.register_notify("textDocument/didClose",requests.CloseDocument, server.closeDocumentHandler);
+    jsonrpc.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
+    jsonrpc.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
+    jsonrpc.registerNotify("textDocument/didChange",requests.ChangeDocument, server.changeDocumentHandler);
+    jsonrpc.registerNotify("textDocument/didClose",requests.CloseDocument, server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut(), &server.notifyQueue);
+    jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut());
 }

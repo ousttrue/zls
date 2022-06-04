@@ -13,6 +13,7 @@ const semantic_tokens = @import("./semantic_tokens.zig");
 const shared = @import("./shared.zig");
 const Ast = std.zig.Ast;
 const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
+const Session = @import("./session.zig").Session;
 
 const data = switch (build_options.data_version) {
     .master => @import("data/master.zig"),
@@ -984,9 +985,9 @@ fn completeDot(arena: *std.heap.ArenaAllocator, id: i64, handle: *DocumentStore.
     };
 }
 
-pub fn initializeHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Initialize) !lsp.Response {
-    _ = arena;
-    _ = config;
+pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !lsp.Response {
+    _ = session;
+
     for (req.params.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
             offset_encoding = .utf8;
@@ -1091,27 +1092,22 @@ pub fn initializeHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests
     };
 }
 
-pub fn openDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.OpenDocument) !void {
-    _ = config;
+pub fn openDocumentHandler(session:*Session, req: requests.OpenDocument) !void {
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
-    _ = handle;
-
-    try notifyDiagnostics(arena, handle.*);
+    try notifyDiagnostics(&session.arena, handle.*);
 }
 
-pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.ChangeDocument) !void {
-    _ = config;
+pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-        try notifyDiagnostics(arena, handle.*);
+        try notifyDiagnostics(&session.arena, handle.*);
     } else {
         logger.debug("Trying to change non existent document {s}", .{req.params.textDocument.uri});
     }
 }
 
-pub fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.SaveDocument) !void {
-    _ = config;
-    _ = arena;
+pub fn saveDocumentHandler(session: *Session, req: requests.SaveDocument) !void {
+    _  = session;
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applySave(handle);
     } else {
@@ -1119,20 +1115,19 @@ pub fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.SaveDo
     }
 }
 
-pub fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.CloseDocument) !void {
-    _ = config;
-    _ = arena;
+pub fn closeDocumentHandler(session: *Session, req: requests.CloseDocument) !void {
+    _ = session;
     document_store.closeDocument(req.params.textDocument.uri);
 }
 
-pub fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
-    return try semanticTokensFullHandlerReq(arena, id, req);
+pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
+    return try semanticTokensFullHandlerReq(session, id, req);
 }
 
-fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
+fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
     if (config.enable_semantic_tokens) {
         if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
-            const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &document_store, handle, offset_encoding);
+            const token_array = try semantic_tokens.writeAllSemanticTokens(&session.arena, &document_store, handle, offset_encoding);
             return lsp.Response{
                 .id = id,
                 .result = .{ .SemanticTokensFull = .{ .data = token_array } },
@@ -1144,11 +1139,12 @@ fn semanticTokensFullHandlerReq(arena: *std.heap.ArenaAllocator, id: i64, req: r
     return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
 }
 
-fn getCompletion(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Completion) !lsp.Response {
+fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
     if (req.params.position.character < 0) {
         return lsp.Response{ .id = id, .result = no_completions_response };
     }
 
+    var arena = &session.arena;
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
         const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
@@ -1168,8 +1164,8 @@ fn getCompletion(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Complet
     return lsp.Response{ .id = id, .result = no_completions_response };
 }
 
-pub fn completionHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Completion) !lsp.Response {
-    return try getCompletion(arena, id, req);
+pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
+    return try getCompletion(session, id, req);
 }
 
 fn getSignature(arena: *std.heap.ArenaAllocator, id: i64, req: requests.SignatureHelp) !lsp.Response {
@@ -1203,9 +1199,9 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Signatur
     return lsp.Response{ .id = id, .result = no_signatures_response };
 }
 
-pub fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.SignatureHelp) !lsp.Response {
+pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Response {
     _ = config;
-    return try getSignature(arena, id, req);
+    return try getSignature(&session.arena, id, req);
 }
 
 pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
@@ -1230,12 +1226,12 @@ pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoD
     };
 }
 
-pub fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try gotoHandler(arena, id, req, true);
+pub fn gotoDefinitionHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
+    return try gotoHandler(&session.arena, id, req, true);
 }
 
-pub fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try gotoHandler(arena, id, req, false);
+pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
+    return try gotoHandler(&session.arena, id, req, false);
 }
 
 fn getHover(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.Response {
@@ -1259,8 +1255,8 @@ fn getHover(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.
     };
 }
 
-pub fn hoverHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.Response {
-    return try getHover(arena, id, req);
+pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
+    return try getHover(&session.arena, id, req);
 }
 
 fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: i64, req: requests.DocumentSymbols) !lsp.Response {
@@ -1275,9 +1271,8 @@ fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Doc
     };
 }
 
-pub fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.DocumentSymbols) !lsp.Response {
-    _ = config;
-    return try getDocumentSymbol(arena, id, req);
+pub fn documentSymbolsHandler(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
+    return try getDocumentSymbol(&session.arena, id, req);
 }
 
 fn doFormat(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) !lsp.Response {
@@ -1325,8 +1320,8 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) 
     return lsp.Response.createNull(id);
 }
 
-pub fn formattingHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) !lsp.Response {
-    return try doFormat(arena, id, req);
+pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !lsp.Response {
+    return try doFormat(&session.arena, id, req);
 }
 
 fn doRename(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp.Response {
@@ -1350,8 +1345,8 @@ fn doRename(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp
     };
 }
 
-pub fn renameHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp.Response {
-    return try doRename(arena, id, req);
+pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
+    return try doRename(&session.arena, id, req);
 }
 
 fn getReference(arena: *std.heap.ArenaAllocator, id: i64, req: requests.References) !lsp.Response {
@@ -1376,8 +1371,8 @@ fn getReference(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Referenc
     };
 }
 
-pub fn referencesHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.References) !lsp.Response {
-    return try getReference(arena, id, req);
+pub fn referencesHandler(session: *Session, id: i64, req: requests.References) !lsp.Response {
+    return try getReference(&session.arena, id, req);
 }
 
 pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {
