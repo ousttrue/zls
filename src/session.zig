@@ -3,19 +3,24 @@ const lsp = @import("lsp");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
 const DocumentStore = @import("./DocumentStore.zig");
 const Completion = @import("./builtin_completions.zig").Completion;
+const Config = @import("./Config.zig");
 
 pub const Session = struct {
     const Self = @This();
 
-    // Arena used for temporary allocations while handling a request
+    // global(not deinit)
     allocator: std.mem.Allocator,
-    arena: *std.heap.ArenaAllocator,
-    writer: std.io.BufferedWriter(4096, std.fs.File.Writer),
-    tree: std.json.ValueTree,
+    config: *Config,
     document_store: *DocumentStore,
     completion: *Completion,
+    writer: std.io.BufferedWriter(4096, std.fs.File.Writer),
 
-    pub fn init(allocator: std.mem.Allocator, arena: *std.heap.ArenaAllocator, reader: anytype, json_parser: *std.json.Parser, writer: anytype, document_store: *DocumentStore, completion: *Completion) Self {
+    // par request session(deinit each session)
+    // Arena used for temporary allocations while handling a request
+    arena: *std.heap.ArenaAllocator,
+    tree: std.json.ValueTree,
+
+    pub fn init(allocator: std.mem.Allocator, config: *Config, document_store: *DocumentStore, completion: *Completion, writer: anytype, arena: *std.heap.ArenaAllocator, reader: anytype, json_parser: *std.json.Parser) Self {
         // read
         const headers = readRequestHeader(arena.allocator(), reader) catch @panic("readRequestHeader");
         const buf = arena.allocator().alloc(u8, headers.content_length) catch @panic("arena.alloc");
@@ -24,15 +29,16 @@ pub const Session = struct {
         const tree = json_parser.parse(buf) catch @panic("parseError");
         defer json_parser.reset();
 
-        var self = .{
+        return .{
             .allocator = allocator,
-            .arena = arena,
-            .writer = writer,
-            .tree = tree,
+            .config = config,
             .document_store = document_store,
             .completion = completion,
+            .writer = writer,
+
+            .arena = arena,
+            .tree = tree,
         };
-        return self;
     }
 
     pub fn deinit(self: *Self) void {

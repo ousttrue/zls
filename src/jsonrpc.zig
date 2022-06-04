@@ -174,7 +174,7 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, stdout: anytype, c
     defer completion.deinit();
 
     while (keep_running) {
-        var session = Session.init(allocator, &arena, reader, &json_parser, stdout, &document_store, &completion);
+        var session = Session.init(allocator, config, &document_store, &completion, stdout, &arena, reader, &json_parser);
         defer session.deinit();
 
         dispatch(&session);

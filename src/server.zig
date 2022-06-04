@@ -20,7 +20,6 @@ const DocumentError = error{
 };
 
 const logger = std.log.scoped(.main);
-pub var config = Config{};
 
 const ClientCapabilities = struct {
     supports_snippets: bool = false,
@@ -67,10 +66,10 @@ fn astLocationToRange(loc: Ast.Location) lsp.Range {
     };
 }
 
-fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const DocumentStore.Handle) !lsp.Notification {
+fn createNotifyDiagnostics(session: *Session, handle: *const DocumentStore.Handle) !lsp.Notification {
     const tree = handle.tree;
 
-    var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
+    var diagnostics = std.ArrayList(lsp.Diagnostic).init(session.arena.allocator());
 
     for (tree.errors) |err| {
         const loc = tree.tokenLocation(0, err.token);
@@ -84,7 +83,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
             .severity = .Error,
             .code = @tagName(err.tag),
             .source = "zls",
-            .message = try arena.allocator().dupe(u8, fbs.getWritten()),
+            .message = try session.arena.allocator().dupe(u8, fbs.getWritten()),
             // .relatedInformation = undefined
         });
     }
@@ -104,7 +103,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
                     const func = ast.fnProto(tree, decl_idx, &buf).?;
                     if (func.extern_export_inline_token != null) break :blk;
 
-                    if (config.warn_style) {
+                    if (session.config.warn_style) {
                         if (func.name_token) |name_token| {
                             const loc = tree.tokenLocation(0, name_token);
 
@@ -170,7 +169,7 @@ fn typeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
         },
         .error_union => {},
         .pointer => |n| {
-            if (config.operator_completions) {
+            if (session.config.operator_completions) {
                 try list.append(.{
                     .label = "*",
                     .kind = .Operator,
@@ -214,7 +213,7 @@ fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
     if (ast.isContainer(handle.tree, node)) {
         const context = DeclToCompletionContext{
             .completions = list,
-            .config = &config,
+            .config = session.config,
             .arena = arena,
             .orig_handle = orig_handle,
             .parent_is_type_val = is_type_val,
@@ -241,7 +240,7 @@ fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
             var buf: [1]Ast.Node.Index = undefined;
             const func = ast.fnProto(tree, node, &buf).?;
             if (func.name_token) |name_token| {
-                const use_snippets = config.enable_snippets and client_capabilities.supports_snippets;
+                const use_snippets = session.config.enable_snippets and client_capabilities.supports_snippets;
                 const insert_text = if (use_snippets) blk: {
                     const skip_self_param = !(parent_is_type_val orelse true) and
                         try analysis.hasSelfParam(session, handle, func);
@@ -271,7 +270,7 @@ fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
             if (try analysis.resolveVarDeclAlias(session, node_handle)) |result| {
                 const context = DeclToCompletionContext{
                     .completions = list,
-                    .config = &config,
+                    .config = session.config,
                     .arena = arena,
                     .orig_handle = orig_handle,
                 };
@@ -319,7 +318,7 @@ fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
             const ptr_type = ast.ptrType(tree, node).?;
 
             switch (ptr_type.size) {
-                .One, .C, .Many => if (config.operator_completions) {
+                .One, .C, .Many => if (session.config.operator_completions) {
                     try list.append(.{
                         .label = "*",
                         .kind = .Operator,
@@ -350,7 +349,7 @@ fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
             return;
         },
         .optional_type => {
-            if (config.operator_completions) {
+            if (session.config.operator_completions) {
                 try list.append(.{
                     .label = "?",
                     .kind = .Operator,
@@ -579,8 +578,6 @@ fn hoverDefinitionGlobal(session: *Session, id: i64, pos_index: usize, handle: *
 }
 
 fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !?analysis.DeclWithHandle {
-    _ = config;
-
     const name = identifierFromPosition(position.absolute_index, handle.*);
     if (name.len == 0) return null;
 
@@ -700,7 +697,7 @@ fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore
 fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
     const decl = (try getSymbolFieldAccess(session, handle, position, range)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
-    try references.symbolReferences(session, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, config.skip_std_references);
+    try references.symbolReferences(session, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, session.config.skip_std_references);
     return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
@@ -819,12 +816,12 @@ fn completeLabel(session: *Session, id: i64, pos_index: usize, handle: *Document
 
     const context = DeclToCompletionContext{
         .completions = &completions,
-        .config = &config,
+        .config = session.config,
         .arena = session.arena,
         .orig_handle = handle,
     };
     try analysis.iterateLabels(session, handle, pos_index, declToCompletion, context);
-    builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions.items, session.config.max_detail_length);
 
     return lsp.Response{
         .id = id,
@@ -842,12 +839,12 @@ fn completeGlobal(session: *Session, id: i64, pos_index: usize, handle: *Documen
 
     const context = DeclToCompletionContext{
         .completions = &completions,
-        .config = &config,
+        .config = session.config,
         .arena = session.arena,
         .orig_handle = handle,
     };
     try analysis.iterateSymbolsGlobal(session, handle, pos_index, declToCompletion, context);
-    builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions.items, session.config.max_detail_length);
 
     return lsp.Response{
         .id = id,
@@ -871,7 +868,7 @@ fn completeFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle
     if (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) |result| {
         held_range.release();
         try typeToCompletion(session, &completions, result, handle);
-        builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
+        builtin_completions.truncateCompletions(completions.items, session.config.max_detail_length);
     }
 
     return lsp.Response{
@@ -887,7 +884,7 @@ fn completeFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle
 
 fn completeError(session: *Session, id: i64, handle: *DocumentStore.Handle) !lsp.Response {
     const completions = try session.document_store.errorCompletionItems(session.arena, handle);
-    builtin_completions.truncateCompletions(completions, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions, session.config.max_detail_length);
     logger.debug("Completing error:", .{});
 
     return lsp.Response{
@@ -903,7 +900,7 @@ fn completeError(session: *Session, id: i64, handle: *DocumentStore.Handle) !lsp
 
 fn completeDot(session: *Session, id: i64, handle: *DocumentStore.Handle) !lsp.Response {
     var completions = try session.document_store.enumCompletionItems(session.arena, handle);
-    builtin_completions.truncateCompletions(completions, config.max_detail_length);
+    builtin_completions.truncateCompletions(completions, session.config.max_detail_length);
 
     return lsp.Response{
         .id = id,
@@ -1025,7 +1022,7 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 
 pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
     const handle = session.document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text) catch return DocumentError.NotExists;
-    if (createNotifyDiagnostics(session.arena, handle)) |notification| {
+    if (createNotifyDiagnostics(session, handle)) |notification| {
         session.send(notification);
     } else |_| {}
 }
@@ -1033,7 +1030,7 @@ pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void 
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
     const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse return DocumentError.NotExists;
     try session.document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-    if (createNotifyDiagnostics(session.arena, handle)) |notification| {
+    if (createNotifyDiagnostics(session, handle)) |notification| {
         session.send(notification);
     } else |_| {}
 }
@@ -1052,7 +1049,7 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
 }
 
 fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
-    if (config.enable_semantic_tokens) {
+    if (session.config.enable_semantic_tokens) {
         if (session.document_store.getHandle(req.params.textDocument.uri)) |handle| {
             const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offset_encoding);
             return lsp.Response{
@@ -1077,7 +1074,7 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
         const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
 
         return switch (pos_context) {
-            .builtin => try session.completion.completeBuiltin(id, &config),
+            .builtin => try session.completion.completeBuiltin(id, session.config),
             .var_access, .empty => try completeGlobal(session, id, doc_position.absolute_index, handle),
             .field_access => |range| try completeFieldAccess(session, id, handle, doc_position, range),
             .global_error_set => try completeError(session, id, handle),
@@ -1126,7 +1123,6 @@ fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Re
 }
 
 pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Response {
-    _ = config;
     return try getSignature(session, id, req);
 }
 
@@ -1202,7 +1198,7 @@ pub fn documentSymbolsHandler(session: *Session, id: i64, req: requests.Document
 }
 
 fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response {
-    const zig_exe_path = config.zig_exe_path orelse {
+    const zig_exe_path = session.config.zig_exe_path orelse {
         logger.warn("no zig_exe_path", .{});
         return lsp.Response.createNull(id);
     };
@@ -1290,7 +1286,7 @@ fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Respo
 
     const include_decl = req.params.context.includeDeclaration;
     return switch (pos_context) {
-        .var_access => try referencesDefinitionGlobal(session, id, handle, doc_position.absolute_index, include_decl, config.skip_std_references),
+        .var_access => try referencesDefinitionGlobal(session, id, handle, doc_position.absolute_index, include_decl, session.config.skip_std_references),
         .field_access => |range| try referencesDefinitionFieldAccess(session, id, handle, doc_position, range, include_decl),
         .label => try referencesDefinitionLabel(session, id, handle, doc_position.absolute_index, include_decl),
         else => lsp.Response.createNull(id),
