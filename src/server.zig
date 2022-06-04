@@ -1057,10 +1057,6 @@ fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.Semant
 }
 
 fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
-    if (req.params.position.character < 0) {
-        return lsp.Response{ .id = id, .result = no_completions_response };
-    }
-
     var arena = session.arena;
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
@@ -1115,11 +1111,6 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
 
 pub fn gotoHandler(session: *Session, id: i64, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-
-    if (req.params.position.character < 0) {
-        return lsp.Response.createNull(id);
-    }
-
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
 
@@ -1142,11 +1133,6 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 
 fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-
-    if (req.params.position.character < 0) {
-        return lsp.Response.createNull(id);
-    }
-
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
     return switch (pos_context) {
@@ -1222,10 +1208,6 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-    if (req.params.position.character < 0) {
-        return lsp.Response.createNull(id);
-    }
-
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
 
@@ -1243,10 +1225,6 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
-    if (req.params.position.character < 0) {
-        return lsp.Response.createNull(id);
-    }
-
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = try analysis.documentPositionContext(session.arena, handle.document, doc_position);
 

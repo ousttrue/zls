@@ -2,6 +2,10 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 
+pub const OffsetError = error{
+    PositionNegativeCharacter,
+};
+
 pub const Encoding = enum {
     utf8,
     utf16,
@@ -14,6 +18,10 @@ pub const DocumentPosition = struct {
 };
 
 pub fn documentPosition(doc: lsp.TextDocument, position: lsp.Position, encoding: Encoding) !DocumentPosition {
+    if (position.character < 0) {
+        return OffsetError.PositionNegativeCharacter;
+    }
+
     var split_iterator = std.mem.split(u8, doc.text, "\n");
 
     var line_idx: i64 = 0;
