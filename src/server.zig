@@ -1093,20 +1093,16 @@ pub fn initializeHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTr
     };
 }
 
-pub fn openDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) !void {
+pub fn openDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.OpenDocument) !void {
     _ = config;
-    const req = try requests.fromDynamicTree(arena, requests.OpenDocument, tree.root);
-
     const handle = try document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     _ = handle;
 
     try notifyDiagnostics(arena, handle.*);
 }
 
-pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) !void {
+pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.ChangeDocument) !void {
     _ = config;
-    const req = try requests.fromDynamicTree(arena, requests.ChangeDocument, tree.root);
-
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
         try notifyDiagnostics(arena, handle.*);
@@ -1115,10 +1111,9 @@ pub fn changeDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.Val
     }
 }
 
-pub fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) !void {
+pub fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.SaveDocument) !void {
     _ = config;
     _ = arena;
-    const req = try requests.fromDynamicTree(arena, requests.SaveDocument, tree.root);
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         try document_store.applySave(handle);
     } else {
@@ -1126,10 +1121,9 @@ pub fn saveDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.Value
     }
 }
 
-pub fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) !void {
+pub fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.CloseDocument) !void {
     _ = config;
     _ = arena;
-    const req = try requests.fromDynamicTree(arena, requests.CloseDocument, tree.root);
     document_store.closeDocument(req.params.textDocument.uri);
 }
 

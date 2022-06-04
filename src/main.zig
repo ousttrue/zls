@@ -7,6 +7,7 @@ const Config = @import("./Config.zig");
 const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
 const jsonrpc = @import("./jsonrpc.zig");
+const requests = @import("./requests.zig");
 const lsp = @import("lsp");
 
 const logger = std.log.scoped(.main);
@@ -274,6 +275,9 @@ pub fn main() anyerror!void {
     try server.init(allocator, build_runner_path, build_runner_cache_path);
     defer server.deinit();
 
+    jsonrpc.init(allocator);
+    defer jsonrpc.deinit();
+
     jsonrpc.request_map = std.StringHashMap(jsonrpc.RequestProto).init(allocator);
     defer jsonrpc.request_map.deinit();
     try jsonrpc.request_map.put("initialize", server.initializeHandler);
@@ -291,12 +295,10 @@ pub fn main() anyerror!void {
     try jsonrpc.request_map.put("textDocument/rename", server.renameHandler);
     try jsonrpc.request_map.put("textDocument/references", server.referencesHandler);
 
-    jsonrpc.notify_map = std.StringHashMap(jsonrpc.NotifyProto).init(allocator);
-    defer jsonrpc.notify_map.deinit();
-    try jsonrpc.notify_map.put("textDocument/didOpen", server.openDocumentHandler);
-    try jsonrpc.notify_map.put("textDocument/didSave", server.saveDocumentHandler);
-    try jsonrpc.notify_map.put("textDocument/didChange", server.changeDocumentHandler);
-    try jsonrpc.notify_map.put("textDocument/didClose", server.closeDocumentHandler);
+    jsonrpc.register_notify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
+    jsonrpc.register_notify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
+    jsonrpc.register_notify("textDocument/didChange",requests.ChangeDocument, server.changeDocumentHandler);
+    jsonrpc.register_notify("textDocument/didClose",requests.CloseDocument, server.closeDocumentHandler);
 
     jsonrpc.readloop(allocator, std.io.getStdIn(), std.io.getStdOut(), &server.notifyQueue);
 }

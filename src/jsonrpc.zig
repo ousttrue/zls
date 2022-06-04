@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
+const requests = @import("./requests.zig");
 
 const logger = std.log.scoped(.jsonrpc);
 var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
@@ -17,7 +18,35 @@ pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.Val
 pub const NotifyProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void;
 
 pub var request_map: std.StringHashMap(RequestProto) = undefined;
-pub var notify_map: std.StringHashMap(NotifyProto) = undefined;
+
+var notify_map: std.StringHashMap(NotifyProto) = undefined;
+
+pub fn init(allocator: std.mem.Allocator) void
+{
+    notify_map = std.StringHashMap(NotifyProto).init(allocator);
+}
+
+pub fn deinit() void
+{
+    notify_map.deinit();
+}
+
+pub fn register_notify(method: []const u8, comptime ParamType: type, comptime callback: fn(arena: *std.heap.ArenaAllocator, req: ParamType) anyerror!void) void
+{
+    const T = struct {
+        pub fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void
+        {
+            if(requests.fromDynamicTree(arena, ParamType, tree.root))|req|
+            {
+                try callback(arena, req);                
+            }
+            else |_| {
+                return RpcError.InvalidParams;
+            }
+        }
+    };
+    notify_map.put(method, T.notify) catch @panic("put");
+}
 
 /// Sends a request or response
 pub fn send(arena: *std.heap.ArenaAllocator, reqOrRes: anytype) void {
