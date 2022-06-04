@@ -1125,8 +1125,7 @@ pub fn closeDocumentHandler(arena: *std.heap.ArenaAllocator, req: requests.Close
     document_store.closeDocument(req.params.textDocument.uri);
 }
 
-pub fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.SemanticTokensFull, tree.root);
+pub fn semanticTokensFullHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
     return try semanticTokensFullHandlerReq(arena, id, req);
 }
 
@@ -1169,8 +1168,7 @@ fn getCompletion(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Complet
     return lsp.Response{ .id = id, .result = no_completions_response };
 }
 
-pub fn completionHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.Completion, tree.root);
+pub fn completionHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Completion) !lsp.Response {
     return try getCompletion(arena, id, req);
 }
 
@@ -1205,9 +1203,8 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Signatur
     return lsp.Response{ .id = id, .result = no_signatures_response };
 }
 
-pub fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
+pub fn signatureHelpHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.SignatureHelp) !lsp.Response {
     _ = config;
-    const req = try requests.fromDynamicTree(arena, requests.SignatureHelp, tree.root);
     return try getSignature(arena, id, req);
 }
 
@@ -1233,13 +1230,11 @@ pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoD
     };
 }
 
-pub fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.GotoDefinition, tree.root);
+pub fn gotoDefinitionHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoDefinition) !lsp.Response {
     return try gotoHandler(arena, id, req, true);
 }
 
-pub fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.GotoDeclaration, tree.root);
+pub fn gotoDeclarationHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoDefinition) !lsp.Response {
     return try gotoHandler(arena, id, req, false);
 }
 
@@ -1264,8 +1259,7 @@ fn getHover(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.
     };
 }
 
-pub fn hoverHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.Hover, tree.root);
+pub fn hoverHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.Response {
     return try getHover(arena, id, req);
 }
 
@@ -1281,9 +1275,8 @@ fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Doc
     };
 }
 
-pub fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
+pub fn documentSymbolsHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.DocumentSymbols) !lsp.Response {
     _ = config;
-    const req = try requests.fromDynamicTree(arena, requests.DocumentSymbols, tree.root);
     return try getDocumentSymbol(arena, id, req);
 }
 
@@ -1332,8 +1325,7 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) 
     return lsp.Response.createNull(id);
 }
 
-pub fn formattingHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.Formatting, tree.root);
+pub fn formattingHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) !lsp.Response {
     return try doFormat(arena, id, req);
 }
 
@@ -1358,8 +1350,7 @@ fn doRename(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp
     };
 }
 
-pub fn renameHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.Rename, tree.root);
+pub fn renameHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp.Response {
     return try doRename(arena, id, req);
 }
 
@@ -1385,8 +1376,7 @@ fn getReference(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Referenc
     };
 }
 
-pub fn referencesHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
-    const req = try requests.fromDynamicTree(arena, requests.References, tree.root);
+pub fn referencesHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.References) !lsp.Response {
     return try getReference(arena, id, req);
 }
 

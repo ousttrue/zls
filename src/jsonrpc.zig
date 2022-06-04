@@ -14,11 +14,9 @@ pub const RpcError = error{
     InternalError,
 };
 
-pub const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) anyerror!lsp.Response;
-pub const NotifyProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void;
-
-pub var request_map: std.StringHashMap(RequestProto) = undefined;
-
+const RequestProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) anyerror!lsp.Response;
+const NotifyProto = fn (arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void;
+var request_map: std.StringHashMap(RequestProto) = undefined;
 var notify_map: std.StringHashMap(NotifyProto) = undefined;
 
 pub fn init(allocator: std.mem.Allocator) void {
@@ -32,16 +30,27 @@ pub fn deinit() void {
 }
 
 pub fn register_request(method: []const u8, comptime ParamType: type, comptime callback: fn (arena: *std.heap.ArenaAllocator, id: i64, req: ParamType) anyerror!lsp.Response) void {
-    const T = struct {
-        pub fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) anyerror!lsp.Response {
-            if (requests.fromDynamicTree(arena, ParamType, tree.root)) |req| {
-                return callback(arena, id, req);
-            } else |_| {
-                return RpcError.InvalidParams;
+    if(ParamType==void)
+    {
+        const T = struct {
+            pub fn request(arena: *std.heap.ArenaAllocator, _: std.json.ValueTree, id: i64) anyerror!lsp.Response {
+                return callback(arena, id, .{});
             }
-        }
-    };
-    request_map.put(method, T.request) catch @panic("put");
+        };
+        request_map.put(method, T.request) catch @panic("put");
+    }
+    else{
+        const T = struct {
+            pub fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) anyerror!lsp.Response {
+                if (requests.fromDynamicTree(arena, ParamType, tree.root)) |req| {
+                    return callback(arena, id, req);
+                } else |_| {
+                    return RpcError.InvalidParams;
+                }
+            }
+        };
+        request_map.put(method, T.request) catch @panic("put");
+    }
 }
 
 pub fn register_notify(method: []const u8, comptime ParamType: type, comptime callback: fn (arena: *std.heap.ArenaAllocator, req: ParamType) anyerror!void) void {
@@ -168,12 +177,9 @@ pub fn process(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) void {
 }
 
 pub var keep_running = false;
-pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
+pub fn shutdownHandler(arena: *std.heap.ArenaAllocator, id: i64, _: void) !lsp.Response {
     _ = arena;
-    _ = tree;
-    logger.info("Server closing...", .{});
     keep_running = false;
-    // Technically we should deinitialize first and send possible errors to the client
     return lsp.Response.createNull(id);
 }
 

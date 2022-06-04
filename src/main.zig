@@ -279,19 +279,19 @@ pub fn main() anyerror!void {
     defer jsonrpc.deinit();
 
     jsonrpc.register_request("initialize", requests.Initialize, server.initializeHandler);
-    try jsonrpc.request_map.put("shutdown", jsonrpc.shutdownHandler);
-    try jsonrpc.request_map.put("textDocument/semanticTokens/full", server.semanticTokensFullHandler);
-    try jsonrpc.request_map.put("textDocument/completion", server.completionHandler);
-    try jsonrpc.request_map.put("textDocument/signatureHelp", server.signatureHelpHandler);
-    try jsonrpc.request_map.put("textDocument/definition", server.gotoDefinitionHandler);
-    try jsonrpc.request_map.put("textDocument/typeDefinition", server.gotoDefinitionHandler);
-    try jsonrpc.request_map.put("textDocument/implementation", server.gotoDefinitionHandler);
-    try jsonrpc.request_map.put("textDocument/declaration", server.gotoDeclarationHandler);
-    try jsonrpc.request_map.put("textDocument/hover", server.hoverHandler);
-    try jsonrpc.request_map.put("textDocument/documentSymbol", server.documentSymbolsHandler);
-    try jsonrpc.request_map.put("textDocument/formatting", server.formattingHandler);
-    try jsonrpc.request_map.put("textDocument/rename", server.renameHandler);
-    try jsonrpc.request_map.put("textDocument/references", server.referencesHandler);
+    jsonrpc.register_request("shutdown", void, jsonrpc.shutdownHandler);
+    jsonrpc.register_request("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
+    jsonrpc.register_request("textDocument/completion", requests.Completion, server.completionHandler);
+    jsonrpc.register_request("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
+    jsonrpc.register_request("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    jsonrpc.register_request("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    jsonrpc.register_request("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
+    jsonrpc.register_request("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
+    jsonrpc.register_request("textDocument/hover", requests.Hover, server.hoverHandler);
+    jsonrpc.register_request("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
+    jsonrpc.register_request("textDocument/formatting", requests.Formatting, server.formattingHandler);
+    jsonrpc.register_request("textDocument/rename", requests.Rename, server.renameHandler);
+    jsonrpc.register_request("textDocument/references", requests.References, server.referencesHandler);
 
     jsonrpc.register_notify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
     jsonrpc.register_notify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
