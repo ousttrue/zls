@@ -37,3 +37,4 @@ max_detail_length: usize = 1024 * 1024,
 skip_std_references: bool = false,
 
 builtin_path: ?[]const u8 = null,
+

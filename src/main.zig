@@ -263,7 +263,7 @@ pub fn main() anyerror!void {
         server.config.builtin_path = try std.fs.path.join(allocator, &.{ config_path.?, "builtin.zig" });
     }
 
-    const build_runner_path = if (server.config.build_runner_path) |p|
+    server.config.build_runner_path = if (server.config.build_runner_path) |p|
         try allocator.dupe(u8, p)
     else blk: {
         var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
@@ -271,18 +271,16 @@ pub fn main() anyerror!void {
         break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
     };
 
-    const build_runner_cache_path = if (server.config.build_runner_cache_path) |p|
-        try allocator.dupe(u8, p)
-    else blk: {
+    if (server.config.build_runner_cache_path == null) {
         const cache_dir_path = (try known_folders.getPath(allocator, .cache)) orelse {
             logger.warn("Known-folders could not fetch the cache path", .{});
             return;
         };
         defer allocator.free(cache_dir_path);
-        break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
-    };
+        server.config.build_runner_cache_path = try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
+    }
 
-    try server.init(allocator, build_runner_path, build_runner_cache_path);
+    try server.init(allocator);
     defer server.deinit();
 
     jsonrpc.init(allocator);
@@ -308,5 +306,5 @@ pub fn main() anyerror!void {
     jsonrpc.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
     jsonrpc.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), stdout);
+    jsonrpc.readloop(allocator, std.io.getStdIn(), stdout, &server.config);
 }

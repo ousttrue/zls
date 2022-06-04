@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const readRequestHeader = @import("./header.zig").readRequestHeader;
+const DocumentStore = @import("./DocumentStore.zig");
 
 pub const Session = struct {
     const Self = @This();
@@ -9,8 +10,9 @@ pub const Session = struct {
     arena: *std.heap.ArenaAllocator,
     writer: std.io.BufferedWriter(4096, std.fs.File.Writer),
     tree: std.json.ValueTree,
+    document_store: *DocumentStore,
 
-    pub fn init(arena: *std.heap.ArenaAllocator, reader: anytype, json_parser: *std.json.Parser, writer: anytype) Self {
+    pub fn init(arena: *std.heap.ArenaAllocator, reader: anytype, json_parser: *std.json.Parser, writer: anytype, document_store: *DocumentStore) Self {
         // read
         const headers = readRequestHeader(arena.allocator(), reader) catch @panic("readRequestHeader");
         const buf = arena.allocator().alloc(u8, headers.content_length) catch @panic("arena.alloc");
@@ -23,6 +25,7 @@ pub const Session = struct {
             .arena = arena,
             .writer = writer,
             .tree = tree,
+            .document_store = document_store,
         };
         return self;
     }

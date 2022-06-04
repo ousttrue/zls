@@ -7,18 +7,19 @@ const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const identifierFromPosition = @import("./server.zig").identifierFromPosition;
 const ast = @import("./ast.zig");
+const Session = @import("./session.zig").Session;
 
-fn fnProtoToSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAllocator, commas: u32, skip_self_param: bool, handle: *DocumentStore.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
+fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *DocumentStore.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
 
     const tree = handle.tree;
     const token_starts = tree.tokens.items(.start);
-    const alloc = arena.allocator();
+    const alloc = session.arena.allocator();
     const label = analysis.getFunctionSignature(tree, proto);
     const proto_comments = (try analysis.getDocComments(alloc, tree, fn_node, .Markdown)) orelse "";
 
     const arg_idx = if (skip_self_param) blk: {
-        const has_self_param = try analysis.hasSelfParam(arena, document_store, handle, proto);
+        const has_self_param = try analysis.hasSelfParam(session, handle, proto);
         break :blk commas + @boolToInt(has_self_param);
     } else commas;
 
@@ -67,7 +68,7 @@ fn fnProtoToSignatureInfo(document_store: *DocumentStore, arena: *std.heap.Arena
     };
 }
 
-pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAllocator, handle: *DocumentStore.Handle, absolute_index: usize, comptime data: type) !?lsp.SignatureInformation {
+pub fn getSignatureInfo(session: *Session, handle: *DocumentStore.Handle, absolute_index: usize, comptime data: type) !?lsp.SignatureInformation {
     const innermost_block = analysis.innermostBlockScope(handle.*, absolute_index);
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);
@@ -119,7 +120,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
             };
         }
     };
-    const alloc = arena.allocator();
+    const alloc = session.arena.allocator();
     var symbol_stack = try std.ArrayListUnmanaged(StackSymbol).initCapacity(alloc, 8);
     var curr_commas: u32 = 0;
     var comma_stack = try std.ArrayListUnmanaged(u32).initCapacity(alloc, 4);
@@ -257,8 +258,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
                 // Resolve the expression.
                 var tokenizer = std.zig.Tokenizer.init(held_expr.data());
                 if (try analysis.getFieldAccessType(
-                    document_store,
-                    arena,
+                    session,
                     handle,
                     expr_start,
                     &tokenizer,
@@ -275,8 +275,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
                     var buf: [1]Ast.Node.Index = undefined;
                     if (ast.fnProto(type_handle.handle.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
-                            document_store,
-                            arena,
+                            session,
                             paren_commas,
                             false,
                             type_handle.handle,
@@ -293,8 +292,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
 
                     const skip_self_param = !type_handle.type.is_type_val;
                     const decl_handle = (try analysis.lookupSymbolContainer(
-                        document_store,
-                        arena,
+                        session,
                         .{ .node = node, .handle = type_handle.handle },
                         name,
                         true,
@@ -312,8 +310,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
                     };
 
                     if (try analysis.resolveVarDeclAlias(
-                        document_store,
-                        arena,
+                        session,
                         .{ .node = node, .handle = decl_handle.handle },
                     )) |resolved| {
                         switch (resolved.decl.*) {
@@ -327,8 +324,7 @@ pub fn getSignatureInfo(document_store: *DocumentStore, arena: *std.heap.ArenaAl
 
                     if (ast.fnProto(res_handle.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
-                            document_store,
-                            arena,
+                            session,
                             paren_commas,
                             skip_self_param,
                             res_handle,
