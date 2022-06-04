@@ -278,9 +278,7 @@ pub fn main() anyerror!void {
     jsonrpc.init(allocator);
     defer jsonrpc.deinit();
 
-    jsonrpc.request_map = std.StringHashMap(jsonrpc.RequestProto).init(allocator);
-    defer jsonrpc.request_map.deinit();
-    try jsonrpc.request_map.put("initialize", server.initializeHandler);
+    jsonrpc.register_request("initialize", requests.Initialize, server.initializeHandler);
     try jsonrpc.request_map.put("shutdown", jsonrpc.shutdownHandler);
     try jsonrpc.request_map.put("textDocument/semanticTokens/full", server.semanticTokensFullHandler);
     try jsonrpc.request_map.put("textDocument/completion", server.completionHandler);

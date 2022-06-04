@@ -984,11 +984,9 @@ fn completeDot(arena: *std.heap.ArenaAllocator, id: i64, handle: *DocumentStore.
     };
 }
 
-pub fn initializeHandler(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) !lsp.Response {
+pub fn initializeHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Initialize) !lsp.Response {
+    _ = arena;
     _ = config;
-
-    const req = try requests.fromDynamicTree(arena, requests.Initialize, tree.root);
-
     for (req.params.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
             offset_encoding = .utf8;

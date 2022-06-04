@@ -21,26 +21,35 @@ pub var request_map: std.StringHashMap(RequestProto) = undefined;
 
 var notify_map: std.StringHashMap(NotifyProto) = undefined;
 
-pub fn init(allocator: std.mem.Allocator) void
-{
+pub fn init(allocator: std.mem.Allocator) void {
+    request_map = std.StringHashMap(RequestProto).init(allocator);
     notify_map = std.StringHashMap(NotifyProto).init(allocator);
 }
 
-pub fn deinit() void
-{
+pub fn deinit() void {
+    request_map.deinit();
     notify_map.deinit();
 }
 
-pub fn register_notify(method: []const u8, comptime ParamType: type, comptime callback: fn(arena: *std.heap.ArenaAllocator, req: ParamType) anyerror!void) void
-{
+pub fn register_request(method: []const u8, comptime ParamType: type, comptime callback: fn (arena: *std.heap.ArenaAllocator, id: i64, req: ParamType) anyerror!lsp.Response) void {
     const T = struct {
-        pub fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void
-        {
-            if(requests.fromDynamicTree(arena, ParamType, tree.root))|req|
-            {
-                try callback(arena, req);                
+        pub fn request(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree, id: i64) anyerror!lsp.Response {
+            if (requests.fromDynamicTree(arena, ParamType, tree.root)) |req| {
+                return callback(arena, id, req);
+            } else |_| {
+                return RpcError.InvalidParams;
             }
-            else |_| {
+        }
+    };
+    request_map.put(method, T.request) catch @panic("put");
+}
+
+pub fn register_notify(method: []const u8, comptime ParamType: type, comptime callback: fn (arena: *std.heap.ArenaAllocator, req: ParamType) anyerror!void) void {
+    const T = struct {
+        pub fn notify(arena: *std.heap.ArenaAllocator, tree: std.json.ValueTree) anyerror!void {
+            if (requests.fromDynamicTree(arena, ParamType, tree.root)) |req| {
+                try callback(arena, req);
+            } else |_| {
                 return RpcError.InvalidParams;
             }
         }
