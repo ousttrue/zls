@@ -5,6 +5,10 @@ const DocumentStore = @import("./DocumentStore.zig");
 const Completion = @import("./builtin_completions.zig").Completion;
 const Config = @import("./Config.zig");
 
+const SessionError = error{
+    DocumentNotExists,
+};
+
 pub const Session = struct {
     const Self = @This();
 
@@ -92,5 +96,13 @@ pub const Session = struct {
                 },
             },
         });
+    }
+
+    pub fn getHandle(self: *Self, uri: []const u8) SessionError!*DocumentStore.Handle {
+        if (self.document_store.getHandle(uri)) |handle| {
+            return handle;
+        } else {
+            return SessionError.DocumentNotExists;
+        }
     }
 };

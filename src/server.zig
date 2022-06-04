@@ -15,10 +15,6 @@ const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 const Session = @import("./session.zig").Session;
 const builtin_completions = @import("./builtin_completions.zig");
 
-const DocumentError = error{
-    NotExists,
-};
-
 const logger = std.log.scoped(.main);
 
 const ClientCapabilities = struct {
@@ -1021,14 +1017,14 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 }
 
 pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
-    const handle = session.document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text) catch return DocumentError.NotExists;
+    const handle = try session.document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     if (createNotifyDiagnostics(session, handle)) |notification| {
         session.send(notification);
     } else |_| {}
 }
 
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse return DocumentError.NotExists;
+    const handle = try session.getHandle(req.params.textDocument.uri);
     try session.document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
     if (createNotifyDiagnostics(session, handle)) |notification| {
         session.send(notification);
@@ -1036,7 +1032,7 @@ pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !v
 }
 
 pub fn saveDocumentHandler(session: *Session, req: requests.SaveDocument) !void {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse return DocumentError.NotExists;
+    const handle = try session.getHandle(req.params.textDocument.uri);
     try session.document_store.applySave(handle);
 }
 
@@ -1050,15 +1046,12 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
 
 fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
     if (session.config.enable_semantic_tokens) {
-        if (session.document_store.getHandle(req.params.textDocument.uri)) |handle| {
-            const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offset_encoding);
-            return lsp.Response{
-                .id = id,
-                .result = .{ .SemanticTokensFull = .{ .data = token_array } },
-            };
-        } else {
-            logger.warn("Trying to get semantic tokens of non existent document {s}", .{req.params.textDocument.uri});
-        }
+        const handle = try session.getHandle(req.params.textDocument.uri);
+        const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offset_encoding);
+        return lsp.Response{
+            .id = id,
+            .result = .{ .SemanticTokensFull = .{ .data = token_array } },
+        };
     }
     return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
 }
@@ -1069,23 +1062,19 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
     }
 
     var arena = session.arena;
-    if (session.document_store.getHandle(req.params.textDocument.uri)) |handle| {
-        const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-        const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
+    const handle = try session.getHandle(req.params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
 
-        return switch (pos_context) {
-            .builtin => try session.completion.completeBuiltin(id, session.config),
-            .var_access, .empty => try completeGlobal(session, id, doc_position.absolute_index, handle),
-            .field_access => |range| try completeFieldAccess(session, id, handle, doc_position, range),
-            .global_error_set => try completeError(session, id, handle),
-            .enum_literal => try completeDot(session, id, handle),
-            .label => try completeLabel(session, id, doc_position.absolute_index, handle),
-            else => lsp.Response{ .id = id, .result = no_completions_response },
-        };
-    }
-
-    logger.warn("Trying to complete in non existent document {s}", .{req.params.textDocument.uri});
-    return lsp.Response{ .id = id, .result = no_completions_response };
+    return switch (pos_context) {
+        .builtin => try session.completion.completeBuiltin(id, session.config),
+        .var_access, .empty => try completeGlobal(session, id, doc_position.absolute_index, handle),
+        .field_access => |range| try completeFieldAccess(session, id, handle, doc_position, range),
+        .global_error_set => try completeError(session, id, handle),
+        .enum_literal => try completeDot(session, id, handle),
+        .label => try completeLabel(session, id, doc_position.absolute_index, handle),
+        else => lsp.Response{ .id = id, .result = no_completions_response },
+    };
 }
 
 pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
@@ -1093,30 +1082,28 @@ pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !
 }
 
 fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Response {
-    if (req.params.position.character == 0)
+    if (req.params.position.character == 0) {
         return lsp.Response{ .id = id, .result = no_signatures_response };
+    }
 
-    if (session.document_store.getHandle(req.params.textDocument.uri)) |handle| {
-        const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
-        if (try getSignatureInfo(
-            session,
-            handle,
-            doc_position.absolute_index,
-            builtin_completions.data,
-        )) |sig_info| {
-            return lsp.Response{
-                .id = id,
-                .result = .{
-                    .SignatureHelp = .{
-                        .signatures = &[1]lsp.SignatureInformation{sig_info},
-                        .activeSignature = 0,
-                        .activeParameter = sig_info.activeParameter,
-                    },
+    const handle = try session.getHandle(req.params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
+    if (try getSignatureInfo(
+        session,
+        handle,
+        doc_position.absolute_index,
+        builtin_completions.data,
+    )) |sig_info| {
+        return lsp.Response{
+            .id = id,
+            .result = .{
+                .SignatureHelp = .{
+                    .signatures = &[1]lsp.SignatureInformation{sig_info},
+                    .activeSignature = 0,
+                    .activeParameter = sig_info.activeParameter,
                 },
-            };
-        }
-    } else {
-        logger.warn("Trying to get signature help in non existent document {s}", .{req.params.textDocument.uri});
+            },
+        };
     }
 
     return lsp.Response{ .id = id, .result = no_signatures_response };
@@ -1127,10 +1114,7 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
 }
 
 pub fn gotoHandler(session: *Session, id: i64, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to go to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return lsp.Response.createNull(id);
-    };
+    const handle = try session.getHandle(req.params.textDocument.uri);
 
     if (req.params.position.character < 0) {
         return lsp.Response.createNull(id);
@@ -1157,10 +1141,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 }
 
 fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to get hover in non existent document {s}", .{req.params.textDocument.uri});
-        return lsp.Response.createNull(id);
-    };
+    const handle = try session.getHandle(req.params.textDocument.uri);
 
     if (req.params.position.character < 0) {
         return lsp.Response.createNull(id);
@@ -1182,10 +1163,7 @@ pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Respon
 }
 
 fn getDocumentSymbol(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to get document symbols in non existent document {s}", .{req.params.textDocument.uri});
-        return lsp.Response.createNull(id);
-    };
+    const handle = try session.getHandle(req.params.textDocument.uri);
 
     return lsp.Response{
         .id = id,
@@ -1203,11 +1181,7 @@ fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response 
         return lsp.Response.createNull(id);
     };
 
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to got to definition in non existent document {s}", .{req.params.textDocument.uri});
-        return lsp.Response.createNull(id);
-    };
-
+    const handle = try session.getHandle(req.params.textDocument.uri);
     var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, session.arena.allocator());
     process.stdin_behavior = .Pipe;
     process.stdout_behavior = .Pipe;
@@ -1247,11 +1221,7 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 }
 
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to rename in non existent document {s}", .{req.params.textDocument.uri});
-        return lsp.Response.createNull(id);
-    };
-
+    const handle = try session.getHandle(req.params.textDocument.uri);
     if (req.params.position.character < 0) {
         return lsp.Response.createNull(id);
     }
@@ -1272,11 +1242,7 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 }
 
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
-    const handle = session.document_store.getHandle(req.params.textDocument.uri) orelse {
-        logger.warn("Trying to get references in non existent document {s}", .{req.params.textDocument.uri});
-        return lsp.Response.createNull(id);
-    };
-
+    const handle = try session.getHandle(req.params.textDocument.uri);
     if (req.params.position.character < 0) {
         return lsp.Response.createNull(id);
     }
