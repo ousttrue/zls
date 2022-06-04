@@ -147,8 +147,10 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, stdout: anytype) v
     var json_parser = std.json.Parser.init(allocator, false);
     defer json_parser.deinit();
 
+    var arena = std.heap.ArenaAllocator.init(allocator);
+
     while (keep_running) {
-        var session = Session.init(allocator, reader, &json_parser, stdout);
+        var session = Session.init(&arena, reader, &json_parser, stdout);
         defer session.deinit();
 
         dispatch(&session);

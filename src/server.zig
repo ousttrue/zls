@@ -1097,7 +1097,7 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 
 pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
     const handle = document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text) catch return DocumentError.NotExists;
-    if (createNotifyDiagnostics(&session.arena, handle)) |notification| {
+    if (createNotifyDiagnostics(session.arena, handle)) |notification| {
         session.send(notification);
     } else |_| {}
 }
@@ -1105,7 +1105,7 @@ pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void 
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
     const handle = document_store.getHandle(req.params.textDocument.uri) orelse return DocumentError.NotExists;
     try document_store.applyChanges(handle, req.params.contentChanges.Array, offset_encoding);
-    if (createNotifyDiagnostics(&session.arena, handle)) |notification| {
+    if (createNotifyDiagnostics(session.arena, handle)) |notification| {
         session.send(notification);
     } else |_| {}
 }
@@ -1128,7 +1128,7 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
 fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
     if (config.enable_semantic_tokens) {
         if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
-            const token_array = try semantic_tokens.writeAllSemanticTokens(&session.arena, &document_store, handle, offset_encoding);
+            const token_array = try semantic_tokens.writeAllSemanticTokens(session.arena, &document_store, handle, offset_encoding);
             return lsp.Response{
                 .id = id,
                 .result = .{ .SemanticTokensFull = .{ .data = token_array } },
@@ -1145,7 +1145,7 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
         return lsp.Response{ .id = id, .result = no_completions_response };
     }
 
-    var arena = &session.arena;
+    var arena = session.arena;
     if (document_store.getHandle(req.params.textDocument.uri)) |handle| {
         const doc_position = try offsets.documentPosition(handle.document, req.params.position, offset_encoding);
         const pos_context = try analysis.documentPositionContext(arena, handle.document, doc_position);
@@ -1202,7 +1202,7 @@ fn getSignature(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Signatur
 
 pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Response {
     _ = config;
-    return try getSignature(&session.arena, id, req);
+    return try getSignature(session.arena, id, req);
 }
 
 pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
@@ -1228,11 +1228,11 @@ pub fn gotoHandler(arena: *std.heap.ArenaAllocator, id: i64, req: requests.GotoD
 }
 
 pub fn gotoDefinitionHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try gotoHandler(&session.arena, id, req, true);
+    return try gotoHandler(session.arena, id, req, true);
 }
 
 pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try gotoHandler(&session.arena, id, req, false);
+    return try gotoHandler(session.arena, id, req, false);
 }
 
 fn getHover(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.Response {
@@ -1257,7 +1257,7 @@ fn getHover(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Hover) !lsp.
 }
 
 pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
-    return try getHover(&session.arena, id, req);
+    return try getHover(session.arena, id, req);
 }
 
 fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: i64, req: requests.DocumentSymbols) !lsp.Response {
@@ -1273,7 +1273,7 @@ fn getDocumentSymbol(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Doc
 }
 
 pub fn documentSymbolsHandler(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
-    return try getDocumentSymbol(&session.arena, id, req);
+    return try getDocumentSymbol(session.arena, id, req);
 }
 
 fn doFormat(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) !lsp.Response {
@@ -1322,7 +1322,7 @@ fn doFormat(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Formatting) 
 }
 
 pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !lsp.Response {
-    return try doFormat(&session.arena, id, req);
+    return try doFormat(session.arena, id, req);
 }
 
 fn doRename(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp.Response {
@@ -1347,7 +1347,7 @@ fn doRename(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Rename) !lsp
 }
 
 pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
-    return try doRename(&session.arena, id, req);
+    return try doRename(session.arena, id, req);
 }
 
 fn getReference(arena: *std.heap.ArenaAllocator, id: i64, req: requests.References) !lsp.Response {
@@ -1373,7 +1373,7 @@ fn getReference(arena: *std.heap.ArenaAllocator, id: i64, req: requests.Referenc
 }
 
 pub fn referencesHandler(session: *Session, id: i64, req: requests.References) !lsp.Response {
-    return try getReference(&session.arena, id, req);
+    return try getReference(session.arena, id, req);
 }
 
 pub fn init(a: std.mem.Allocator, build_runner_path: []const u8, build_runner_cache_path: []const u8) anyerror!void {

@@ -6,12 +6,11 @@ pub const Session = struct {
     const Self = @This();
 
     // Arena used for temporary allocations while handling a request
-    arena: std.heap.ArenaAllocator,
+    arena: *std.heap.ArenaAllocator,
     writer: std.io.BufferedWriter(4096, std.fs.File.Writer),
     tree: std.json.ValueTree,
 
-    pub fn init(allocator: std.mem.Allocator, reader: anytype, json_parser: *std.json.Parser, writer: anytype) Self {
-        var arena = std.heap.ArenaAllocator.init(allocator);
+    pub fn init(arena: *std.heap.ArenaAllocator, reader: anytype, json_parser: *std.json.Parser, writer: anytype) Self {
         // read
         const headers = readRequestHeader(arena.allocator(), reader) catch @panic("readRequestHeader");
         const buf = arena.allocator().alloc(u8, headers.content_length) catch @panic("arena.alloc");
@@ -31,6 +30,7 @@ pub const Session = struct {
     pub fn deinit(self: *Self) void {
         self.tree.deinit();
         self.arena.deinit();
+        self.arena.state = .{};
     }
 
     pub fn getId(self: *Self) ?i64 {
@@ -54,7 +54,7 @@ pub const Session = struct {
     }
 
     pub fn getParam(self: *Self, comptime ParamType: type) !ParamType {
-        return lsp.requests.fromDynamicTree(&self.arena, ParamType, self.tree.root);
+        return lsp.requests.fromDynamicTree(self.arena, ParamType, self.tree.root);
     }
 
     /// Sends a request or response
