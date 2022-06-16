@@ -8,12 +8,14 @@ const analysis = @import("./analysis.zig");
 const logger = std.log.scoped(.offset);
 
 pub const OffsetError = error{
+    LineNotFound,
     PositionNegativeCharacter,
     NotImplemented,
     NoSymbolName,
     NoFieldAccessType,
     SymbolNotFound,
     NodeNotFound,
+    OutOfRange,
 };
 
 pub const Encoding = enum {
@@ -23,9 +25,28 @@ pub const Encoding = enum {
 pub var offset_encoding = Encoding.utf16;
 
 pub const DocumentPosition = struct {
+    const Self = @This();
+
     line: []const u8,
-    line_index: usize,
     absolute_index: usize,
+    line_index: usize,
+
+    pub fn advance(self: Self, delta: usize) DocumentPosition {
+        // const index = @intCast(i64, self.absolute_index) + position.character;
+        // if (index < 0 or index > @intCast(i64, doc.text.len)) {
+        //     unreachable;
+        // }
+        // return DocumentPosition{
+        //     .line = line,
+        //     .absolute_index = line.start_idx + utf8_idx,
+        //     .line_index = utf8_idx,
+        // };
+        return DocumentPosition{
+            .line = self.line,
+            .absolute_index = self.absolute_index + delta,
+            .line_index = self.line_index + delta,
+        };
+    }
 };
 
 const SourceRange = std.zig.Token.Loc;
@@ -60,56 +81,52 @@ pub const PositionContext = union(enum) {
     }
 };
 
-pub fn documentPosition(doc: lsp.TextDocument, position: lsp.Position, encoding: Encoding) !DocumentPosition {
+fn getLine(doc: lsp.TextDocument, position: lsp.Position) OffsetError!DocumentPosition {
+    var split_iterator = std.mem.split(u8, doc.text, "\n");
+    var line_idx: i64 = 0;
+    var line: []const u8 = "";
+    while (line_idx < position.line) : (line_idx += 1) {
+        line = split_iterator.next() orelse return OffsetError.LineNotFound;
+    }
+    line = split_iterator.next() orelse return OffsetError.LineNotFound;
+    return DocumentPosition{ .line = line, .absolute_index = split_iterator.index.?, .line_index = 0 };
+}
+
+fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
+    var utf8_idx: usize = 0;
+    var utf16_idx: usize = 0;
+    while (utf16_idx < utf16Characters) {
+        if (utf8_idx > utf8.len) {
+            unreachable;
+            // return error.InvalidParams;
+        }
+
+        const n = std.unicode.utf8ByteSequenceLength(utf8[utf8_idx]) catch unreachable;
+        const next_utf8_idx = utf8_idx + n;
+        const codepoint = std.unicode.utf8Decode(utf8[utf8_idx..next_utf8_idx]) catch unreachable;
+        if (codepoint < 0x10000) {
+            utf16_idx += 1;
+        } else {
+            utf16_idx += 2;
+        }
+        utf8_idx = next_utf8_idx;
+    }
+    return utf8_idx;
+}
+
+pub fn documentPosition(doc: lsp.TextDocument, position: lsp.Position, encoding: Encoding) OffsetError!DocumentPosition {
     if (position.character < 0) {
         return OffsetError.PositionNegativeCharacter;
     }
 
-    var split_iterator = std.mem.split(u8, doc.text, "\n");
-
-    var line_idx: i64 = 0;
-    var line: []const u8 = "";
-    while (line_idx < position.line) : (line_idx += 1) {
-        line = split_iterator.next() orelse return error.InvalidParams;
-    }
-
-    const line_start_idx = split_iterator.index.?;
-    line = split_iterator.next() orelse return error.InvalidParams;
+    const line = try getLine(doc, position);
 
     if (encoding == .utf8) {
-        const index = @intCast(i64, line_start_idx) + position.character;
-        if (index < 0 or index > @intCast(i64, doc.text.len)) {
-            return error.InvalidParams;
-        }
-        return DocumentPosition{
-            .line = line,
-            .absolute_index = @intCast(usize, index),
-            .line_index = @intCast(usize, position.character),
-        };
+        return line.advance(@intCast(usize, position.character));
     } else {
-        const utf8 = doc.text[line_start_idx..];
-        var utf8_idx: usize = 0;
-        var utf16_idx: usize = 0;
-        while (utf16_idx < position.character) {
-            if (utf8_idx > utf8.len) {
-                return error.InvalidParams;
-            }
-
-            const n = try std.unicode.utf8ByteSequenceLength(utf8[utf8_idx]);
-            const next_utf8_idx = utf8_idx + n;
-            const codepoint = try std.unicode.utf8Decode(utf8[utf8_idx..next_utf8_idx]);
-            if (codepoint < 0x10000) {
-                utf16_idx += 1;
-            } else {
-                utf16_idx += 2;
-            }
-            utf8_idx = next_utf8_idx;
-        }
-        return DocumentPosition{
-            .line = line,
-            .absolute_index = line_start_idx + utf8_idx,
-            .line_index = utf8_idx,
-        };
+        const utf8 = doc.text[line.absolute_index..];
+        const utf8_idx = getUtf8Length(utf8, position.character);
+        return line.advance(utf8_idx);
     }
 }
 
