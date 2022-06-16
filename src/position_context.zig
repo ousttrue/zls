@@ -41,23 +41,45 @@ fn tokenRangeAppend(prev: SourceRange, token: std.zig.Token) SourceRange {
     };
 }
 
-const StackState = struct {
-    ctx: PositionContext,
-    stack_id: enum { Paren, Bracket, Global },
-};
+const Stack = struct {
+    const Self = @This();
 
-fn peek(arr: *std.ArrayList(StackState)) !*StackState {
-    if (arr.items.len == 0) {
-        try arr.append(.{ .ctx = .empty, .stack_id = .Global });
+    const StackState = struct {
+        ctx: PositionContext,
+        stack_id: enum { Paren, Bracket, Global },
+    };
+
+    stack: std.ArrayList(StackState),
+
+    fn init(allocator: std.mem.Allocator) Self {
+        return .{ .stack = std.ArrayList(StackState).initCapacity(allocator, 8) catch unreachable };
     }
-    return &arr.items[arr.items.len - 1];
-}
+
+    fn append(self: *Self, state: StackState) void {
+        self.stack.append(state) catch unreachable;
+    }
+
+    fn pop(self: *Self) void {
+        self.pop();
+    }
+
+    fn popOrNull(self: *Self) ?StackState {
+        return self.stack.popOrNull();
+    }
+
+    fn peek(self: *Self) *StackState {
+        if (self.stack.items.len == 0) {
+            self.stack.append(.{ .ctx = .empty, .stack_id = .Global }) catch unreachable;
+        }
+        return &self.stack.items[self.stack.items.len - 1];
+    }
+};
 
 pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) PositionContext {
     const line = doc_position.line;
     const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
 
-    var stack = std.ArrayList(StackState).initCapacity(arena.allocator(), 8) catch @panic("initCapacity");
+    var stack = Stack.init(arena.allocator());
 
     {
         var held_line = document.borrowNullTerminatedSlice(
@@ -90,7 +112,7 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
             }
 
             // State changes
-            var curr_ctx = peek(&stack) catch @panic("peek");
+            var curr_ctx = stack.peek();
             switch (tok.tag) {
                 .string_literal, .multiline_string_literal_line => curr_ctx.ctx = .{ .string_literal = tok.loc },
                 .identifier => switch (curr_ctx.ctx) {
@@ -126,18 +148,18 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
                     .field_access => {},
                     else => curr_ctx.ctx = .empty,
                 },
-                .l_paren => stack.append(.{ .ctx = .empty, .stack_id = .Paren }) catch @panic("append"),
-                .l_bracket => stack.append(.{ .ctx = .empty, .stack_id = .Bracket }) catch @panic("append"),
+                .l_paren => stack.append(.{ .ctx = .empty, .stack_id = .Paren }),
+                .l_bracket => stack.append(.{ .ctx = .empty, .stack_id = .Bracket }),
                 .r_paren => {
                     _ = stack.pop();
                     if (curr_ctx.stack_id != .Paren) {
-                        (peek(&stack) catch @panic("peek")).ctx = .empty;
+                        stack.peek().ctx = .empty;
                     }
                 },
                 .r_bracket => {
                     _ = stack.pop();
                     if (curr_ctx.stack_id != .Bracket) {
-                        (peek(&stack) catch @panic("peek")).ctx = .empty;
+                        stack.peek().ctx = .empty;
                     }
                 },
                 .keyword_error => curr_ctx.ctx = .global_error_set,
