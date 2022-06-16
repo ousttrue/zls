@@ -968,21 +968,26 @@ pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Respon
     const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
     switch (pos_context) {
         .builtin => {
+            logger.debug("[hover][builtin]", .{});
             return try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle);
         },
         .var_access => {
+            logger.debug("[hover][var_access]", .{});
             const decl = try offsets.getSymbolGlobal(session, doc_position.absolute_index, handle);
             return try hoverSymbol(session, id, decl);
         },
         .field_access => |range| {
+            logger.debug("[hover][field_access]", .{});
             const decl = try offsets.getSymbolFieldAccess(session, handle, doc_position, range);
             return try hoverSymbol(session, id, decl);
         },
         .label => {
+            logger.debug("[hover][label_access]", .{});
             const decl = (try offsets.getLabelGlobal(doc_position.absolute_index, handle)) orelse return lsp.Response.createNull(id);
             return try hoverSymbol(session, id, decl);
         },
         else => {
+            logger.debug("[hover][{s}]", .{@tagName(pos_context)});
             return lsp.Response.createNull(id);
         },
     }

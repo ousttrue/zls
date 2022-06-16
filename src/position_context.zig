@@ -2,6 +2,14 @@ const std = @import("std");
 const lsp = @import("lsp");
 const DocumentPosition = @import("./document_position.zig").DocumentPosition;
 
+const logger = std.log.scoped(.position_context);
+
+const Error = error{
+    AtMark,
+    Other,
+    Comment,
+};
+
 const SourceRange = std.zig.Token.Loc;
 
 pub const PositionContext = union(enum) {
@@ -41,13 +49,13 @@ fn tokenRangeAppend(prev: SourceRange, token: std.zig.Token) SourceRange {
     };
 }
 
+const StackState = struct {
+    ctx: PositionContext,
+    stack_id: enum { Paren, Bracket, Global },
+};
+
 const Stack = struct {
     const Self = @This();
-
-    const StackState = struct {
-        ctx: PositionContext,
-        stack_id: enum { Paren, Bracket, Global },
-    };
 
     stack: std.ArrayList(StackState),
 
@@ -60,7 +68,7 @@ const Stack = struct {
     }
 
     fn pop(self: *Self) void {
-        self.pop();
+        _ = self.stack.pop();
     }
 
     fn popOrNull(self: *Self) ?StackState {
@@ -75,7 +83,7 @@ const Stack = struct {
     }
 };
 
-pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) PositionContext {
+fn getState(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) Error!?StackState {
     const line = doc_position.line;
     const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
 
@@ -97,16 +105,11 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
                 .invalid => {
                     // Single '@' do not return a builtin token so we check this on our own.
                     if (line[doc_position.col - 1] == '@') {
-                        return PositionContext{
-                            .builtin = .{
-                                .start = doc_position.col - 1,
-                                .end = doc_position.col,
-                            },
-                        };
+                        return Error.AtMark;
                     }
-                    return .other;
+                    return Error.Other;
                 },
-                .doc_comment, .container_doc_comment => return .comment,
+                .doc_comment, .container_doc_comment => return Error.Comment,
                 .eof => break,
                 else => {},
             }
@@ -175,21 +178,44 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
         }
     }
 
-    if (stack.popOrNull()) |state| {
+    return stack.popOrNull();
+}
+
+pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) PositionContext {
+    const state_or_null = getState(arena, document, doc_position) catch |err|
+        {
+        return switch (err) {
+            Error.AtMark => PositionContext{
+                .builtin = .{
+                    .start = doc_position.col - 1,
+                    .end = doc_position.col,
+                },
+            },
+            Error.Other => .other,
+            Error.Comment => .comment,
+        };
+    };
+
+    if (state_or_null) |state| {
         switch (state.ctx) {
             .empty => {},
             .label => |filled| {
                 // We need to check this because the state could be a filled
                 // label if only a space follows it
-                const last_char = line[doc_position.col - 1];
+                const last_char = doc_position.line[doc_position.col - 1];
                 if (!filled or last_char != ' ') {
                     return state.ctx;
                 }
             },
-            else => return state.ctx,
+            else => {
+                logger.debug("StackState: {s}", .{@tagName(state.ctx)});
+                return state.ctx;
+            },
         }
     }
 
+    const line = doc_position.line;
+    const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
     if (doc_position.col < line.len) {
         var held_line = document.borrowNullTerminatedSlice(
             line_mem_start + doc_position.col,
@@ -203,7 +229,7 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
         }
         var tokenizer = std.zig.Tokenizer.init(held_line.data());
         const tok = tokenizer.next();
-        if (tok.tag == .identifier){
+        if (tok.tag == .identifier) {
             return PositionContext{ .var_access = tok.loc };
         }
     }
