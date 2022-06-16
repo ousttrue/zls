@@ -25,6 +25,8 @@ pub const Hover = struct {
 };
 
 pub const TextDocument = struct {
+    const Self = @This();
+
     uri: string,
     // This is a substring of mem starting at 0
     text: [:0]const u8,
@@ -46,7 +48,7 @@ pub const TextDocument = struct {
         }
     };
 
-    pub fn borrowNullTerminatedSlice(self: *const @This(), start_idx: usize, end_idx: usize) Held {
+    pub fn borrowNullTerminatedSlice(self: *const Self, start_idx: usize, end_idx: usize) Held {
         std.debug.assert(end_idx >= start_idx);
         const popped_char = self.mem[end_idx];
         self.mem[end_idx] = 0;

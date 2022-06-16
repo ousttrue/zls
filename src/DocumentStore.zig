@@ -373,12 +373,12 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
 
 pub fn openDocument(self: *DocumentStore, uri: []const u8, text: []const u8) !*Handle {
     if (self.handles.getEntry(uri)) |entry| {
-        log.debug("Document already open: {s}, incrementing count", .{uri});
+        // log.debug("Document already open: {s}, incrementing count", .{uri});
         entry.value_ptr.*.count += 1;
         if (entry.value_ptr.*.is_build_file) |build_file| {
             build_file.refs += 1;
         }
-        log.debug("New count: {}", .{entry.value_ptr.*.count});
+        // log.debug("New count: {}", .{entry.value_ptr.*.count});
         return entry.value_ptr.*;
     }
 

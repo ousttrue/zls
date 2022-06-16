@@ -14,6 +14,8 @@ const Ast = std.zig.Ast;
 const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 const Session = @import("./session.zig").Session;
 const builtin_completions = @import("./builtin_completions.zig");
+const position_context = @import("./position_context.zig");
+const DocumentPosition = @import("./document_position.zig").DocumentPosition;
 
 const logger = std.log.scoped(.main);
 
@@ -486,7 +488,7 @@ fn hoverDefinitionGlobal(session: *Session, id: i64, pos_index: usize, handle: *
     return try hoverSymbol(session, id, decl);
 }
 
-fn hoverDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !lsp.Response {
+fn hoverDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !lsp.Response {
     const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
     return try hoverSymbol(session, id, decl);
 }
@@ -504,7 +506,7 @@ fn renameDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore.Han
     };
 }
 
-fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
+fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
     const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
 
     var workspace_edit = lsp.WorkspaceEdit{
@@ -548,7 +550,7 @@ fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore
     };
 }
 
-fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
+fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
     const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
     try references.symbolReferences(session, decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, session.config.skip_std_references);
@@ -711,7 +713,7 @@ fn completeGlobal(session: *Session, id: i64, pos_index: usize, handle: *Documen
     };
 }
 
-fn completeFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: offsets.DocumentPosition, range: analysis.SourceRange) !lsp.Response {
+fn completeFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !lsp.Response {
     var completions = std.ArrayList(lsp.CompletionItem).init(session.arena.allocator());
 
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
@@ -918,7 +920,7 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
     var arena = session.arena;
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = offsets.documentPositionContext(arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(arena, handle.document, doc_position);
 
     return switch (pos_context) {
         .builtin => try session.completion.completeBuiltin(id, session.config),
@@ -978,7 +980,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
     logger.debug("{}", .{pos_context});
     return switch (pos_context) {
         .builtin => try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle),
@@ -1054,7 +1056,7 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
 
     return switch (pos_context) {
         .var_access => try renameDefinitionGlobal(session, id, handle, doc_position.absolute_index, req.params.newName),
@@ -1071,7 +1073,7 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
 
     const include_decl = req.params.context.includeDeclaration;
     return switch (pos_context) {
