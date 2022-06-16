@@ -283,7 +283,7 @@ pub fn getSignatureInfo(session: *Session, handle: *DocumentStore.Handle, absolu
                         );
                     }
 
-                    const name = offsets.identifierFromPosition(expr_end - 1, handle.*);
+                    const name = offsets.identifierFromPosition(expr_end - 1, handle.document.text);
                     if (name.len == 0) {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;

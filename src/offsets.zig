@@ -13,7 +13,8 @@ pub const OffsetError = error{
     NotImplemented,
     NoSymbolName,
     NoFieldAccessType,
-    SymbolNotFound,
+    GlobalSymbolNotFound,
+    ContainerSymbolNotFound,
     NodeNotFound,
     OutOfRange,
 };
@@ -27,24 +28,26 @@ pub var offset_encoding = Encoding.utf16;
 pub const DocumentPosition = struct {
     const Self = @This();
 
+    row: usize,
+    col: usize,
     line: []const u8,
     absolute_index: usize,
-    line_index: usize,
+
+    pub fn init_line(row: usize, line: []const u8, absolute_index: usize) Self {
+        return .{
+            .row = row,
+            .col = 0,
+            .line = line,
+            .absolute_index = absolute_index,
+        };
+    }
 
     pub fn advance(self: Self, delta: usize) DocumentPosition {
-        // const index = @intCast(i64, self.absolute_index) + position.character;
-        // if (index < 0 or index > @intCast(i64, doc.text.len)) {
-        //     unreachable;
-        // }
-        // return DocumentPosition{
-        //     .line = line,
-        //     .absolute_index = line.start_idx + utf8_idx,
-        //     .line_index = utf8_idx,
-        // };
         return DocumentPosition{
+            .row = self.row,
+            .col = self.col + delta,
             .line = self.line,
             .absolute_index = self.absolute_index + delta,
-            .line_index = self.line_index + delta,
         };
     }
 };
@@ -83,13 +86,14 @@ pub const PositionContext = union(enum) {
 
 fn getLine(doc: lsp.TextDocument, position: lsp.Position) OffsetError!DocumentPosition {
     var split_iterator = std.mem.split(u8, doc.text, "\n");
-    var line_idx: i64 = 0;
+    const dst = position.line - 1;
+    var line_idx: usize = 0;
     var line: []const u8 = "";
-    while (line_idx < position.line) : (line_idx += 1) {
+    while (line_idx < dst) : (line_idx += 1) {
         line = split_iterator.next() orelse return OffsetError.LineNotFound;
     }
     line = split_iterator.next() orelse return OffsetError.LineNotFound;
-    return DocumentPosition{ .line = line, .absolute_index = split_iterator.index.?, .line_index = 0 };
+    return DocumentPosition.init_line(line_idx, line, split_iterator.index.?);
 }
 
 fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
@@ -316,6 +320,7 @@ fn tokenRangeAppend(prev: SourceRange, token: std.zig.Token) SourceRange {
 
 pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) PositionContext {
     const line = doc_position.line;
+    // logger.debug("{},{}:{s}", .{doc_position.row, doc_position.col, line});
     const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
 
     var stack = std.ArrayList(StackState).initCapacity(arena.allocator(), 8) catch @panic("initCapacity");
@@ -323,7 +328,7 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
     {
         var held_line = document.borrowNullTerminatedSlice(
             line_mem_start,
-            line_mem_start + doc_position.line_index,
+            line_mem_start + doc_position.col,
         );
         defer held_line.release();
 
@@ -335,11 +340,11 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
             switch (tok.tag) {
                 .invalid => {
                     // Single '@' do not return a builtin token so we check this on our own.
-                    if (line[doc_position.line_index - 1] == '@') {
+                    if (line[doc_position.col - 1] == '@') {
                         return PositionContext{
                             .builtin = .{
-                                .start = doc_position.line_index - 1,
-                                .end = doc_position.line_index,
+                                .start = doc_position.col - 1,
+                                .end = doc_position.col,
                             },
                         };
                     }
@@ -421,7 +426,7 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
                 .label => |filled| {
                     // We need to check this because the state could be a filled
                     // label if only a space follows it
-                    const last_char = line[doc_position.line_index - 1];
+                    const last_char = line[doc_position.col - 1];
                     if (!filled or last_char != ' ') {
                         break :block state.ctx;
                     }
@@ -429,14 +434,14 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
                 else => break :block state.ctx,
             }
         }
-        if (doc_position.line_index < line.len) {
+        if (doc_position.col < line.len) {
             var held_line = document.borrowNullTerminatedSlice(
-                line_mem_start + doc_position.line_index,
+                line_mem_start + doc_position.col,
                 line_mem_start + line.len,
             );
             defer held_line.release();
 
-            switch (line[doc_position.line_index]) {
+            switch (line[doc_position.col]) {
                 'a'...'z', 'A'...'Z', '_', '@' => {},
                 else => break :block .empty,
             }
@@ -453,36 +458,50 @@ fn isSymbolChar(char: u8) bool {
     return std.ascii.isAlNum(char) or char == '_';
 }
 
-pub fn identifierFromPosition(pos_index: usize, handle: DocumentStore.Handle) []const u8 {
-    const text = handle.document.text;
+pub fn identifierFromPosition(pos_index: usize, text: []const u8) []const u8 {
+    if (pos_index + 1 >= text.len) {
+        return "";
+    }
+    if(!isSymbolChar(text[pos_index]))
+    {
+        return "";
+    }
 
-    if (pos_index + 1 >= text.len) return "";
     var start_idx = pos_index;
-
-    while (start_idx > 0 and isSymbolChar(text[start_idx - 1])) {
-        start_idx -= 1;
+    while (start_idx >= 0) : (start_idx -= 1) {
+        if (!isSymbolChar(text[start_idx])) {
+            start_idx += 1;
+            break;
+        }
     }
 
     var end_idx = pos_index;
-    while (end_idx < handle.document.text.len and isSymbolChar(text[end_idx])) {
+    while (end_idx < text.len and isSymbolChar(text[end_idx])) {
         end_idx += 1;
     }
 
-    if (end_idx <= start_idx) return "";
-    return text[start_idx..end_idx];
+    const id = text[start_idx..end_idx];
+    // std.debug.print("{}, {}:{s}", .{start_idx, end_idx, id});
+    return id;
+}
+
+test "identifierFromPosition" {
+    try std.testing.expectEqualStrings("abc", identifierFromPosition(1, " abc cde"));
+    try std.testing.expectEqualStrings("abc", identifierFromPosition(2, " abc cde"));
+    try std.testing.expectEqualStrings("", identifierFromPosition(3, "abc cde"));
 }
 
 pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !analysis.DeclWithHandle {
-    const name = identifierFromPosition(pos_index, handle.*);
+    const name = identifierFromPosition(pos_index, handle.document.text);
     if (name.len == 0) {
         return OffsetError.NoSymbolName;
     }
 
-    return (try analysis.lookupSymbolGlobal(session, handle, name, pos_index)) orelse return OffsetError.SymbolNotFound;
+    return (try analysis.lookupSymbolGlobal(session, handle, name, pos_index)) orelse return OffsetError.GlobalSymbolNotFound;
 }
 
 pub fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
-    const name = identifierFromPosition(pos_index, handle.*);
+    const name = identifierFromPosition(pos_index, handle.document.text);
     if (name.len == 0) return null;
 
     return try analysis.lookupLabel(handle, name, pos_index);
@@ -528,7 +547,7 @@ fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWi
 }
 
 pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
-    const name = identifierFromPosition(position.absolute_index, handle.*);
+    const name = identifierFromPosition(position.absolute_index, handle.document.text);
     if (name.len == 0) {
         return OffsetError.NoSymbolName;
     }
@@ -550,7 +569,7 @@ pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, po
         .{ .node = container_handle_node, .handle = container_handle.handle },
         name,
         true,
-    )) orelse return OffsetError.SymbolNotFound;
+    )) orelse return OffsetError.ContainerSymbolNotFound;
 }
 
 fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {

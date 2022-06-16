@@ -456,7 +456,7 @@ fn hoverDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *D
 }
 
 fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const name = offsets.identifierFromPosition(pos_index, handle.*);
+    const name = offsets.identifierFromPosition(pos_index, handle.document.text);
     if (name.len == 0) return lsp.Response.createNull(id);
 
     inline for (builtin_completions.data.builtins) |builtin| {
@@ -979,6 +979,7 @@ fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = offsets.documentPositionContext(session.arena, handle.document, doc_position);
+    logger.debug("{}", .{pos_context});
     return switch (pos_context) {
         .builtin => try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle),
         .var_access => try hoverDefinitionGlobal(session, id, doc_position.absolute_index, handle),

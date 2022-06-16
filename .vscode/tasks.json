@@ -10,6 +10,14 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "test",
+            "type": "shell",
+            "command": "zig test src/offsets.zig",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ]
 }
