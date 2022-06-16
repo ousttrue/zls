@@ -452,11 +452,6 @@ fn hoverSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle)
     };
 }
 
-fn hoverDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
-    return try hoverSymbol(session, id, decl);
-}
-
 fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
     const name = offsets.identifierFromPosition(pos_index, handle.document.text);
     if (name.len == 0) return lsp.Response.createNull(id);
@@ -481,16 +476,6 @@ fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: 
     }
 
     unreachable;
-}
-
-fn hoverDefinitionGlobal(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const decl = try offsets.getSymbolGlobal(session, pos_index, handle);
-    return try hoverSymbol(session, id, decl);
-}
-
-fn hoverDefinitionFieldAccess(session: *Session, id: i64, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !lsp.Response {
-    const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
-    return try hoverSymbol(session, id, decl);
 }
 
 fn renameDefinitionGlobal(session: *Session, id: i64, handle: *DocumentStore.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
@@ -977,22 +962,30 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
     return try offsets.gotoHandler(session, id, req, false);
 }
 
-fn getHover(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
+pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
-    logger.debug("{}", .{pos_context});
-    return switch (pos_context) {
-        .builtin => try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle),
-        .var_access => try hoverDefinitionGlobal(session, id, doc_position.absolute_index, handle),
-        .field_access => |range| try hoverDefinitionFieldAccess(session, id, handle, doc_position, range),
-        .label => try hoverDefinitionLabel(session, id, doc_position.absolute_index, handle),
-        else => lsp.Response.createNull(id),
-    };
-}
-
-pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
-    return try getHover(session, id, req);
+    switch (pos_context) {
+        .builtin => {
+            return try hoverDefinitionBuiltin(session, id, doc_position.absolute_index, handle);
+        },
+        .var_access => {
+            const decl = try offsets.getSymbolGlobal(session, doc_position.absolute_index, handle);
+            return try hoverSymbol(session, id, decl);
+        },
+        .field_access => |range| {
+            const decl = try offsets.getSymbolFieldAccess(session, handle, doc_position, range);
+            return try hoverSymbol(session, id, decl);
+        },
+        .label => {
+            const decl = (try offsets.getLabelGlobal(doc_position.absolute_index, handle)) orelse return lsp.Response.createNull(id);
+            return try hoverSymbol(session, id, decl);
+        },
+        else => {
+            return lsp.Response.createNull(id);
+        },
+    }
 }
 
 fn getDocumentSymbol(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
