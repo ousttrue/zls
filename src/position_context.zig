@@ -151,13 +151,13 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
                 .l_paren => stack.append(.{ .ctx = .empty, .stack_id = .Paren }),
                 .l_bracket => stack.append(.{ .ctx = .empty, .stack_id = .Bracket }),
                 .r_paren => {
-                    _ = stack.pop();
+                    stack.pop();
                     if (curr_ctx.stack_id != .Paren) {
                         stack.peek().ctx = .empty;
                     }
                 },
                 .r_bracket => {
-                    _ = stack.pop();
+                    stack.pop();
                     if (curr_ctx.stack_id != .Bracket) {
                         stack.peek().ctx = .empty;
                     }
@@ -175,37 +175,38 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
         }
     }
 
-    return block: {
-        if (stack.popOrNull()) |state| {
-            switch (state.ctx) {
-                .empty => {},
-                .label => |filled| {
-                    // We need to check this because the state could be a filled
-                    // label if only a space follows it
-                    const last_char = line[doc_position.col - 1];
-                    if (!filled or last_char != ' ') {
-                        break :block state.ctx;
-                    }
-                },
-                else => break :block state.ctx,
-            }
+    if (stack.popOrNull()) |state| {
+        switch (state.ctx) {
+            .empty => {},
+            .label => |filled| {
+                // We need to check this because the state could be a filled
+                // label if only a space follows it
+                const last_char = line[doc_position.col - 1];
+                if (!filled or last_char != ' ') {
+                    return state.ctx;
+                }
+            },
+            else => return state.ctx,
         }
-        if (doc_position.col < line.len) {
-            var held_line = document.borrowNullTerminatedSlice(
-                line_mem_start + doc_position.col,
-                line_mem_start + line.len,
-            );
-            defer held_line.release();
+    }
 
-            switch (line[doc_position.col]) {
-                'a'...'z', 'A'...'Z', '_', '@' => {},
-                else => break :block .empty,
-            }
-            var tokenizer = std.zig.Tokenizer.init(held_line.data());
-            const tok = tokenizer.next();
-            if (tok.tag == .identifier)
-                break :block PositionContext{ .var_access = tok.loc };
+    if (doc_position.col < line.len) {
+        var held_line = document.borrowNullTerminatedSlice(
+            line_mem_start + doc_position.col,
+            line_mem_start + line.len,
+        );
+        defer held_line.release();
+
+        switch (line[doc_position.col]) {
+            'a'...'z', 'A'...'Z', '_', '@' => {},
+            else => return .empty,
         }
-        break :block .empty;
-    };
+        var tokenizer = std.zig.Tokenizer.init(held_line.data());
+        const tok = tokenizer.next();
+        if (tok.tag == .identifier){
+            return PositionContext{ .var_access = tok.loc };
+        }
+    }
+
+    return .empty;
 }
