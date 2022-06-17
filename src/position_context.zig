@@ -182,57 +182,75 @@ fn getState(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_pos
 }
 
 pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) PositionContext {
-    const state_or_null = getState(arena, document, doc_position) catch |err|
-        {
-        return switch (err) {
-            Error.AtMark => PositionContext{
-                .builtin = .{
-                    .start = doc_position.col - 1,
-                    .end = doc_position.col,
-                },
-            },
-            Error.Other => .other,
-            Error.Comment => .comment,
-        };
-    };
+    _ = arena;
+    _ = document;
+    _ = doc_position;
+    // const state_or_null = getState(arena, document, doc_position) catch |err|
+    //     {
+    //     return switch (err) {
+    //         Error.AtMark => PositionContext{
+    //             .builtin = .{
+    //                 .start = doc_position.col - 1,
+    //                 .end = doc_position.col,
+    //             },
+    //         },
+    //         Error.Other => .other,
+    //         Error.Comment => .comment,
+    //     };
+    // };
 
-    if (state_or_null) |state| {
-        switch (state.ctx) {
-            .empty => {},
-            .label => |filled| {
-                // We need to check this because the state could be a filled
-                // label if only a space follows it
-                const last_char = doc_position.line[doc_position.col - 1];
-                if (!filled or last_char != ' ') {
-                    return state.ctx;
-                }
-            },
-            else => {
-                logger.debug("StackState: {s}", .{@tagName(state.ctx)});
-                return state.ctx;
-            },
-        }
-    }
+    // if (state_or_null) |state| {
+    //     switch (state.ctx) {
+    //         .empty => {},
+    //         .label => |filled| {
+    //             // We need to check this because the state could be a filled
+    //             // label if only a space follows it
+    //             const last_char = doc_position.line[doc_position.col - 1];
+    //             if (!filled or last_char != ' ') {
+    //                 return state.ctx;
+    //             }
+    //         },
+    //         else => {
+    //             logger.debug("StackState: {s}", .{@tagName(state.ctx)});
+    //             return state.ctx;
+    //         },
+    //     }
+    // }
 
-    const line = doc_position.line;
-    const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
-    if (doc_position.col < line.len) {
-        var held_line = document.borrowNullTerminatedSlice(
-            line_mem_start + doc_position.col,
-            line_mem_start + line.len,
-        );
-        defer held_line.release();
+    // const line = doc_position.line;
+    // const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
+    // if (doc_position.col < line.len) {
+    //     var held_line = document.borrowNullTerminatedSlice(
+    //         line_mem_start + doc_position.col,
+    //         line_mem_start + line.len,
+    //     );
+    //     defer held_line.release();
 
-        switch (line[doc_position.col]) {
-            'a'...'z', 'A'...'Z', '_', '@' => {},
-            else => return .empty,
-        }
-        var tokenizer = std.zig.Tokenizer.init(held_line.data());
-        const tok = tokenizer.next();
-        if (tok.tag == .identifier) {
-            return PositionContext{ .var_access = tok.loc };
-        }
-    }
+    //     switch (line[doc_position.col]) {
+    //         'a'...'z', 'A'...'Z', '_', '@' => {},
+    //         else => return .empty,
+    //     }
+    //     var tokenizer = std.zig.Tokenizer.init(held_line.data());
+    //     const tok = tokenizer.next();
+    //     if (tok.tag == .identifier) {
+    //         return PositionContext{ .var_access = tok.loc };
+    //     }
+    // }
+
+    logger.debug("[doc_position]{s}", .{doc_position.line});
 
     return .empty;
+}
+
+fn getSlice(all: []const u8, tok: std.zig.Token) []const u8 {
+    return all[tok.loc.start..tok.loc.end];
+}
+
+test "token" {
+    const src =
+        \\ const src = "";
+    ;
+    var tokenizer = std.zig.Tokenizer.init(src);
+
+    std.debug.print("{s}\n", .{getSlice(src, tokenizer.next())});
 }

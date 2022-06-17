@@ -961,6 +961,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 }
 
 pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
+    logger.debug("[hover]{s} {}", .{req.params.textDocument.uri, req.params.position});
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);

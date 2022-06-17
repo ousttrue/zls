@@ -27,18 +27,6 @@ pub const Encoding = enum {
 };
 pub var offset_encoding = Encoding.utf16;
 
-fn getLine(doc: lsp.TextDocument, position: lsp.Position) OffsetError!DocumentPosition {
-    var split_iterator = std.mem.split(u8, doc.text, "\n");
-    const dst = position.line - 1;
-    var line_idx: usize = 0;
-    var line: []const u8 = "";
-    while (line_idx < dst) : (line_idx += 1) {
-        line = split_iterator.next() orelse return OffsetError.LineNotFound;
-    }
-    line = split_iterator.next() orelse return OffsetError.LineNotFound;
-    return DocumentPosition.init_line(line_idx, line, split_iterator.index.?);
-}
-
 fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
     var utf8_idx: usize = 0;
     var utf16_idx: usize = 0;
@@ -66,7 +54,9 @@ pub fn documentPosition(doc: lsp.TextDocument, position: lsp.Position, encoding:
         return OffsetError.PositionNegativeCharacter;
     }
 
-    const line = try getLine(doc, position);
+    const line = DocumentPosition.getLine(doc.text, @intCast(usize, position.line)) orelse {
+        return OffsetError.LineNotFound;
+    };
 
     if (encoding == .utf8) {
         return line.advance(@intCast(usize, position.character));
@@ -379,6 +369,7 @@ fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *Do
 }
 
 pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
+    logger.debug("[definition]{s} {}", .{ req.params.textDocument.uri, req.params.position });
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);

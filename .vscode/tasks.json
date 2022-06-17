@@ -14,7 +14,9 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "zig test src/offsets.zig",
+            // "command": "zig test src/offsets.zig",
+            // "command": "zig test src/position_context.zig",
+            "command": "zig test src/document_position.zig",
             "problemMatcher": [
                 "$gcc"
             ]
