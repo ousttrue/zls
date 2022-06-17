@@ -1,35 +1,44 @@
 const std = @import("std");
 
 pub const SemanticTokenType = enum(u32) {
+    namespace,
     type,
+    class,
+    @"enum",
+    interface,
+    @"struct",
+    typeParameter,
     parameter,
     variable,
+    property,
     enumMember,
-    field,
-    errorTag,
+    event,
     function,
+    method,
+    macro,
     keyword,
+    modifier,
     comment,
     string,
     number,
+    regexp,
     operator,
-    builtin,
-    label,
-    keywordLiteral,
+    decorator,
 };
 
 pub const SemanticTokenModifiers = packed struct {
     const Self = @This();
 
-    namespace: bool = false,
-    @"struct": bool = false,
-    @"enum": bool = false,
-    @"union": bool = false,
-    @"opaque": bool = false,
     declaration: bool = false,
+    definition: bool = false,
+    readonly: bool = false,
+    static: bool = false,
+    deprecated: bool = false,
+    abstract: bool = false,
     @"async": bool = false,
+    modification: bool = false,
     documentation: bool = false,
-    generic: bool = false,
+    defaultLibrary: bool = false,
 
     pub fn toInt(self: Self) u32 {
         var res: u32 = 0;
