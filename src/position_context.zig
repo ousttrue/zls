@@ -98,6 +98,7 @@ const LineParser = struct {
                         }
                         return PositionContext{ .var_access = item.token.loc };
                     },
+                    .builtin => return PositionContext{ .builtin = item.token.loc },
                     else => {
                         logger.debug("{s}", .{@tagName(item.token.tag)});
                     },
@@ -117,6 +118,10 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, doc_position: Do
     logger.debug("[doc_position]{s}", .{doc_position.line});
     for (parser.tokens.items) |item, i| {
         item.print(i);
+        if(item.on_pos)
+        {
+            break;
+        }
     }
 
     return parser.getState();
