@@ -1,15 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const DocumentPosition = @import("./document_position.zig").DocumentPosition;
-
 const logger = std.log.scoped(.position_context);
-
-const Error = error{
-    AtMark,
-    Other,
-    Comment,
-};
-
 const SourceRange = std.zig.Token.Loc;
 
 pub const PositionContext = union(enum) {
@@ -49,138 +41,78 @@ fn tokenRangeAppend(prev: SourceRange, token: std.zig.Token) SourceRange {
         .end = token.loc.end,
     };
 }
+// // Early exits.
+// switch (tok.tag) {
+//     .invalid => {
+//         // Single '@' do not return a builtin token so we check this on our own.
+//         if (line[doc_position.col - 1] == '@') {
+//             return Error.AtMark;
+//         }
+//         return Error.Other;
+//     },
+//     .doc_comment, .container_doc_comment => return Error.Comment,
+// }
 
-const StackState = struct {
-    ctx: PositionContext,
-    stack_id: enum { Paren, Bracket, Global },
-};
+// State changes
+// switch (tok.tag) {
+// .string_literal, .multiline_string_literal_line => curr_ctx.ctx = .{ .string_literal = tok.loc },
+// .identifier => switch (curr_ctx.ctx) {
+//     .empty, .pre_label => curr_ctx.ctx = .{ .var_access = tok.loc },
+//     .label => |filled| if (!filled) {
+//         curr_ctx.ctx = .{ .label = true };
+//     } else {
+//         curr_ctx.ctx = .{ .var_access = tok.loc };
+//     },
+//     else => {},
+// },
+// .builtin => switch (curr_ctx.ctx) {
+//     .empty, .pre_label => curr_ctx.ctx = .{ .builtin = tok.loc },
+//     else => {},
+// },
+// .period, .period_asterisk => switch (curr_ctx.ctx) {
+//     .empty, .pre_label => curr_ctx.ctx = .enum_literal,
+//     .enum_literal => curr_ctx.ctx = .empty,
+//     .field_access => {},
+//     .other => {},
+//     .global_error_set => {},
+//     else => curr_ctx.ctx = .{
+//         .field_access = tokenRangeAppend(curr_ctx.ctx.range().?, tok),
+//     },
+// },
+// .keyword_break, .keyword_continue => curr_ctx.ctx = .pre_label,
+// .colon => if (curr_ctx.ctx == .pre_label) {
+//     curr_ctx.ctx = .{ .label = false };
+// } else {
+//     curr_ctx.ctx = .empty;
+// },
+// .question_mark => switch (curr_ctx.ctx) {
+//     .field_access => {},
+//     else => curr_ctx.ctx = .empty,
+// },
+// .l_paren => stack.append(.{ .ctx = .empty, .stack_id = .Paren }),
+// .l_bracket => stack.append(.{ .ctx = .empty, .stack_id = .Bracket }),
+// .r_paren => {
+//     stack.pop();
+//     if (curr_ctx.stack_id != .Paren) {
+//         stack.peek().ctx = .empty;
+//     }
+// },
+// .r_bracket => {
+//     stack.pop();
+//     if (curr_ctx.stack_id != .Bracket) {
+//         stack.peek().ctx = .empty;
+//     }
+// },
+// .keyword_error => curr_ctx.ctx = .global_error_set,
+// else => curr_ctx.ctx = .empty,
+// }
 
-const Stack = struct {
-    const Self = @This();
-
-    stack: std.ArrayList(StackState),
-
-    fn init(allocator: std.mem.Allocator) Self {
-        return .{ .stack = std.ArrayList(StackState).initCapacity(allocator, 8) catch unreachable };
-    }
-
-    fn append(self: *Self, state: StackState) void {
-        self.stack.append(state) catch unreachable;
-    }
-
-    fn pop(self: *Self) void {
-        _ = self.stack.pop();
-    }
-
-    fn popOrNull(self: *Self) ?StackState {
-        return self.stack.popOrNull();
-    }
-
-    fn peek(self: *Self) *StackState {
-        if (self.stack.items.len == 0) {
-            self.stack.append(.{ .ctx = .empty, .stack_id = .Global }) catch unreachable;
-        }
-        return &self.stack.items[self.stack.items.len - 1];
-    }
-};
-
-fn getState(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) Error!?StackState {
-    const line = doc_position.line;
-    const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
-
-    var stack = Stack.init(arena.allocator());
-
-    {
-        var held_line = document.borrowNullTerminatedSlice(
-            line_mem_start,
-            line_mem_start + doc_position.col,
-        );
-        defer held_line.release();
-
-        var tokenizer = std.zig.Tokenizer.init(held_line.data());
-        while (true) {
-            const tok = tokenizer.next();
-
-            // Early exits.
-            switch (tok.tag) {
-                .invalid => {
-                    // Single '@' do not return a builtin token so we check this on our own.
-                    if (line[doc_position.col - 1] == '@') {
-                        return Error.AtMark;
-                    }
-                    return Error.Other;
-                },
-                .doc_comment, .container_doc_comment => return Error.Comment,
-                .eof => break,
-                else => {},
-            }
-
-            // State changes
-            var curr_ctx = stack.peek();
-            switch (tok.tag) {
-                .string_literal, .multiline_string_literal_line => curr_ctx.ctx = .{ .string_literal = tok.loc },
-                .identifier => switch (curr_ctx.ctx) {
-                    .empty, .pre_label => curr_ctx.ctx = .{ .var_access = tok.loc },
-                    .label => |filled| if (!filled) {
-                        curr_ctx.ctx = .{ .label = true };
-                    } else {
-                        curr_ctx.ctx = .{ .var_access = tok.loc };
-                    },
-                    else => {},
-                },
-                .builtin => switch (curr_ctx.ctx) {
-                    .empty, .pre_label => curr_ctx.ctx = .{ .builtin = tok.loc },
-                    else => {},
-                },
-                .period, .period_asterisk => switch (curr_ctx.ctx) {
-                    .empty, .pre_label => curr_ctx.ctx = .enum_literal,
-                    .enum_literal => curr_ctx.ctx = .empty,
-                    .field_access => {},
-                    .other => {},
-                    .global_error_set => {},
-                    else => curr_ctx.ctx = .{
-                        .field_access = tokenRangeAppend(curr_ctx.ctx.range().?, tok),
-                    },
-                },
-                .keyword_break, .keyword_continue => curr_ctx.ctx = .pre_label,
-                .colon => if (curr_ctx.ctx == .pre_label) {
-                    curr_ctx.ctx = .{ .label = false };
-                } else {
-                    curr_ctx.ctx = .empty;
-                },
-                .question_mark => switch (curr_ctx.ctx) {
-                    .field_access => {},
-                    else => curr_ctx.ctx = .empty,
-                },
-                .l_paren => stack.append(.{ .ctx = .empty, .stack_id = .Paren }),
-                .l_bracket => stack.append(.{ .ctx = .empty, .stack_id = .Bracket }),
-                .r_paren => {
-                    stack.pop();
-                    if (curr_ctx.stack_id != .Paren) {
-                        stack.peek().ctx = .empty;
-                    }
-                },
-                .r_bracket => {
-                    stack.pop();
-                    if (curr_ctx.stack_id != .Bracket) {
-                        stack.peek().ctx = .empty;
-                    }
-                },
-                .keyword_error => curr_ctx.ctx = .global_error_set,
-                else => curr_ctx.ctx = .empty,
-            }
-
-            switch (curr_ctx.ctx) {
-                .field_access => |r| curr_ctx.ctx = .{
-                    .field_access = tokenRangeAppend(r, tok),
-                },
-                else => {},
-            }
-        }
-    }
-
-    return stack.popOrNull();
-}
+// switch (curr_ctx.ctx) {
+//     .field_access => |r| curr_ctx.ctx = .{
+//         .field_access = tokenRangeAppend(r, tok),
+//     },
+//     else => {},
+// }
 
 const TokenItem = struct {
     const Self = @This();
@@ -191,9 +123,9 @@ const TokenItem = struct {
 
     fn print(self: Self, i: usize) void {
         if (self.on_pos) {
-            logger.debug("<{}> {s}: \"{s}\"", .{i, @tagName(self.token.tag), self.slice});
+            logger.debug("<{}> {s}: \"{s}\"", .{ i, @tagName(self.token.tag), self.slice });
         } else {
-            logger.debug("[{}] {s}: \"{s}\"", .{i, @tagName(self.token.tag), self.slice});
+            logger.debug("[{}] {s}: \"{s}\"", .{ i, @tagName(self.token.tag), self.slice });
         }
     }
 };
@@ -233,15 +165,20 @@ const LineParser = struct {
         self.tokens.deinit();
     }
 
-    fn getState(self: Self)PositionContext{
-        for(self.tokens.items)|item|
-        {
-            if(item.on_pos)
-            {
-                switch(item.token.tag)
-                {
-                    else =>{},
+    fn getState(self: Self) PositionContext {
+        for (self.tokens.items) |item| {
+            if (item.on_pos) {
+                if (std.mem.startsWith(u8, @tagName(item.token.tag), "keyword_")) {
+                    return .keyword;
                 }
+
+                switch (item.token.tag) {
+                    .identifier => return PositionContext{ .var_access = item.token.loc },
+                    else => {
+                        logger.debug("{s}", .{@tagName(item.token.tag)});
+                    },
+                }
+                break;
             }
         }
 
