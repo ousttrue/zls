@@ -5,51 +5,9 @@ const analysis = @import("./analysis.zig");
 const Ast = std.zig.Ast;
 const log = std.log.scoped(.semantic_tokens);
 const ast = @import("./ast.zig");
+const lsp = @import("lsp");
 const Session = @import("./session.zig").Session;
 
-pub const TokenType = enum(u32) {
-    type,
-    parameter,
-    variable,
-    enumMember,
-    field,
-    errorTag,
-    function,
-    keyword,
-    comment,
-    string,
-    number,
-    operator,
-    builtin,
-    label,
-    keywordLiteral,
-};
-
-pub const TokenModifiers = packed struct {
-    namespace: bool = false,
-    @"struct": bool = false,
-    @"enum": bool = false,
-    @"union": bool = false,
-    @"opaque": bool = false,
-    declaration: bool = false,
-    @"async": bool = false,
-    documentation: bool = false,
-    generic: bool = false,
-
-    fn toInt(self: TokenModifiers) u32 {
-        var res: u32 = 0;
-        inline for (std.meta.fields(TokenModifiers)) |field, i| {
-            if (@field(self, field.name)) {
-                res |= 1 << i;
-            }
-        }
-        return res;
-    }
-
-    inline fn set(self: *TokenModifiers, comptime field: []const u8) void {
-        @field(self, field) = true;
-    }
-};
 
 const Builder = struct {
     handle: *DocumentStore.Handle,
@@ -66,7 +24,7 @@ const Builder = struct {
         };
     }
 
-    fn add(self: *Builder, token: Ast.TokenIndex, token_type: TokenType, token_modifiers: TokenModifiers) !void {
+    fn add(self: *Builder, token: Ast.TokenIndex, token_type: lsp.SemanticTokenType, token_modifiers: lsp.SemanticTokenModifiers) !void {
         const tree = self.handle.tree;
         const starts = tree.tokens.items(.start);
         const next_start = starts[token];
@@ -107,7 +65,7 @@ const Builder = struct {
         const tree = self.handle.tree;
         // TODO More highlighting here
         const tok_id = tree.tokens.items(.tag)[tok];
-        const tok_type: TokenType = switch (tok_id) {
+        const tok_type: lsp.SemanticTokenType = switch (tok_id) {
             .keyword_unreachable => .keywordLiteral,
             .integer_literal, .float_literal => .number,
             .string_literal, .multiline_string_literal_line, .char_literal => .string,
@@ -117,10 +75,10 @@ const Builder = struct {
                 const id = @enumToInt(tok_id);
                 if (id >= @enumToInt(std.zig.Token.Tag.keyword_align) and
                     id <= @enumToInt(std.zig.Token.Tag.keyword_while))
-                    break :blk TokenType.keyword;
+                    break :blk lsp.SemanticTokenType.keyword;
                 if (id >= @enumToInt(std.zig.Token.Tag.bang) and
                     id <= @enumToInt(std.zig.Token.Tag.tilde))
-                    break :blk TokenType.operator;
+                    break :blk lsp.SemanticTokenType.operator;
 
                 return;
             },
@@ -167,18 +125,18 @@ const Builder = struct {
                 continue;
 
             const comment_start = i;
-            var mods = TokenModifiers{};
+            var mods = lsp.SemanticTokenModifiers{};
             if (i + 2 < to and (source[i + 2] == '!' or source[i + 2] == '/'))
                 mods.documentation = true;
 
             while (i < to - 1 and source[i] != '\n') : (i += 1) {}
 
             const length = try offsets.lineSectionLength(self.handle.tree, comment_start, i, self.encoding);
-            try self.addDirect(TokenType.comment, mods, comment_start, length);
+            try self.addDirect(lsp.SemanticTokenType.comment, mods, comment_start, length);
         }
     }
 
-    fn addDirect(self: *Builder, tok_type: TokenType, tok_mod: TokenModifiers, start: usize, length: usize) !void {
+    fn addDirect(self: *Builder, tok_type: lsp.SemanticTokenType, tok_mod: lsp.SemanticTokenModifiers, start: usize, length: usize) !void {
         const delta = offsets.tokenRelativeLocation(
             self.handle.tree,
             self.previous_position,
@@ -201,11 +159,11 @@ const Builder = struct {
     }
 };
 
-inline fn writeToken(builder: *Builder, token_idx: ?Ast.TokenIndex, tok_type: TokenType) !void {
+inline fn writeToken(builder: *Builder, token_idx: ?Ast.TokenIndex, tok_type: lsp.SemanticTokenType) !void {
     return try writeTokenMod(builder, token_idx, tok_type, .{});
 }
 
-inline fn writeTokenMod(builder: *Builder, token_idx: ?Ast.TokenIndex, tok_type: TokenType, tok_mod: TokenModifiers) !void {
+inline fn writeTokenMod(builder: *Builder, token_idx: ?Ast.TokenIndex, tok_type: lsp.SemanticTokenType, tok_mod: lsp.SemanticTokenModifiers) !void {
     if (token_idx) |ti| {
         try builder.add(ti, tok_type, tok_mod);
     }
@@ -217,24 +175,24 @@ fn writeDocComments(builder: *Builder, tree: Ast, doc: Ast.TokenIndex) !void {
     while (token_tags[tok_idx] == .doc_comment or
         token_tags[tok_idx] == .container_doc_comment) : (tok_idx += 1)
     {
-        var tok_mod = TokenModifiers{};
+        var tok_mod = lsp.SemanticTokenModifiers{};
         tok_mod.set("documentation");
 
         try builder.add(tok_idx, .comment, tok_mod);
     }
 }
 
-fn fieldTokenType(container_decl: Ast.Node.Index, handle: *DocumentStore.Handle) ?TokenType {
+fn fieldTokenType(container_decl: Ast.Node.Index, handle: *DocumentStore.Handle) ?lsp.SemanticTokenType {
     const main_token = handle.tree.nodes.items(.main_token)[container_decl];
     if (main_token > handle.tree.tokens.len) return null;
-    return @as(?TokenType, switch (handle.tree.tokens.items(.tag)[main_token]) {
+    return @as(?lsp.SemanticTokenType, switch (handle.tree.tokens.items(.tag)[main_token]) {
         .keyword_struct => .field,
         .keyword_union, .keyword_enum => .enumMember,
         else => null,
     });
 }
 
-fn colorIdentifierBasedOnType(builder: *Builder, type_node: analysis.TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: TokenModifiers) !void {
+fn colorIdentifierBasedOnType(builder: *Builder, type_node: analysis.TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: lsp.SemanticTokenModifiers) !void {
     if (type_node.type.is_type_val) {
         var new_tok_mod = tok_mod;
         if (type_node.isNamespace())
@@ -463,15 +421,15 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             try writeToken(builder, fn_proto.lib_name, .string);
             try writeToken(builder, fn_proto.ast.fn_token, .keyword);
 
-            const func_name_tok_type: TokenType = if (analysis.isTypeFunction(tree, fn_proto))
+            const func_name_tok_type: lsp.SemanticTokenType = if (analysis.isTypeFunction(tree, fn_proto))
                 .type
             else
                 .function;
 
             const tok_mod = if (analysis.isGenericFunction(tree, fn_proto))
-                TokenModifiers{ .generic = true }
+                lsp.SemanticTokenModifiers{ .generic = true }
             else
-                TokenModifiers{};
+                lsp.SemanticTokenModifiers{};
 
             try writeTokenMod(builder, fn_proto.name_token, func_name_tok_type, tok_mod);
 
@@ -643,7 +601,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 else => unreachable,
             };
 
-            var field_token_type: ?TokenType = null;
+            var field_token_type: ?lsp.SemanticTokenType = null;
 
             if (struct_init.ast.type_expr != 0) {
                 try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, struct_init.ast.type_expr });
@@ -870,7 +828,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
         .@"orelse",
         => {
             try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
-            const token_type: TokenType = switch (tag) {
+            const token_type: lsp.SemanticTokenType = switch (tag) {
                 .bool_and, .bool_or => .keyword,
                 else => .operator,
             };
@@ -908,10 +866,10 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 switch (decl_type.decl.*) {
                     .ast_node => |decl_node| {
                         if (decl_type.handle.tree.nodes.items(.tag)[decl_node].isContainerField()) {
-                            const tok_type: ?TokenType = if (ast.isContainer(lhs_type.handle.tree, left_type_node))
+                            const tok_type: ?lsp.SemanticTokenType = if (ast.isContainer(lhs_type.handle.tree, left_type_node))
                                 fieldTokenType(decl_node, lhs_type.handle)
                             else if (left_type_node == 0)
-                                TokenType.field
+                                lsp.SemanticTokenType.field
                             else
                                 null;
 
@@ -1000,7 +958,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
     }
 }
 
-fn writeContainerField(builder: *Builder, session: *Session, node: Ast.Node.Index, field_token_type: ?TokenType, child_frame: anytype) !void {
+fn writeContainerField(builder: *Builder, session: *Session, node: Ast.Node.Index, field_token_type: ?lsp.SemanticTokenType, child_frame: anytype) !void {
     const tree = builder.handle.tree;
     const container_field = ast.containerField(tree, node).?;
     const base = tree.nodes.items(.main_token)[node];

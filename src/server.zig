@@ -836,7 +836,7 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
                         .range = false,
                         .legend = .{
                             .tokenTypes = comptime block: {
-                                const tokTypeFields = std.meta.fields(semantic_tokens.TokenType);
+                                const tokTypeFields = std.meta.fields(lsp.SemanticTokenType);
                                 var names: [tokTypeFields.len][]const u8 = undefined;
                                 for (tokTypeFields) |field, i| {
                                     names[i] = field.name;
@@ -844,7 +844,7 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
                                 break :block &names;
                             },
                             .tokenModifiers = comptime block: {
-                                const tokModFields = std.meta.fields(semantic_tokens.TokenModifiers);
+                                const tokModFields = std.meta.fields(lsp.SemanticTokenModifiers);
                                 var names: [tokModFields.len][]const u8 = undefined;
                                 for (tokModFields) |field, i| {
                                     names[i] = field.name;
@@ -884,19 +884,16 @@ pub fn closeDocumentHandler(session: *Session, req: requests.CloseDocument) !voi
 }
 
 pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
-    return try semanticTokensFullHandlerReq(session, id, req);
-}
-
-fn semanticTokensFullHandlerReq(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
-    if (session.config.enable_semantic_tokens) {
-        const handle = try session.getHandle(req.params.textDocument.uri);
-        const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offsets.offset_encoding);
-        return lsp.Response{
-            .id = id,
-            .result = .{ .SemanticTokensFull = .{ .data = token_array } },
-        };
+    if (!session.config.enable_semantic_tokens) {
+        return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
     }
-    return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
+
+    const handle = try session.getHandle(req.params.textDocument.uri);
+    const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offsets.offset_encoding);
+    return lsp.Response{
+        .id = id,
+        .result = .{ .SemanticTokensFull = .{ .data = token_array } },
+    };
 }
 
 fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
@@ -961,7 +958,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 }
 
 pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
-    logger.debug("[hover]{s} {}", .{req.params.textDocument.uri, req.params.position});
+    logger.debug("[hover]{s} {}", .{ req.params.textDocument.uri, req.params.position });
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
