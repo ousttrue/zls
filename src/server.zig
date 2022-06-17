@@ -453,9 +453,7 @@ fn hoverSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle)
 }
 
 fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const name = offsets.identifierFromPosition(pos_index, handle.document.text);
-    if (name.len == 0) return lsp.Response.createNull(id);
-
+    const name = try offsets.identifierFromPosition(pos_index, handle.document.text);
     inline for (builtin_completions.data.builtins) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
             return lsp.Response{

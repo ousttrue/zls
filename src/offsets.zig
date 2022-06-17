@@ -12,13 +12,13 @@ const logger = std.log.scoped(.offset);
 pub const OffsetError = error{
     LineNotFound,
     PositionNegativeCharacter,
-    NotImplemented,
-    NoSymbolName,
+    NoIdentifier,
     NoFieldAccessType,
     GlobalSymbolNotFound,
     ContainerSymbolNotFound,
     NodeNotFound,
     OutOfRange,
+    NotImplemented,
 };
 
 pub const Encoding = enum {
@@ -246,12 +246,12 @@ fn isSymbolChar(char: u8) bool {
     return std.ascii.isAlNum(char) or char == '_';
 }
 
-pub fn identifierFromPosition(pos_index: usize, text: []const u8) []const u8 {
+pub fn identifierFromPosition(pos_index: usize, text: []const u8) OffsetError![]const u8 {
     if (pos_index + 1 >= text.len) {
-        return "";
+        return OffsetError.NoIdentifier;
     }
     if (!isSymbolChar(text[pos_index])) {
-        return "";
+        return OffsetError.NoIdentifier;
     }
 
     var start_idx = pos_index;
@@ -279,18 +279,12 @@ test "identifierFromPosition" {
 }
 
 pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !analysis.DeclWithHandle {
-    const name = identifierFromPosition(pos_index, handle.document.text);
-    if (name.len == 0) {
-        return OffsetError.NoSymbolName;
-    }
-
+    const name = try identifierFromPosition(pos_index, handle.document.text);
     return (try analysis.lookupSymbolGlobal(session, handle, name, pos_index)) orelse return OffsetError.GlobalSymbolNotFound;
 }
 
 pub fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
-    const name = identifierFromPosition(pos_index, handle.document.text);
-    if (name.len == 0) return null;
-
+    const name = try identifierFromPosition(pos_index, handle.document.text);
     return try analysis.lookupLabel(handle, name, pos_index);
 }
 
@@ -334,11 +328,7 @@ fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWi
 }
 
 pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
-    const name = identifierFromPosition(position.absolute_index, handle.document.text);
-    if (name.len == 0) {
-        return OffsetError.NoSymbolName;
-    }
-
+    const name = try identifierFromPosition(position.absolute_index, handle.document.text);
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
     var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
@@ -393,7 +383,7 @@ pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition,
     const doc_position = try documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
 
-    return switch (pos_context) {
+    switch (pos_context) {
         .var_access => {
             const decl = try getSymbolGlobal(session, doc_position.absolute_index, handle);
             return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
@@ -402,11 +392,15 @@ pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition,
             const decl = try getSymbolFieldAccess(session, handle, doc_position, range);
             return try gotoDefinitionSymbol(session, id, decl, resolve_alias);
         },
-        .string_literal => try gotoDefinitionString(session, id, doc_position.absolute_index, handle),
-        .label => try gotoDefinitionLabel(session, id, doc_position.absolute_index, handle),
+        .string_literal => {
+            return try gotoDefinitionString(session, id, doc_position.absolute_index, handle);
+        },
+        .label => {
+            return try gotoDefinitionLabel(session, id, doc_position.absolute_index, handle);
+        },
         else => {
             logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
             return OffsetError.NotImplemented;
         },
-    };
+    }
 }
