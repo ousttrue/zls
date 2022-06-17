@@ -903,7 +903,7 @@ fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Resp
     var arena = session.arena;
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(arena, doc_position);
 
     return switch (pos_context) {
         .builtin => try session.completion.completeBuiltin(id, session.config),
@@ -964,7 +964,7 @@ pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Respon
     logger.debug("[hover]{s} {}", .{req.params.textDocument.uri, req.params.position});
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
     switch (pos_context) {
         .builtin => {
             logger.debug("[hover][builtin]", .{});
@@ -1053,7 +1053,7 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
     return switch (pos_context) {
         .var_access => try renameDefinitionGlobal(session, id, handle, doc_position.absolute_index, req.params.newName),
@@ -1070,7 +1070,7 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
     const include_decl = req.params.context.includeDeclaration;
     return switch (pos_context) {

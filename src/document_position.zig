@@ -1,5 +1,14 @@
 const std = @import("std");
 
+pub fn find(src: []const u8) ?usize {
+    for (src) |c, i| {
+        if (c == '\n') {
+            return i;
+        }
+    }
+    return null;
+}
+
 pub const DocumentPosition = struct {
     const Self = @This();
 
@@ -7,18 +16,7 @@ pub const DocumentPosition = struct {
     col: usize,
     line: []const u8,
     absolute_index: usize,
-
-    // pub fn init_line(row: usize, line: []const u8, absolute_index: usize) Self {
-    // }
-
-    pub fn find(src: []const u8) ?usize {
-        for (src) |c, i| {
-            if (c == '\n') {
-                return i;
-            }
-        }
-        return null;
-    }
+    all: []const u8,
 
     pub fn getLine(text: []const u8, dst: usize) ?Self {
         // doc: lsp.TextDocument
@@ -44,8 +42,7 @@ pub const DocumentPosition = struct {
             }
             end += 1;
         }
-        if(i!=dst)
-        {
+        if (i != dst) {
             return null;
         }
         return Self{
@@ -53,6 +50,7 @@ pub const DocumentPosition = struct {
             .col = 0,
             .line = text[start..end],
             .absolute_index = start,
+            .all = text,
         };
     }
 
@@ -62,6 +60,7 @@ pub const DocumentPosition = struct {
             .col = self.col + delta,
             .line = self.line,
             .absolute_index = self.absolute_index + delta,
+            .all = self.all,
         };
     }
 };

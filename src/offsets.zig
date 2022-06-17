@@ -372,7 +372,7 @@ pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition,
     logger.debug("[definition]{s} {}", .{ req.params.textDocument.uri, req.params.position });
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try documentPosition(handle.document, req.params.position, offset_encoding);
-    const pos_context = position_context.documentPositionContext(session.arena, handle.document, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
     switch (pos_context) {
         .var_access => {

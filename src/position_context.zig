@@ -14,32 +14,33 @@ const SourceRange = std.zig.Token.Loc;
 
 pub const PositionContext = union(enum) {
     builtin: SourceRange,
-    comment,
+    // comment,
     string_literal: SourceRange,
     field_access: SourceRange,
     var_access: SourceRange,
     global_error_set,
     enum_literal,
-    pre_label,
+    // pre_label,
     label: bool,
-    other,
+    // other,
+    keyword,
     empty,
 
-    pub fn range(self: PositionContext) ?SourceRange {
-        return switch (self) {
-            .builtin => |r| r,
-            .comment => null,
-            .string_literal => |r| r,
-            .field_access => |r| r,
-            .var_access => |r| r,
-            .enum_literal => null,
-            .pre_label => null,
-            .label => null,
-            .other => null,
-            .empty => null,
-            .global_error_set => null,
-        };
-    }
+    // pub fn range(self: PositionContext) ?SourceRange {
+    //     return switch (self) {
+    //         .builtin => |r| r,
+    //         .comment => null,
+    //         .string_literal => |r| r,
+    //         .field_access => |r| r,
+    //         .var_access => |r| r,
+    //         .enum_literal => null,
+    //         .pre_label => null,
+    //         .label => null,
+    //         .other => null,
+    //         .empty => null,
+    //         .global_error_set => null,
+    //     };
+    // }
 };
 
 fn tokenRangeAppend(prev: SourceRange, token: std.zig.Token) SourceRange {
@@ -181,10 +182,37 @@ fn getState(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_pos
     return stack.popOrNull();
 }
 
-pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_position: DocumentPosition) PositionContext {
-    _ = arena;
-    _ = document;
-    _ = doc_position;
+const LineParser = struct {
+    const Self = @This();
+
+    allocator: std.mem.Allocator,
+    tokens: std.ArrayList(std.zig.Token),
+
+    fn init(arena: *std.heap.ArenaAllocator, doc_position: DocumentPosition) Self {
+        const allocator=arena.allocator();
+        var self = Self{
+            .allocator = allocator,
+            .tokens = std.ArrayList(std.zig.Token).init(allocator),
+        };
+        var dup = allocator.dupeZ(u8, doc_position.line) catch unreachable;
+        defer allocator.free(dup);
+        var tokenizer = std.zig.Tokenizer.init(dup);
+        while (true) {
+            const tok = tokenizer.next();
+            switch (tok.tag) {
+                .eof => break,
+                else => {},
+            }
+            self.tokens.append(tok) catch unreachable;
+        }
+        return self;
+    }
+
+    fn deinit(self: *Self) void {
+        self.tokens.deinit();
+    }
+};
+
     // const state_or_null = getState(arena, document, doc_position) catch |err|
     //     {
     //     return switch (err) {
@@ -237,7 +265,14 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, document: lsp.Te
     //     }
     // }
 
+pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, doc_position: DocumentPosition) PositionContext {
+    var parser = LineParser.init(arena, doc_position);
+
     logger.debug("[doc_position]{s}", .{doc_position.line});
+    for(parser.tokens.items)|tok, i|
+    {
+        logger.debug("[{}] {s}", .{i, @tagName(tok.tag)});
+    }
 
     return .empty;
 }
