@@ -182,17 +182,34 @@ fn getState(arena: *std.heap.ArenaAllocator, document: lsp.TextDocument, doc_pos
     return stack.popOrNull();
 }
 
-const LineParser = struct {
+const TokenItem = struct {
     const Self = @This();
 
+    on_pos: bool,
+    token: std.zig.Token,
+    slice: []const u8,
+
+    fn print(self: Self, i: usize) void {
+        if (self.on_pos) {
+            logger.debug("<{}> {s}: {s}", .{i, @tagName(self.token.tag), self.slice});
+        } else {
+            logger.debug("[{}] {s}: {s}", .{i, @tagName(self.token.tag), self.slice});
+        }
+    }
+};
+
+const LineParser = struct {
+    const Self = @This();
+    const TokenItemList = std.ArrayList(TokenItem);
+
     allocator: std.mem.Allocator,
-    tokens: std.ArrayList(std.zig.Token),
+    tokens: TokenItemList,
 
     fn init(arena: *std.heap.ArenaAllocator, doc_position: DocumentPosition) Self {
-        const allocator=arena.allocator();
+        const allocator = arena.allocator();
         var self = Self{
             .allocator = allocator,
-            .tokens = std.ArrayList(std.zig.Token).init(allocator),
+            .tokens = TokenItemList.init(allocator),
         };
         var dup = allocator.dupeZ(u8, doc_position.line) catch unreachable;
         defer allocator.free(dup);
@@ -203,7 +220,11 @@ const LineParser = struct {
                 .eof => break,
                 else => {},
             }
-            self.tokens.append(tok) catch unreachable;
+            self.tokens.append(.{
+                .on_pos = tok.loc.start <= doc_position.col and tok.loc.end >= doc_position.col,
+                .token = tok,
+                .slice = doc_position.line[tok.loc.start..tok.loc.end],
+            }) catch unreachable;
         }
         return self;
     }
@@ -213,65 +234,65 @@ const LineParser = struct {
     }
 };
 
-    // const state_or_null = getState(arena, document, doc_position) catch |err|
-    //     {
-    //     return switch (err) {
-    //         Error.AtMark => PositionContext{
-    //             .builtin = .{
-    //                 .start = doc_position.col - 1,
-    //                 .end = doc_position.col,
-    //             },
-    //         },
-    //         Error.Other => .other,
-    //         Error.Comment => .comment,
-    //     };
-    // };
+// const state_or_null = getState(arena, document, doc_position) catch |err|
+//     {
+//     return switch (err) {
+//         Error.AtMark => PositionContext{
+//             .builtin = .{
+//                 .start = doc_position.col - 1,
+//                 .end = doc_position.col,
+//             },
+//         },
+//         Error.Other => .other,
+//         Error.Comment => .comment,
+//     };
+// };
 
-    // if (state_or_null) |state| {
-    //     switch (state.ctx) {
-    //         .empty => {},
-    //         .label => |filled| {
-    //             // We need to check this because the state could be a filled
-    //             // label if only a space follows it
-    //             const last_char = doc_position.line[doc_position.col - 1];
-    //             if (!filled or last_char != ' ') {
-    //                 return state.ctx;
-    //             }
-    //         },
-    //         else => {
-    //             logger.debug("StackState: {s}", .{@tagName(state.ctx)});
-    //             return state.ctx;
-    //         },
-    //     }
-    // }
+// if (state_or_null) |state| {
+//     switch (state.ctx) {
+//         .empty => {},
+//         .label => |filled| {
+//             // We need to check this because the state could be a filled
+//             // label if only a space follows it
+//             const last_char = doc_position.line[doc_position.col - 1];
+//             if (!filled or last_char != ' ') {
+//                 return state.ctx;
+//             }
+//         },
+//         else => {
+//             logger.debug("StackState: {s}", .{@tagName(state.ctx)});
+//             return state.ctx;
+//         },
+//     }
+// }
 
-    // const line = doc_position.line;
-    // const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
-    // if (doc_position.col < line.len) {
-    //     var held_line = document.borrowNullTerminatedSlice(
-    //         line_mem_start + doc_position.col,
-    //         line_mem_start + line.len,
-    //     );
-    //     defer held_line.release();
+// const line = doc_position.line;
+// const line_mem_start = @ptrToInt(line.ptr) - @ptrToInt(document.mem.ptr);
+// if (doc_position.col < line.len) {
+//     var held_line = document.borrowNullTerminatedSlice(
+//         line_mem_start + doc_position.col,
+//         line_mem_start + line.len,
+//     );
+//     defer held_line.release();
 
-    //     switch (line[doc_position.col]) {
-    //         'a'...'z', 'A'...'Z', '_', '@' => {},
-    //         else => return .empty,
-    //     }
-    //     var tokenizer = std.zig.Tokenizer.init(held_line.data());
-    //     const tok = tokenizer.next();
-    //     if (tok.tag == .identifier) {
-    //         return PositionContext{ .var_access = tok.loc };
-    //     }
-    // }
+//     switch (line[doc_position.col]) {
+//         'a'...'z', 'A'...'Z', '_', '@' => {},
+//         else => return .empty,
+//     }
+//     var tokenizer = std.zig.Tokenizer.init(held_line.data());
+//     const tok = tokenizer.next();
+//     if (tok.tag == .identifier) {
+//         return PositionContext{ .var_access = tok.loc };
+//     }
+// }
 
 pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, doc_position: DocumentPosition) PositionContext {
     var parser = LineParser.init(arena, doc_position);
 
     logger.debug("[doc_position]{s}", .{doc_position.line});
-    for(parser.tokens.items)|tok, i|
-    {
-        logger.debug("[{}] {s}", .{i, @tagName(tok.tag)});
+    for (parser.tokens.items) |item, i| {
+        // logger.debug("[{}] {s}", .{ i, @tagName(tok.tag) });
+        item.print(i);
     }
 
     return .empty;
