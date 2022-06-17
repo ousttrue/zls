@@ -191,9 +191,9 @@ const TokenItem = struct {
 
     fn print(self: Self, i: usize) void {
         if (self.on_pos) {
-            logger.debug("<{}> {s}: {s}", .{i, @tagName(self.token.tag), self.slice});
+            logger.debug("<{}> {s}: \"{s}\"", .{i, @tagName(self.token.tag), self.slice});
         } else {
-            logger.debug("[{}] {s}: {s}", .{i, @tagName(self.token.tag), self.slice});
+            logger.debug("[{}] {s}: \"{s}\"", .{i, @tagName(self.token.tag), self.slice});
         }
     }
 };
@@ -231,6 +231,21 @@ const LineParser = struct {
 
     fn deinit(self: *Self) void {
         self.tokens.deinit();
+    }
+
+    fn getState(self: Self)PositionContext{
+        for(self.tokens.items)|item|
+        {
+            if(item.on_pos)
+            {
+                switch(item.token.tag)
+                {
+                    else =>{},
+                }
+            }
+        }
+
+        return .empty;
     }
 };
 
@@ -288,6 +303,7 @@ const LineParser = struct {
 
 pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, doc_position: DocumentPosition) PositionContext {
     var parser = LineParser.init(arena, doc_position);
+    defer parser.deinit();
 
     logger.debug("[doc_position]{s}", .{doc_position.line});
     for (parser.tokens.items) |item, i| {
@@ -295,7 +311,7 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, doc_position: Do
         item.print(i);
     }
 
-    return .empty;
+    return parser.getState();
 }
 
 fn getSlice(all: []const u8, tok: std.zig.Token) []const u8 {
