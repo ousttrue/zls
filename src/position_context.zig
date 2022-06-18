@@ -78,6 +78,8 @@ const LineParser = struct {
                 }
 
                 switch (item.token.tag) {
+                    .string_literal => return PositionContext{ .string_literal = item.token.loc },
+                    .builtin => return PositionContext{ .builtin = item.token.loc },
                     .identifier => {
                         if (i >= 2 and self.tokens.items[i - 1].token.tag == .period) {
                             var j = i;
@@ -98,7 +100,6 @@ const LineParser = struct {
                         }
                         return PositionContext{ .var_access = item.token.loc };
                     },
-                    .builtin => return PositionContext{ .builtin = item.token.loc },
                     else => {
                         logger.debug("{s}", .{@tagName(item.token.tag)});
                     },
@@ -118,8 +119,7 @@ pub fn documentPositionContext(arena: *std.heap.ArenaAllocator, doc_position: Do
     logger.debug("[doc_position]{s}", .{doc_position.line});
     for (parser.tokens.items) |item, i| {
         item.print(i);
-        if(item.on_pos)
-        {
+        if (item.on_pos) {
             break;
         }
     }
