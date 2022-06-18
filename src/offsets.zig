@@ -4,6 +4,7 @@ const Ast = std.zig.Ast;
 const Session = @import("./session.zig").Session;
 const DocumentStore = @import("./DocumentStore.zig");
 const analysis = @import("./analysis.zig");
+const ast = @import("./ast.zig");
 const DocumentPosition = @import("./document_position.zig").DocumentPosition;
 const position_context = @import("./position_context.zig");
 
@@ -263,9 +264,9 @@ pub fn identifierFromPosition(pos_index: usize, text: []const u8) OffsetError![]
 }
 
 test "identifierFromPosition" {
-    try std.testing.expectEqualStrings("abc", identifierFromPosition(1, " abc cde"));
-    try std.testing.expectEqualStrings("abc", identifierFromPosition(2, " abc cde"));
-    try std.testing.expectEqualStrings("", identifierFromPosition(3, "abc cde"));
+    try std.testing.expectEqualStrings("abc", try identifierFromPosition(1, " abc cde"));
+    try std.testing.expectEqualStrings("abc", try identifierFromPosition(2, " abc cde"));
+    // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }
 
 pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !analysis.DeclWithHandle {
@@ -339,28 +340,152 @@ pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, po
     )) orelse return OffsetError.ContainerSymbolNotFound;
 }
 
-fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
-    const tree = handle.tree;
+pub const ImportStrIterator = struct {
+    const Self = @This();
 
-    const import_str = analysis.getImportStr(tree, 0, pos_index) orelse return lsp.Response.createNull(id);
-    const uri = (try session.document_store.uriFromImportStr(
-        session.arena.allocator(),
-        handle.*,
-        import_str,
-    )) orelse return lsp.Response.createNull(id);
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .Location = .{
-                .uri = uri,
-                .range = .{
-                    .start = .{ .line = 0, .character = 0 },
-                    .end = .{ .line = 0, .character = 0 },
-                },
-            },
-        },
+    const Payload = union(enum) {
+        decl: Ast.Node.Index,
+        decls: []const Ast.Node.Index,
     };
+    const Item = struct {
+        // const Self = @This();
+        payload: Payload,
+        pos: usize = 0,
+
+        fn node(self: Item) Ast.Node.Index {
+            return switch (self.payload) {
+                .decls => |decls| return decls[self.pos],
+                .decl => |decl| return decl,
+            };
+        }
+
+        fn next(self: Item) ?Item {
+            switch (self.payload) {
+                .decls => |decls| {
+                    if (self.pos + 1 < decls.len) {
+                        return Item{ .payload = .{ .decls = decls }, .pos = self.pos + 1 };
+                    }
+                    return null;
+                },
+                .decl => return null,
+            }
+        }
+    };
+
+    tree: Ast,
+    stack: [256]Item = undefined,
+    depth: usize,
+
+    pub fn init(tree: Ast) Self {
+        var self = Self{
+            .tree = tree,
+            .depth = 0,
+        };
+        self.push(.{ .payload = .{ .decl = 0 } });
+        return self;
+    }
+
+    fn push(self: *Self, item: Item) void {
+        self.stack[self.depth] = item;
+        self.depth += 1;
+    }
+
+    fn pop(self: *Self) Item {
+        const node = self.stack[self.depth - 1];
+        self.depth -= 1;
+        return node;
+    }
+
+    pub fn next(self: *Self) ?u32 {
+        const node_tags = self.tree.nodes.items(.tag);
+        var buf: [2]Ast.Node.Index = undefined;
+        while (self.depth > 0) {
+            const item = self.pop();
+            if (item.next()) |next_item| {
+                self.push(next_item);
+            }
+
+            const node = item.node();
+
+            if (ast.isContainer(self.tree, node)) {
+                const decls = ast.declMembers(self.tree, node, &buf);
+                if (decls.len > 0) {
+                    self.push(.{ .payload = .{ .decls = decls } });
+                }
+            } else if (ast.varDecl(self.tree, node)) |var_decl| {
+                self.push(.{ .payload = .{ .decl = var_decl.ast.init_node } });
+            } else if (node_tags[node] == .@"usingnamespace") {
+                self.push(.{ .payload = .{ .decl = self.tree.nodes.items(.data)[node].lhs } });
+            }
+
+            if (ast.isBuiltinCall(self.tree, node)) {
+                const builtin_token = self.tree.nodes.items(.main_token)[node];
+                const call_name = self.tree.tokenSlice(builtin_token);
+                if (std.mem.eql(u8, call_name, "@import")) {
+                    return node;
+                }
+            }
+        }
+
+        return null;
+    }
+};
+
+fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, source_index: usize) bool {
+    const first_token = tokenLocation(tree, tree.firstToken(node)).start;
+    const last_token = tokenLocation(tree, ast.lastToken(tree, node)).end;
+    return source_index >= first_token and source_index <= last_token;
+}
+
+fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
+    const node_tags = tree.nodes.items(.tag);
+    const data = tree.nodes.items(.data)[node];
+    const params = switch (node_tags[node]) {
+        .builtin_call, .builtin_call_comma => tree.extra_data[data.lhs..data.rhs],
+        .builtin_call_two, .builtin_call_two_comma => if (data.lhs == 0)
+            &[_]Ast.Node.Index{}
+        else if (data.rhs == 0)
+            &[_]Ast.Node.Index{data.lhs}
+        else
+            &[_]Ast.Node.Index{ data.lhs, data.rhs },
+        else => unreachable,
+    };
+
+    if (params.len != 1) return null;
+
+    const import_str = tree.tokenSlice(tree.nodes.items(.main_token)[params[0]]);
+    return import_str[1 .. import_str.len - 1];
+}
+
+fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+    var it = ImportStrIterator.init(handle.tree);
+    while (it.next()) |node| {
+        if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
+            if (importStr(handle.tree, node)) |import_str| {
+                if (try session.document_store.uriFromImportStr(
+                    session.arena.allocator(),
+                    handle.*,
+                    import_str,
+                )) |uri| {
+                    logger.debug("gotoDefinitionString: {s}", .{uri});
+                    return lsp.Response{
+                        .id = id,
+                        .result = .{
+                            .Location = .{
+                                .uri = uri,
+                                .range = .{
+                                    .start = .{ .line = 0, .character = 0 },
+                                    .end = .{ .line = 0, .character = 0 },
+                                },
+                            },
+                        },
+                    };
+                }
+            }
+        }
+    }
+
+    return lsp.Response.createNull(id);
 }
 
 fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {

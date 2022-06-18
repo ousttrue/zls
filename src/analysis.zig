@@ -1338,59 +1338,6 @@ pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     return null;
 }
 
-fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, source_index: usize) bool {
-    const first_token = offsets.tokenLocation(tree, tree.firstToken(node)).start;
-    const last_token = offsets.tokenLocation(tree, ast.lastToken(tree, node)).end;
-    return source_index >= first_token and source_index <= last_token;
-}
-
-pub fn getImportStr(tree: Ast, node: Ast.Node.Index, source_index: usize) ?[]const u8 {
-    const node_tags = tree.nodes.items(.tag);
-    var buf: [2]Ast.Node.Index = undefined;
-    if (ast.isContainer(tree, node)) {
-        const decls = ast.declMembers(tree, node, &buf);
-        for (decls) |decl_idx| {
-            if (getImportStr(tree, decl_idx, source_index)) |name| {
-                return name;
-            }
-        }
-        return null;
-    } else if (ast.varDecl(tree, node)) |var_decl| {
-        return getImportStr(tree, var_decl.ast.init_node, source_index);
-    } else if (node_tags[node] == .@"usingnamespace") {
-        return getImportStr(tree, tree.nodes.items(.data)[node].lhs, source_index);
-    }
-
-    if (!nodeContainsSourceIndex(tree, node, source_index)) {
-        return null;
-    }
-
-    if (ast.isBuiltinCall(tree, node)) {
-        const builtin_token = tree.nodes.items(.main_token)[node];
-        const call_name = tree.tokenSlice(builtin_token);
-
-        if (!std.mem.eql(u8, call_name, "@import")) return null;
-        const data = tree.nodes.items(.data)[node];
-        const params = switch (node_tags[node]) {
-            .builtin_call, .builtin_call_comma => tree.extra_data[data.lhs..data.rhs],
-            .builtin_call_two, .builtin_call_two_comma => if (data.lhs == 0)
-                &[_]Ast.Node.Index{}
-            else if (data.rhs == 0)
-                &[_]Ast.Node.Index{data.lhs}
-            else
-                &[_]Ast.Node.Index{ data.lhs, data.rhs },
-            else => unreachable,
-        };
-
-        if (params.len != 1) return null;
-
-        const import_str = tree.tokenSlice(tree.nodes.items(.main_token)[params[0]]);
-        return import_str[1 .. import_str.len - 1];
-    }
-
-    return null;
-}
-
 pub const SourceRange = std.zig.Token.Loc;
 
 fn addOutlineNodes(allocator: std.mem.Allocator, tree: Ast, child: Ast.Node.Index, context: *GetDocumentSymbolsContext) anyerror!void {
