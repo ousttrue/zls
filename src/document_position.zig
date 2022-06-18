@@ -63,6 +63,16 @@ pub const DocumentPosition = struct {
             .all = self.all,
         };
     }
+
+    pub fn back(self: Self, delta: usize) DocumentPosition {
+        return DocumentPosition{
+            .row = self.row,
+            .col = self.col - delta,
+            .line = self.line,
+            .absolute_index = self.absolute_index - delta,
+            .all = self.all,
+        };
+    }
 };
 
 test "getLine" {

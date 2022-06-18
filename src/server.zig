@@ -896,25 +896,41 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
     };
 }
 
-fn getCompletion(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
-    var arena = session.arena;
+pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
     const handle = try session.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
-    return switch (pos_context) {
-        .builtin => try session.completion.completeBuiltin(id, session.config),
-        .var_access, .empty => try completeGlobal(session, id, doc_position.absolute_index, handle),
-        .field_access => |range| try completeFieldAccess(session, id, handle, doc_position, range),
-        .global_error_set => try completeError(session, id, handle),
-        .enum_literal => try completeDot(session, id, handle),
-        .label => try completeLabel(session, id, doc_position.absolute_index, handle),
-        else => lsp.Response{ .id = id, .result = no_completions_response },
-    };
-}
-
-pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
-    return try getCompletion(session, id, req);
+    switch (pos_context) {
+        .builtin => {
+            logger.debug("[completion][builtin]", .{});
+            return try session.completion.completeBuiltin(id, session.config);
+        },
+        .var_access, .empty => {
+            logger.debug("[completion][global]", .{});
+            return try completeGlobal(session, id, doc_position.absolute_index, handle);
+        },
+        .field_access => |range| {
+            logger.debug("[completion][field_access]", .{});
+            return try completeFieldAccess(session, id, handle, doc_position, range);
+        },
+        .global_error_set => {
+            logger.debug("[completion][global_error_set]", .{});
+            return try completeError(session, id, handle);
+        },
+        .enum_literal => {
+            logger.debug("[completion][enum_literal]", .{});
+            return try completeDot(session, id, handle);
+        },
+        .label => {
+            logger.debug("[completion][label]", .{});
+            return try completeLabel(session, id, doc_position.absolute_index, handle);
+        },
+        else => {
+            logger.debug("[completion][{s}]", .{@tagName(pos_context)});
+            return lsp.Response{ .id = id, .result = no_completions_response };
+        },
+    }
 }
 
 fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Response {

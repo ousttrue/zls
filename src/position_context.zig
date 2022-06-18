@@ -70,6 +70,50 @@ const LineParser = struct {
         self.tokens.deinit();
     }
 
+    fn isPeriod(self: Self, i: usize) bool {
+        return self.tokens.items[i].token.tag == .period;
+    }
+
+    fn isId(self: Self, i: usize) bool {
+        return self.tokens.items[i].token.tag == .identifier;
+    }
+
+    fn getFieldAccess(self: Self, i: usize, is_id: bool) ?PositionContext {
+        var j = @intCast(i64, i) - 1;
+        var next_is_id = !is_id;
+        while (j >= 0) {
+            if (next_is_id) {
+                if (self.isId(@intCast(usize, j))) {
+                    next_is_id = !next_is_id;
+                    j -= 1;
+                } else {
+                    j +=1;
+                    break;
+                }
+            } else {
+                if (self.isPeriod(@intCast(usize, j))) {
+                    next_is_id = !next_is_id;
+                    j -= 1;
+                } else {
+                    j +=1;
+                    break;
+                }
+            }
+        }
+        if (j < 0) {
+            j = 0;
+        }
+        logger.debug("{}: {}..{}", .{ is_id, i, j });
+        if (j >= i or next_is_id) {
+            return null;
+        }
+
+        return PositionContext{ .field_access = .{
+            .start = self.tokens.items[@intCast(usize, j)].token.loc.start,
+            .end = self.tokens.items[i].token.loc.end,
+        } };
+    }
+
     fn getState(self: Self) PositionContext {
         for (self.tokens.items) |item, i| {
             if (item.on_pos) {
@@ -80,23 +124,14 @@ const LineParser = struct {
                 switch (item.token.tag) {
                     .string_literal => return PositionContext{ .string_literal = item.token.loc },
                     .builtin => return PositionContext{ .builtin = item.token.loc },
+                    .period => {
+                        if (self.getFieldAccess(i, false)) |pos_context| {
+                            return pos_context;
+                        }
+                    },
                     .identifier => {
-                        if (i >= 2 and self.tokens.items[i - 1].token.tag == .period) {
-                            var j = i;
-                            while (j >= 2) : (j -= 2) {
-                                if (self.tokens.items[j - 1].token.tag == .period and self.tokens.items[j - 2].token.tag == .identifier) {
-                                    continue;
-                                } else {
-                                    break;
-                                }
-                            }
-
-                            if (i > j and (i - j) % 2 == 0) {
-                                return PositionContext{ .field_access = .{
-                                    .start = self.tokens.items[j].token.loc.start,
-                                    .end = item.token.loc.end,
-                                } };
-                            }
+                        if (self.getFieldAccess(i, true)) |pos_context| {
+                            return pos_context;
                         }
                         return PositionContext{ .var_access = item.token.loc };
                     },

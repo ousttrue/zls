@@ -40,7 +40,7 @@ pub const Completion = struct {
         }
     }
 
-    pub fn completeBuiltin(self: *Self, id: i64, config: *Config) !lsp.Response {
+    pub fn completeBuiltin(self: *Self, id: i64, config: *Config) !lsp.Response {        
         if (self.builtin_completions == null) {
             var builtin_completions = try self.allocator.alloc(lsp.CompletionItem, data.builtins.len);
             self.builtin_completions = builtin_completions;
