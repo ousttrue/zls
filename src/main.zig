@@ -9,6 +9,7 @@ const jsonrpc = @import("./jsonrpc.zig");
 const requests = @import("lsp").requests;
 const lsp = @import("lsp");
 const analysis = @import("./analysis.zig");
+const Dispatcher = @import("./Dispatcher.zig");
 
 const logger = std.log.scoped(.main);
 
@@ -282,28 +283,26 @@ pub fn main() anyerror!void {
     analysis.init(allocator);
     defer analysis.deinit();
 
-    jsonrpc.init(allocator);
-    defer jsonrpc.deinit();
+    var dispatcher = Dispatcher.init(allocator);
+    defer dispatcher.deinit();
+    dispatcher.registerRequest("initialize", requests.Initialize, server.initializeHandler);
+    dispatcher.registerRequest("shutdown", void, jsonrpc.shutdownHandler);
+    dispatcher.registerRequest("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
+    dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
+    dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
+    dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
+    dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
+    dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
+    dispatcher.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
+    dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
+    dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
+    dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
+    dispatcher.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
+    dispatcher.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
+    dispatcher.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
+    dispatcher.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
 
-    jsonrpc.registerRequest("initialize", requests.Initialize, server.initializeHandler);
-    jsonrpc.registerRequest("shutdown", void, jsonrpc.shutdownHandler);
-    jsonrpc.registerRequest("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
-    jsonrpc.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
-    jsonrpc.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
-    jsonrpc.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
-    jsonrpc.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
-    jsonrpc.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
-    jsonrpc.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
-    jsonrpc.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
-    jsonrpc.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
-    jsonrpc.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
-    jsonrpc.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
-    jsonrpc.registerRequest("textDocument/references", requests.References, server.referencesHandler);
-
-    jsonrpc.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
-    jsonrpc.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
-    jsonrpc.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
-    jsonrpc.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
-
-    jsonrpc.readloop(allocator, std.io.getStdIn(), stdout, &config);
+    jsonrpc.readloop(allocator, std.io.getStdIn(), stdout, &config, &dispatcher);
 }

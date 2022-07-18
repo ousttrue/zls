@@ -23,7 +23,16 @@ writer: std.io.BufferedWriter(4096, std.fs.File.Writer),
 arena: *std.heap.ArenaAllocator,
 tree: std.json.ValueTree,
 
-pub fn init(allocator: std.mem.Allocator, config: *Config, document_store: *DocumentStore, completion: *Completion, writer: anytype, arena: *std.heap.ArenaAllocator, reader: anytype, json_parser: *std.json.Parser) Self {
+pub fn init(
+    allocator: std.mem.Allocator,
+    config: *Config,
+    document_store: *DocumentStore,
+    completion: *Completion,
+    writer: anytype,
+    arena: *std.heap.ArenaAllocator,
+    reader: anytype,
+    json_parser: *std.json.Parser,
+) Self {
     // read
     const headers = readRequestHeader(arena.allocator(), reader) catch @panic("readRequestHeader");
     const buf = arena.allocator().alloc(u8, headers.content_length) catch @panic("arena.alloc");
@@ -104,4 +113,3 @@ pub fn getHandle(self: *Self, uri: []const u8) SessionError!*DocumentStore.Handl
         return SessionError.DocumentNotExists;
     }
 }
-
