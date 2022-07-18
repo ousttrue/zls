@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const shared = @import("./src/shared.zig");
 
+const lsp_pkg = std.build.Pkg{ .name = "lsp", .source = .{ .path = "pkgs/lsp/src/main.zig" } };
+
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
 
@@ -24,7 +26,7 @@ pub fn build(b: *std.build.Builder) !void {
 
     exe.addPackage(.{ .name = "known-folders", .source = .{ .path = "src/known-folders/known-folders.zig" } });
     exe.addPackage(.{ .name = "zinput", .source = .{ .path = "src/zinput/src/main.zig" } });
-    exe.addPackage(.{ .name = "lsp", .source = .{ .path = "pkgs/lsp/src/main.zig" } });
+    exe.addPackage(lsp_pkg);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
@@ -32,15 +34,23 @@ pub fn build(b: *std.build.Builder) !void {
 
     b.installFile("src/special/build_runner.zig", "bin/build_runner.zig");
 
-    const test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(b.getInstallStep());
+    // const test_step = b.step("test", "Run all the tests");
+    // test_step.dependOn(&tests.step);
+    // test_step.dependOn(b.getInstallStep());
 
-    var unit_tests = b.addTest("src/unit_tests.zig");
-    unit_tests.setBuildMode(.Debug);
-    test_step.dependOn(&unit_tests.step);
+    // var unit_tests = b.addTest("src/unit_tests.zig");
+    // unit_tests.setBuildMode(.Debug);
+    // test_step.dependOn(&unit_tests.step);
 
-    var session_tests = b.addTest("tests/sessions.zig");
-    session_tests.addPackage(.{ .name = "header", .source = .{ .path = "src/header.zig" } });
-    session_tests.setBuildMode(.Debug);
-    test_step.dependOn(&session_tests.step);
+    // var session_tests = b.addTest("tests/sessions.zig");
+    // session_tests.addPackage(.{ .name = "header", .source = .{ .path = "src/header.zig" } });
+    // session_tests.setBuildMode(.Debug);
+    // test_step.dependOn(&session_tests.step);
+
+    const tests = b.addExecutable("zls_test", "src/test.zig");
+    tests.setBuildMode(mode);
+    tests.addPackage(lsp_pkg);
+    tests.setTarget(target);
+    tests.setBuildMode(mode);
+    tests.install();
 }

@@ -57,7 +57,7 @@ fn fromDynamicTreeInternal(arena: *std.heap.ArenaAllocator, value: std.json.Valu
                 }
             }
         }
-        if (err) return error.MalformedJson;
+        // if (err) return error.MalformedJson;
     } else if (comptime (std.meta.trait.isSlice(T) and T != []const u8)) {
         if (value != .Array) return error.MalformedJson;
         const Child = std.meta.Child(T);

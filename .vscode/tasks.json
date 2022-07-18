@@ -14,7 +14,7 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "zig test src/offsets.zig",
+            "command": "zig test src/Dispatcher.zig",
             // "command": "zig test src/position_context.zig",
             // "command": "zig test src/document_position.zig",
             // "command": "zig test src/analysis.zig",

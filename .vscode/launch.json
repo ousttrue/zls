@@ -16,6 +16,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "zls_test",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/zls_test.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "(Windows) 接続",
             "type": "cppvsdbg",
             "request": "attach",
