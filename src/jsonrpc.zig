@@ -1,11 +1,12 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const requests = lsp.requests;
-const Session = @import("./Session.zig");
-const Workspace = @import("./Workspace.zig");
-const Config = @import("./Config.zig");
+const document = @import("document");
 const Dispatcher = @import("./Dispatcher.zig");
-const Stdio = @import("./Stdio.zig");
+const requests = lsp.requests;
+const Session = document.Session;
+const Workspace = document.Workspace;
+const Config = document.Config;
+const Stdio = document.Stdio;
 
 const logger = std.log.scoped(.jsonrpc);
 

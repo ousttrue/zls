@@ -2,7 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Config = @import("./Config.zig");
 const shared = @import("./shared.zig");
-const Builtin = @import("./data/Builtin.zig");
+const Builtin = @import("./Builtin.zig");
 
 pub fn truncateCompletions(list: []lsp.CompletionItem, max_detail_length: usize) void {
     for (list) |*item| {

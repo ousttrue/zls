@@ -1,17 +1,16 @@
 const std = @import("std");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
-const server = @import("server.zig");
-const Config = @import("./Config.zig");
-const setup = @import("./setup.zig");
 const known_folders = @import("known-folders");
-const jsonrpc = @import("./jsonrpc.zig");
-const requests = @import("lsp").requests;
+const document = @import("document");
 const lsp = @import("lsp");
-const analysis = @import("./analysis.zig");
-const builtin_completions = @import("./builtin_completions.zig");
+const setup = @import("./setup.zig");
+const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
-const Stdio = @import("./Stdio.zig");
+const requests = lsp.requests;
+const Config = document.Config;
+const Stdio = document.Stdio;
+const server = document.server;
 
 const logger = std.log.scoped(.main);
 
@@ -291,11 +290,8 @@ pub fn main() anyerror!void {
         config.build_runner_cache_path = try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
     }
 
-    analysis.init(allocator);
-    defer analysis.deinit();
-
-    builtin_completions.init(allocator, &data.builtins, &config);
-    defer builtin_completions.deinit();
+    document.init(allocator, &data.builtins, &config);
+    defer document.deinit();
 
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();

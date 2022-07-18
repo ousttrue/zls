@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const Session = @import("./Session.zig");
+const document = @import("document");
+const Session = document.Session;
 const logger = std.log.scoped(.jsonrpc);
 
 const RequestProto = fn (session: *Session, id: i64) anyerror!lsp.Response;

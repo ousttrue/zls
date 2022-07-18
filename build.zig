@@ -1,8 +1,16 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const shared = @import("./src/shared.zig");
+const shared = @import("./pkgs/document/src/shared.zig");
 
-const lsp_pkg = std.build.Pkg{ .name = "lsp", .source = .{ .path = "pkgs/lsp/src/main.zig" } };
+const lsp_pkg = std.build.Pkg{
+    .name = "lsp",
+    .source = .{ .path = "pkgs/lsp/src/main.zig" },
+};
+const document_pkg = std.build.Pkg{
+    .name = "document",
+    .source = .{ .path = "pkgs/document/src/main.zig" },
+    .dependencies = &.{lsp_pkg},
+};
 
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
@@ -27,6 +35,7 @@ pub fn build(b: *std.build.Builder) !void {
     exe.addPackage(.{ .name = "known-folders", .source = .{ .path = "src/known-folders/known-folders.zig" } });
     exe.addPackage(.{ .name = "zinput", .source = .{ .path = "src/zinput/src/main.zig" } });
     exe.addPackage(lsp_pkg);
+    exe.addPackage(document_pkg);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);

@@ -7,7 +7,7 @@ const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const ast = @import("./ast.zig");
 const Session = @import("./Session.zig");
-const Builtin = @import("./data/Builtin.zig");
+const Builtin = @import("./Builtin.zig");
 
 fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *Document, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;

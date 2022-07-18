@@ -1,4 +1,4 @@
-const Builtin = @import("./Builtin.zig");
+const Builtin = @import("document").Builtin;
 
 pub const builtins = [_]Builtin{
     .{
