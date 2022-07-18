@@ -502,7 +502,7 @@ pub fn symbolReferences(session: *Session, decl_handle: analysis.DeclWithHandle,
 
             var imports = std.ArrayList(*Document).init(session.arena.allocator());
 
-            var handle_it = session.document_store.handles.iterator();
+            var handle_it = session.workspace.handles.iterator();
             while (handle_it.next()) |entry| {
                 if (skip_std_references and std.mem.indexOf(u8, entry.key_ptr.*, "std") != null) {
                     if (!include_decl or entry.value_ptr.* != curr_handle)
@@ -515,7 +515,7 @@ pub fn symbolReferences(session: *Session, decl_handle: analysis.DeclWithHandle,
                 blk: while (i < imports.items.len) : (i += 1) {
                     const import = imports.items[i];
                     for (import.imports_used.items) |uri| {
-                        const h = session.document_store.getHandle(uri) orelse break;
+                        const h = session.workspace.getHandle(uri) catch break;
 
                         if (h == curr_handle) {
                             // entry does import curr_handle

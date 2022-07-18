@@ -463,7 +463,7 @@ fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *D
     while (it.next()) |node| {
         if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
             if (importStr(handle.tree, node)) |import_str| {
-                if (try session.document_store.uriFromImportStr(
+                if (try session.workspace.uriFromImportStr(
                     session.arena.allocator(),
                     handle.*,
                     import_str,
@@ -496,7 +496,7 @@ fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *Do
 
 pub fn gotoHandler(session: *Session, id: i64, req: lsp.requests.GotoDefinition, resolve_alias: bool) !lsp.Response {
     logger.debug("[definition]{s} {}", .{ req.params.textDocument.uri, req.params.position });
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try documentPosition(handle.document, req.params.position, offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 

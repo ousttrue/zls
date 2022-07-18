@@ -723,7 +723,7 @@ fn completeFieldAccess(session: *Session, id: i64, handle: *Document, position: 
 }
 
 fn completeError(session: *Session, id: i64, handle: *Document) !lsp.Response {
-    const completions = try session.document_store.errorCompletionItems(session.arena, handle);
+    const completions = try session.workspace.errorCompletionItems(session.arena, handle);
     builtin_completions.truncateCompletions(completions, session.config.max_detail_length);
     logger.debug("Completing error:", .{});
 
@@ -739,7 +739,7 @@ fn completeError(session: *Session, id: i64, handle: *Document) !lsp.Response {
 }
 
 fn completeDot(session: *Session, id: i64, handle: *Document) !lsp.Response {
-    var completions = try session.document_store.enumCompletionItems(session.arena, handle);
+    var completions = try session.workspace.enumCompletionItems(session.arena, handle);
     builtin_completions.truncateCompletions(completions, session.config.max_detail_length);
 
     return lsp.Response{
@@ -861,27 +861,27 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 }
 
 pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
-    const handle = try session.document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
+    const handle = try session.workspace.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     if (createNotifyDiagnostics(session, handle)) |notification| {
         session.transport.sendToJson(notification);
     } else |_| {}
 }
 
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
-    const handle = try session.getHandle(req.params.textDocument.uri);
-    try session.document_store.applyChanges(handle, req.params.contentChanges.Array, offsets.offset_encoding);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
+    try session.workspace.applyChanges(handle, req.params.contentChanges.Array, offsets.offset_encoding);
     if (createNotifyDiagnostics(session, handle)) |notification| {
         session.transport.sendToJson(notification);
     } else |_| {}
 }
 
 pub fn saveDocumentHandler(session: *Session, req: requests.SaveDocument) !void {
-    const handle = try session.getHandle(req.params.textDocument.uri);
-    try session.document_store.applySave(handle);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
+    try session.workspace.applySave(handle);
 }
 
 pub fn closeDocumentHandler(session: *Session, req: requests.CloseDocument) !void {
-    session.document_store.closeDocument(req.params.textDocument.uri);
+    session.workspace.closeDocument(req.params.textDocument.uri);
 }
 
 pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
@@ -889,7 +889,7 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
         return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
     }
 
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offsets.offset_encoding);
     return lsp.Response{
         .id = id,
@@ -898,7 +898,7 @@ pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.Seman
 }
 
 pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
@@ -939,7 +939,7 @@ fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Re
         return lsp.Response{ .id = id, .result = no_signatures_response };
     }
 
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     if (try getSignatureInfo(
         session,
@@ -976,7 +976,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 
 pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Response {
     logger.debug("[hover]{s} {}", .{ req.params.textDocument.uri, req.params.position });
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
     switch (pos_context) {
@@ -1007,7 +1007,7 @@ pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Respon
 }
 
 fn getDocumentSymbol(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
 
     return lsp.Response{
         .id = id,
@@ -1025,7 +1025,7 @@ fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response 
         return lsp.Response.createNull(id);
     };
 
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, session.arena.allocator());
     process.stdin_behavior = .Pipe;
     process.stdout_behavior = .Pipe;
@@ -1065,7 +1065,7 @@ pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !
 }
 
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
@@ -1082,7 +1082,7 @@ pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Resp
 }
 
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
-    const handle = try session.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 

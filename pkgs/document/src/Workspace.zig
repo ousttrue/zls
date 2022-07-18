@@ -420,8 +420,8 @@ pub fn closeDocument(self: *Self, uri: []const u8) void {
     self.decrementCount(uri);
 }
 
-pub fn getHandle(self: *Self, uri: []const u8) ?*Document {
-    return self.handles.get(uri);
+pub fn getHandle(self: *Self, uri: []const u8) !*Document {
+    return self.handles.get(uri) orelse return error.NoDocument;
 }
 
 fn collectImportUris(self: *Self, handle: *Document) ![]const []const u8 {
@@ -625,7 +625,7 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
 
     for (handle.imports_used.items) |uri| {
         if (std.mem.eql(u8, uri, final_uri)) {
-            return self.getHandle(final_uri).?;
+            return self.getHandle(final_uri);
         }
     }
     // The URI must be somewhere in the import_uris or the package uris
@@ -653,6 +653,8 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
         try handle.imports_used.append(self.allocator, handle_uri);
         new_handle.count += 1;
         return new_handle;
+    } else |_| {
+        //
     }
 
     // New document, read the file then call into openDocument.

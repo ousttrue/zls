@@ -1,4 +1,5 @@
 const std = @import("std");
+const lsp = @import("lsp");
 const Self = @This();
 
 const CONTENT_LENGTH = "Content-Length: ";
@@ -27,6 +28,18 @@ pub fn init(allocator: std.mem.Allocator) Self {
 
 pub fn deinit(self: Self) void {
     self.json_buffer.deinit();
+}
+
+fn sendShowMessage(self: *Self, message_type: lsp.MessageType, message: []const u8) void {
+    self.sendToJson(lsp.Notification{
+        .method = "window/showMessage",
+        .params = .{
+            .ShowMessageParams = .{
+                .type = message_type,
+                .message = message,
+            },
+        },
+    });
 }
 
 pub fn sendToJson(self: *Self, value: anytype) void {

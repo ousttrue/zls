@@ -929,7 +929,7 @@ pub fn resolveTypeOfNodeInternal(session: *Session, node_handle: NodeWithHandle,
             if (node_tags[import_param] != .string_literal) return null;
 
             const import_str = tree.tokenSlice(main_tokens[import_param]);
-            const new_handle = (session.document_store.resolveImport(handle, import_str[1 .. import_str.len - 1]) catch |err| {
+            const new_handle = (session.workspace.resolveImport(handle, import_str[1 .. import_str.len - 1]) catch |err| {
                 log.debug("Error {} while processing import {s}", .{ err, import_str });
                 return null;
             }) orelse return null;

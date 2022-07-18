@@ -6,16 +6,12 @@ const builtin_completions = @import("./builtin_completions.zig");
 const Config = @import("./Config.zig");
 const Stdio = @import("./Stdio.zig");
 
-const SessionError = error{
-    DocumentNotExists,
-};
-
 const Self = @This();
 
 // global(not deinit)
 allocator: std.mem.Allocator,
 config: *Config,
-document_store: *Workspace,
+workspace: *Workspace,
 transport: *Stdio,
 
 // par request session(deinit each session)
@@ -27,7 +23,7 @@ pub fn init(
     allocator: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
     config: *Config,
-    document_store: *Workspace,
+    workspace: *Workspace,
     transport: *Stdio,
     tree: std.json.ValueTree,
 ) Self {
@@ -35,7 +31,7 @@ pub fn init(
     return .{
         .allocator = allocator,
         .config = config,
-        .document_store = document_store,
+        .workspace = workspace,
         .transport = transport,
         .arena = arena,
         .tree = tree,
@@ -70,25 +66,4 @@ pub fn getMethod(self: *Self) ?[]const u8 {
 
 pub fn getParam(self: *Self, comptime ParamType: type) !ParamType {
     return lsp.fromDynamicTree(self.arena, ParamType, self.tree.root);
-}
-
-/// Sends a request or response
-fn showMessage(self: *Self, message_type: lsp.MessageType, message: []const u8) void {
-    self.transport.sendToJson(lsp.Notification{
-        .method = "window/showMessage",
-        .params = .{
-            .ShowMessageParams = .{
-                .type = message_type,
-                .message = message,
-            },
-        },
-    });
-}
-
-pub fn getHandle(self: *Self, uri: []const u8) SessionError!*Document {
-    if (self.document_store.getHandle(uri)) |handle| {
-        return handle;
-    } else {
-        return SessionError.DocumentNotExists;
-    }
 }
