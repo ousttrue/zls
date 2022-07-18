@@ -2,7 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Session = @import("./Session.zig");
-const DocumentStore = @import("./DocumentStore.zig");
+const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
 const ast = @import("./ast.zig");
 const DocumentPosition = @import("./document_position.zig").DocumentPosition;
@@ -269,12 +269,12 @@ test "identifierFromPosition" {
     // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }
 
-pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *DocumentStore.Handle) !analysis.DeclWithHandle {
+pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *Workspace.Handle) !analysis.DeclWithHandle {
     const name = try identifierFromPosition(pos_index, handle.document.text);
     return (try analysis.lookupSymbolGlobal(session, handle, name, pos_index)) orelse return OffsetError.GlobalSymbolNotFound;
 }
 
-pub fn getLabelGlobal(pos_index: usize, handle: *DocumentStore.Handle) !?analysis.DeclWithHandle {
+pub fn getLabelGlobal(pos_index: usize, handle: *Workspace.Handle) !?analysis.DeclWithHandle {
     const name = try identifierFromPosition(pos_index, handle.document.text);
     return try analysis.lookupLabel(handle, name, pos_index);
 }
@@ -318,7 +318,7 @@ fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWi
     };
 }
 
-pub fn getSymbolFieldAccess(session: *Session, handle: *DocumentStore.Handle, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
+pub fn getSymbolFieldAccess(session: *Session, handle: *Workspace.Handle, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
     const name = try identifierFromPosition(position.absolute_index, handle.document.text);
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
     var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
@@ -457,7 +457,7 @@ fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
     return import_str[1 .. import_str.len - 1];
 }
 
-fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *Workspace.Handle) !lsp.Response {
     var it = ImportStrIterator.init(handle.tree);
     while (it.next()) |node| {
         if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
@@ -488,7 +488,7 @@ fn gotoDefinitionString(session: *Session, id: i64, pos_index: usize, handle: *D
     return lsp.Response.createNull(id);
 }
 
-fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *DocumentStore.Handle) !lsp.Response {
+fn gotoDefinitionLabel(session: *Session, id: i64, pos_index: usize, handle: *Workspace.Handle) !lsp.Response {
     const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     return try gotoDefinitionSymbol(session, id, decl, false);
 }

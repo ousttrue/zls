@@ -1,14 +1,14 @@
 const std = @import("std");
 const analysis = @import("./analysis.zig");
 const offsets = @import("./offsets.zig");
-const DocumentStore = @import("./DocumentStore.zig");
+const Workspace = @import("./Workspace.zig");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const ast = @import("./ast.zig");
 const Session = @import("./Session.zig");
 
-fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *DocumentStore.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
+fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *Workspace.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
 
     const tree = handle.tree;
@@ -67,7 +67,7 @@ fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool,
     };
 }
 
-pub fn getSignatureInfo(session: *Session, handle: *DocumentStore.Handle, absolute_index: usize, comptime data: type) !?lsp.SignatureInformation {
+pub fn getSignatureInfo(session: *Session, handle: *Workspace.Handle, absolute_index: usize, comptime data: type) !?lsp.SignatureInformation {
     const innermost_block = analysis.innermostBlockScope(handle.*, absolute_index);
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);

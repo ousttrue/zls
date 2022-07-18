@@ -1,6 +1,6 @@
 const std = @import("std");
 const offsets = @import("./offsets.zig");
-const DocumentStore = @import("./DocumentStore.zig");
+const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
 const Ast = std.zig.Ast;
 const log = std.log.scoped(.semantic_tokens);
@@ -13,13 +13,13 @@ const logger = std.log.scoped(.semantic_tokens);
 const Builder = struct {
     const Self = @This();
 
-    handle: *DocumentStore.Handle,
+    handle: *Workspace.Handle,
     previous_position: usize = 0,
     previous_token: ?Ast.TokenIndex = null,
     arr: std.ArrayList(u32),
     encoding: offsets.Encoding,
 
-    fn init(allocator: std.mem.Allocator, handle: *DocumentStore.Handle, encoding: offsets.Encoding) Self {
+    fn init(allocator: std.mem.Allocator, handle: *Workspace.Handle, encoding: offsets.Encoding) Self {
         return Self{
             .handle = handle,
             .arr = std.ArrayList(u32).init(allocator),
@@ -185,7 +185,7 @@ fn writeDocComments(builder: *Builder, tree: Ast, doc: Ast.TokenIndex) !void {
     }
 }
 
-fn fieldTokenType(container_decl: Ast.Node.Index, handle: *DocumentStore.Handle) ?lsp.SemanticTokenType {
+fn fieldTokenType(container_decl: Ast.Node.Index, handle: *Workspace.Handle) ?lsp.SemanticTokenType {
     const main_token = handle.tree.nodes.items(.main_token)[container_decl];
     if (main_token > handle.tree.tokens.len) return null;
     return @as(?lsp.SemanticTokenType, switch (handle.tree.tokens.items(.tag)[main_token]) {
@@ -1002,7 +1002,7 @@ fn writeContainerField(builder: *Builder, session: *Session, node: Ast.Node.Inde
 }
 
 // TODO Range version, edit version.
-pub fn writeAllSemanticTokens(session: *Session, handle: *DocumentStore.Handle, encoding: offsets.Encoding) ![]u32 {
+pub fn writeAllSemanticTokens(session: *Session, handle: *Workspace.Handle, encoding: offsets.Encoding) ![]u32 {
     var builder = Builder.init(session.arena.child_allocator, handle, encoding);
     errdefer builder.arr.deinit();
 

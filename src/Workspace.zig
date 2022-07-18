@@ -7,7 +7,7 @@ const log = std.log.scoped(.doc_store);
 const Ast = std.zig.Ast;
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
 
-const DocumentStore = @This();
+const Self = @This();
 
 const BuildFile = struct {
     const Pkg = struct {
@@ -57,7 +57,7 @@ zig_global_cache_root: []const u8,
 builtin_path: ?[]const u8,
 
 pub fn init(
-    self: *DocumentStore,
+    self: *Self,
     allocator: std.mem.Allocator,
     zig_exe_path: ?[]const u8,
     build_runner_path: []const u8,
@@ -197,7 +197,7 @@ fn loadPackages(context: LoadPackagesContext) !void {
 
 /// This function asserts the document is not open yet and takes ownership
 /// of the uri and text passed in.
-fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Handle {
+fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Handle {
     // log.debug("Opened document: {s}", .{uri});
 
     var handle = try self.allocator.create(Handle);
@@ -371,7 +371,7 @@ fn newDocument(self: *DocumentStore, uri: []const u8, text: [:0]u8) anyerror!*Ha
     return handle;
 }
 
-pub fn openDocument(self: *DocumentStore, uri: []const u8, text: []const u8) !*Handle {
+pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Handle {
     if (self.handles.getEntry(uri)) |entry| {
         // log.debug("Document already open: {s}, incrementing count", .{uri});
         entry.value_ptr.*.count += 1;
@@ -390,7 +390,7 @@ pub fn openDocument(self: *DocumentStore, uri: []const u8, text: []const u8) !*H
     return try self.newDocument(duped_uri, duped_text);
 }
 
-fn decrementBuildFileRefs(self: *DocumentStore, build_file: *BuildFile) void {
+fn decrementBuildFileRefs(self: *Self, build_file: *BuildFile) void {
     build_file.refs -= 1;
     if (build_file.refs == 0) {
         log.debug("Freeing build file {s}", .{build_file.uri});
@@ -411,7 +411,7 @@ fn decrementBuildFileRefs(self: *DocumentStore, build_file: *BuildFile) void {
     }
 }
 
-fn decrementCount(self: *DocumentStore, uri: []const u8) void {
+fn decrementCount(self: *Self, uri: []const u8) void {
     if (self.handles.getEntry(uri)) |entry| {
         const handle = entry.value_ptr.*;
         if (handle.count == 0) return;
@@ -451,15 +451,15 @@ fn decrementCount(self: *DocumentStore, uri: []const u8) void {
     }
 }
 
-pub fn closeDocument(self: *DocumentStore, uri: []const u8) void {
+pub fn closeDocument(self: *Self, uri: []const u8) void {
     self.decrementCount(uri);
 }
 
-pub fn getHandle(self: *DocumentStore, uri: []const u8) ?*Handle {
+pub fn getHandle(self: *Self, uri: []const u8) ?*Handle {
     return self.handles.get(uri);
 }
 
-fn collectImportUris(self: *DocumentStore, handle: *Handle) ![]const []const u8 {
+fn collectImportUris(self: *Self, handle: *Handle) ![]const []const u8 {
     var new_imports = std.ArrayList([]const u8).init(self.allocator);
     errdefer {
         for (new_imports.items) |imp| {
@@ -483,7 +483,7 @@ fn collectImportUris(self: *DocumentStore, handle: *Handle) ![]const []const u8 
     return new_imports.toOwnedSlice();
 }
 
-fn refreshDocument(self: *DocumentStore, handle: *Handle) !void {
+fn refreshDocument(self: *Self, handle: *Handle) !void {
     log.debug("New text for document {s}", .{handle.uri()});
     handle.tree.deinit(self.allocator);
     handle.tree = try std.zig.parse(self.allocator, handle.document.text);
@@ -527,7 +527,7 @@ fn refreshDocument(self: *DocumentStore, handle: *Handle) !void {
     }
 }
 
-pub fn applySave(self: *DocumentStore, handle: *Handle) !void {
+pub fn applySave(self: *Self, handle: *Handle) !void {
     if (handle.is_build_file) |build_file| {
         loadPackages(.{
             .build_file = build_file,
@@ -543,7 +543,7 @@ pub fn applySave(self: *DocumentStore, handle: *Handle) !void {
     }
 }
 
-pub fn applyChanges(self: *DocumentStore, handle: *Handle, content_changes: std.json.Array, offset_encoding: offsets.Encoding) !void {
+pub fn applyChanges(self: *Self, handle: *Handle, content_changes: std.json.Array, offset_encoding: offsets.Encoding) !void {
     const document = &handle.document;
 
     for (content_changes.items) |change| {
@@ -610,7 +610,7 @@ pub fn applyChanges(self: *DocumentStore, handle: *Handle, content_changes: std.
     try self.refreshDocument(handle);
 }
 
-pub fn uriFromImportStr(self: *DocumentStore, allocator: std.mem.Allocator, handle: Handle, import_str: []const u8) !?[]const u8 {
+pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Handle, import_str: []const u8) !?[]const u8 {
     if (std.mem.eql(u8, import_str, "std")) {
         if (self.std_uri) |uri| return try allocator.dupe(u8, uri) else {
             log.debug("Cannot resolve std library import, path is null.", .{});
@@ -649,7 +649,7 @@ pub fn uriFromImportStr(self: *DocumentStore, allocator: std.mem.Allocator, hand
     }
 }
 
-pub fn resolveImport(self: *DocumentStore, handle: *Handle, import_str: []const u8) !?*Handle {
+pub fn resolveImport(self: *Self, handle: *Handle, import_str: []const u8) !?*Handle {
     const allocator = self.allocator;
     const final_uri = (try self.uriFromImportStr(
         self.allocator,
@@ -743,7 +743,7 @@ fn stdUriFromLibPath(allocator: std.mem.Allocator, zig_lib_path: ?[]const u8) !?
     return null;
 }
 
-pub fn deinit(self: *DocumentStore) void {
+pub fn deinit(self: *Self) void {
     var entry_iterator = self.handles.iterator();
     while (entry_iterator.next()) |entry| {
         entry.value_ptr.*.document_scope.deinit(self.allocator);
@@ -776,7 +776,7 @@ pub fn deinit(self: *DocumentStore) void {
     self.build_files.deinit(self.allocator);
 }
 
-fn tagStoreCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle, comptime name: []const u8) ![]lsp.CompletionItem {
+fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Handle, comptime name: []const u8) ![]lsp.CompletionItem {
     // TODO Better solution for deciding what tags to include
     var max_len: usize = @field(base.document_scope, name).count();
     for (base.imports_used.items) |uri| {
@@ -798,10 +798,10 @@ fn tagStoreCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator,
     return result_set.entries.items(.key);
 }
 
-pub fn errorCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle) ![]lsp.CompletionItem {
+pub fn errorCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Handle) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "error_completions");
 }
 
-pub fn enumCompletionItems(self: DocumentStore, arena: *std.heap.ArenaAllocator, base: *DocumentStore.Handle) ![]lsp.CompletionItem {
+pub fn enumCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Handle) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "enum_completions");
 }

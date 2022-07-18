@@ -2,7 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const requests = lsp.requests;
 const Session = @import("./Session.zig");
-const DocumentStore = @import("./DocumentStore.zig");
+const Workspace = @import("./Workspace.zig");
 const Config = @import("./Config.zig");
 const Completion = @import("./builtin_completions.zig").Completion;
 const Dispatcher = @import("./Dispatcher.zig");
@@ -26,7 +26,7 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, config: *Config
 
     var arena = std.heap.ArenaAllocator.init(allocator);
 
-    var document_store: DocumentStore = undefined;
+    var document_store: Workspace = undefined;
     document_store.init(
         allocator,
         config.zig_exe_path,
@@ -41,7 +41,7 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, config: *Config
         // files there this path can be ignored
         "ZLS_DONT_CARE",
         config.builtin_path,
-    ) catch @panic("DocumentStore.init");
+    ) catch @panic("Workspace.init");
     defer document_store.deinit();
 
     var completion = Completion.init(allocator);

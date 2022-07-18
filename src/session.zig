@@ -1,6 +1,6 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const DocumentStore = @import("./DocumentStore.zig");
+const Workspace = @import("./Workspace.zig");
 const Completion = @import("./builtin_completions.zig").Completion;
 const Config = @import("./Config.zig");
 const Stdio = @import("./Stdio.zig");
@@ -14,7 +14,7 @@ const Self = @This();
 // global(not deinit)
 allocator: std.mem.Allocator,
 config: *Config,
-document_store: *DocumentStore,
+document_store: *Workspace,
 completion: *Completion,
 transport: *Stdio,
 
@@ -27,7 +27,7 @@ pub fn init(
     allocator: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
     config: *Config,
-    document_store: *DocumentStore,
+    document_store: *Workspace,
     completion: *Completion,
     transport: *Stdio,
     tree: std.json.ValueTree,
@@ -87,7 +87,7 @@ fn showMessage(self: *Self, message_type: lsp.MessageType, message: []const u8) 
     });
 }
 
-pub fn getHandle(self: *Self, uri: []const u8) SessionError!*DocumentStore.Handle {
+pub fn getHandle(self: *Self, uri: []const u8) SessionError!*Workspace.Handle {
     if (self.document_store.getHandle(uri)) |handle| {
         return handle;
     } else {

@@ -1,5 +1,5 @@
 const std = @import("std");
-const DocumentStore = @import("./DocumentStore.zig");
+const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
 const references = @import("./references.zig");
 const lsp = @import("lsp");
