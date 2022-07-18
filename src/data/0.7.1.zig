@@ -1,10 +1,4 @@
-const Builtin = struct {
-    name: []const u8,
-    signature: []const u8,
-    snippet: []const u8,
-    documentation: []const u8,
-    arguments: []const []const u8,
-};
+const Builtin = @import("./Builtin.zig");
 
 pub const builtins = [_]Builtin{
     .{

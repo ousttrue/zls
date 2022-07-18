@@ -2,7 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
-const Completion = @import("./builtin_completions.zig").Completion;
+const builtin_completions = @import("./builtin_completions.zig");
 const Config = @import("./Config.zig");
 const Stdio = @import("./Stdio.zig");
 
@@ -16,7 +16,6 @@ const Self = @This();
 allocator: std.mem.Allocator,
 config: *Config,
 document_store: *Workspace,
-completion: *Completion,
 transport: *Stdio,
 
 // par request session(deinit each session)
@@ -29,7 +28,6 @@ pub fn init(
     arena: *std.heap.ArenaAllocator,
     config: *Config,
     document_store: *Workspace,
-    completion: *Completion,
     transport: *Stdio,
     tree: std.json.ValueTree,
 ) Self {
@@ -38,7 +36,6 @@ pub fn init(
         .allocator = allocator,
         .config = config,
         .document_store = document_store,
-        .completion = completion,
         .transport = transport,
         .arena = arena,
         .tree = tree,

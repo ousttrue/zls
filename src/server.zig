@@ -455,7 +455,7 @@ fn hoverSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle)
 
 fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
     const name = try offsets.identifierFromPosition(pos_index, handle.document.text);
-    inline for (builtin_completions.data.builtins) |builtin| {
+    for (builtin_completions.data()) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
             return lsp.Response{
                 .id = id,
@@ -905,7 +905,7 @@ pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !
     switch (pos_context) {
         .builtin => {
             logger.debug("[completion][builtin]", .{});
-            return try session.completion.completeBuiltin(id, session.config);
+            return builtin_completions.completeBuiltin(id);
         },
         .var_access, .empty => {
             logger.debug("[completion][global]", .{});
@@ -945,7 +945,7 @@ fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Re
         session,
         handle,
         doc_position.absolute_index,
-        builtin_completions.data,
+        builtin_completions.data(),
     )) |sig_info| {
         return lsp.Response{
             .id = id,

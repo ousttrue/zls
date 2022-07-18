@@ -7,6 +7,7 @@ const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const ast = @import("./ast.zig");
 const Session = @import("./Session.zig");
+const Builtin = @import("./data/Builtin.zig");
 
 fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *Document, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
@@ -67,7 +68,7 @@ fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool,
     };
 }
 
-pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: usize, comptime data: type) !?lsp.SignatureInformation {
+pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: usize, builtins: []const Builtin) !?lsp.SignatureInformation {
     const innermost_block = analysis.innermostBlockScope(handle.*, absolute_index);
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);
@@ -185,7 +186,7 @@ pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: us
                 const expr_last_token = curr_token - 1;
                 if (token_tags[expr_last_token] == .builtin) {
                     // Builtin token, find the builtin and construct signature information.
-                    for (data.builtins) |builtin| {
+                    for (builtins) |builtin| {
                         if (std.mem.eql(u8, builtin.name, tree.tokenSlice(expr_last_token))) {
                             const param_infos = try alloc.alloc(
                                 lsp.SignatureInformation.ParameterInformation,

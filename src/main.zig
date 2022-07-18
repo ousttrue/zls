@@ -9,10 +9,20 @@ const jsonrpc = @import("./jsonrpc.zig");
 const requests = @import("lsp").requests;
 const lsp = @import("lsp");
 const analysis = @import("./analysis.zig");
+const builtin_completions = @import("./builtin_completions.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const Stdio = @import("./Stdio.zig");
 
 const logger = std.log.scoped(.main);
+
+pub const data = switch (build_options.data_version) {
+    .master => @import("data/master.zig"),
+    .@"0.7.0" => @import("data/0.7.0.zig"),
+    .@"0.7.1" => @import("data/0.7.1.zig"),
+    .@"0.8.0" => @import("data/0.8.0.zig"),
+    .@"0.8.1" => @import("data/0.8.1.zig"),
+    .@"0.9.0" => @import("data/0.9.0.zig"),
+};
 
 // Always set this to debug to make std.log call into our handler, then control the runtime
 // value in the definition below.
@@ -283,6 +293,9 @@ pub fn main() anyerror!void {
 
     analysis.init(allocator);
     defer analysis.deinit();
+
+    builtin_completions.init(allocator, &data.builtins, &config);
+    defer builtin_completions.deinit();
 
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();

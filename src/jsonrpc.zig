@@ -4,7 +4,6 @@ const requests = lsp.requests;
 const Session = @import("./Session.zig");
 const Workspace = @import("./Workspace.zig");
 const Config = @import("./Config.zig");
-const Completion = @import("./builtin_completions.zig").Completion;
 const Dispatcher = @import("./Dispatcher.zig");
 const Stdio = @import("./Stdio.zig");
 
@@ -44,15 +43,12 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, config: *Config
     ) catch @panic("Workspace.init");
     defer document_store.deinit();
 
-    var completion = Completion.init(allocator);
-    defer completion.deinit();
-
     while (keep_running) {
         if (transport.readNext()) |content| {
             // parse
             json_parser.reset();
             if (json_parser.parse(content)) |tree| {
-                var session = Session.init(allocator, &arena, config, &document_store, &completion, transport, tree);
+                var session = Session.init(allocator, &arena, config, &document_store, transport, tree);
                 defer session.deinit();
 
                 // request: id, method, ?params
