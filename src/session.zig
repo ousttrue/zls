@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const Workspace = @import("./Workspace.zig");
+const Document = @import("./Document.zig");
 const Completion = @import("./builtin_completions.zig").Completion;
 const Config = @import("./Config.zig");
 const Stdio = @import("./Stdio.zig");
@@ -87,7 +88,7 @@ fn showMessage(self: *Self, message_type: lsp.MessageType, message: []const u8) 
     });
 }
 
-pub fn getHandle(self: *Self, uri: []const u8) SessionError!*Workspace.Handle {
+pub fn getHandle(self: *Self, uri: []const u8) SessionError!*Document {
     if (self.document_store.getHandle(uri)) |handle| {
         return handle;
     } else {

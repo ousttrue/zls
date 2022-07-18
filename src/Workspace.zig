@@ -4,49 +4,14 @@ const URI = @import("./uri.zig");
 const analysis = @import("./analysis.zig");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.doc_store);
-const Ast = std.zig.Ast;
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
+const Document = @import("./Document.zig");
+const BuildFile = Document.BuildFile;
 
 const Self = @This();
 
-const BuildFile = struct {
-    const Pkg = struct {
-        name: []const u8,
-        uri: []const u8,
-    };
-
-    refs: usize,
-    uri: []const u8,
-    packages: std.ArrayListUnmanaged(Pkg),
-
-    builtin_uri: ?[]const u8 = null,
-
-    pub fn destroy(self: *BuildFile, allocator: std.mem.Allocator) void {
-        if (self.builtin_uri) |builtin_uri| allocator.free(builtin_uri);
-        allocator.destroy(self);
-    }
-};
-
-pub const Handle = struct {
-    document: lsp.TextDocument,
-    count: usize,
-    /// Contains one entry for every import in the document
-    import_uris: []const []const u8,
-    /// Items in this array list come from `import_uris`
-    imports_used: std.ArrayListUnmanaged([]const u8),
-    tree: Ast,
-    document_scope: analysis.DocumentScope,
-
-    associated_build_file: ?*BuildFile,
-    is_build_file: ?*BuildFile,
-
-    pub fn uri(handle: Handle) []const u8 {
-        return handle.document.uri;
-    }
-};
-
 allocator: std.mem.Allocator,
-handles: std.StringHashMap(*Handle),
+handles: std.StringHashMap(*Document),
 zig_exe_path: ?[]const u8,
 build_files: std.ArrayListUnmanaged(*BuildFile),
 build_runner_path: []const u8,
@@ -68,7 +33,7 @@ pub fn init(
     builtin_path: ?[]const u8,
 ) !void {
     self.allocator = allocator;
-    self.handles = std.StringHashMap(*Handle).init(allocator);
+    self.handles = std.StringHashMap(*Document).init(allocator);
     self.zig_exe_path = zig_exe_path;
     self.build_files = .{};
     self.build_runner_path = build_runner_path;
@@ -197,10 +162,10 @@ fn loadPackages(context: LoadPackagesContext) !void {
 
 /// This function asserts the document is not open yet and takes ownership
 /// of the uri and text passed in.
-fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Handle {
+fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     // log.debug("Opened document: {s}", .{uri});
 
-    var handle = try self.allocator.create(Handle);
+    var handle = try self.allocator.create(Document);
     errdefer self.allocator.destroy(handle);
 
     var tree = try std.zig.parse(self.allocator, text);
@@ -209,7 +174,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Handle {
     var document_scope = try analysis.makeDocumentScope(self.allocator, tree);
     errdefer document_scope.deinit(self.allocator);
 
-    handle.* = Handle{
+    handle.* = Document{
         .count = 1,
         .import_uris = &.{},
         .imports_used = .{},
@@ -371,7 +336,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Handle {
     return handle;
 }
 
-pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Handle {
+pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
     if (self.handles.getEntry(uri)) |entry| {
         // log.debug("Document already open: {s}, incrementing count", .{uri});
         entry.value_ptr.*.count += 1;
@@ -455,11 +420,11 @@ pub fn closeDocument(self: *Self, uri: []const u8) void {
     self.decrementCount(uri);
 }
 
-pub fn getHandle(self: *Self, uri: []const u8) ?*Handle {
+pub fn getHandle(self: *Self, uri: []const u8) ?*Document {
     return self.handles.get(uri);
 }
 
-fn collectImportUris(self: *Self, handle: *Handle) ![]const []const u8 {
+fn collectImportUris(self: *Self, handle: *Document) ![]const []const u8 {
     var new_imports = std.ArrayList([]const u8).init(self.allocator);
     errdefer {
         for (new_imports.items) |imp| {
@@ -483,7 +448,7 @@ fn collectImportUris(self: *Self, handle: *Handle) ![]const []const u8 {
     return new_imports.toOwnedSlice();
 }
 
-fn refreshDocument(self: *Self, handle: *Handle) !void {
+fn refreshDocument(self: *Self, handle: *Document) !void {
     log.debug("New text for document {s}", .{handle.uri()});
     handle.tree.deinit(self.allocator);
     handle.tree = try std.zig.parse(self.allocator, handle.document.text);
@@ -527,7 +492,7 @@ fn refreshDocument(self: *Self, handle: *Handle) !void {
     }
 }
 
-pub fn applySave(self: *Self, handle: *Handle) !void {
+pub fn applySave(self: *Self, handle: *Document) !void {
     if (handle.is_build_file) |build_file| {
         loadPackages(.{
             .build_file = build_file,
@@ -543,7 +508,7 @@ pub fn applySave(self: *Self, handle: *Handle) !void {
     }
 }
 
-pub fn applyChanges(self: *Self, handle: *Handle, content_changes: std.json.Array, offset_encoding: offsets.Encoding) !void {
+pub fn applyChanges(self: *Self, handle: *Document, content_changes: std.json.Array, offset_encoding: offsets.Encoding) !void {
     const document = &handle.document;
 
     for (content_changes.items) |change| {
@@ -610,7 +575,7 @@ pub fn applyChanges(self: *Self, handle: *Handle, content_changes: std.json.Arra
     try self.refreshDocument(handle);
 }
 
-pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Handle, import_str: []const u8) !?[]const u8 {
+pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Document, import_str: []const u8) !?[]const u8 {
     if (std.mem.eql(u8, import_str, "std")) {
         if (self.std_uri) |uri| return try allocator.dupe(u8, uri) else {
             log.debug("Cannot resolve std library import, path is null.", .{});
@@ -649,7 +614,7 @@ pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Handl
     }
 }
 
-pub fn resolveImport(self: *Self, handle: *Handle, import_str: []const u8) !?*Handle {
+pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*Document {
     const allocator = self.allocator;
     const final_uri = (try self.uriFromImportStr(
         self.allocator,
@@ -776,7 +741,7 @@ pub fn deinit(self: *Self) void {
     self.build_files.deinit(self.allocator);
 }
 
-fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Handle, comptime name: []const u8) ![]lsp.CompletionItem {
+fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document, comptime name: []const u8) ![]lsp.CompletionItem {
     // TODO Better solution for deciding what tags to include
     var max_len: usize = @field(base.document_scope, name).count();
     for (base.imports_used.items) |uri| {
@@ -798,10 +763,10 @@ fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *S
     return result_set.entries.items(.key);
 }
 
-pub fn errorCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Handle) ![]lsp.CompletionItem {
+pub fn errorCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "error_completions");
 }
 
-pub fn enumCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Handle) ![]lsp.CompletionItem {
+pub fn enumCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "enum_completions");
 }

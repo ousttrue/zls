@@ -1,5 +1,5 @@
 const std = @import("std");
-const Workspace = @import("./Workspace.zig");
+const Document = @import("./Document.zig");
 const Ast = std.zig.Ast;
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
@@ -157,7 +157,7 @@ pub fn getFunctionSnippet(allocator: std.mem.Allocator, tree: Ast, func: Ast.ful
     return buffer.toOwnedSlice();
 }
 
-pub fn hasSelfParam(session: *Session, handle: *Workspace.Handle, func: Ast.full.FnProto) !bool {
+pub fn hasSelfParam(session: *Session, handle: *Document, func: Ast.full.FnProto) !bool {
     // Non-decl prototypes cannot have a self parameter.
     if (func.name_token == null) return false;
     if (func.ast.params.len == 0) return false;
@@ -434,7 +434,7 @@ fn findReturnStatement(tree: Ast, fn_decl: Ast.full.FnProto, body: Ast.Node.Inde
     return findReturnStatementInternal(tree, fn_decl, body, &already_found);
 }
 
-pub fn resolveReturnType(session: *Session, fn_decl: Ast.full.FnProto, handle: *Workspace.Handle, bound_type_params: *BoundTypeParams, fn_body: ?Ast.Node.Index) !?TypeWithHandle {
+pub fn resolveReturnType(session: *Session, fn_decl: Ast.full.FnProto, handle: *Document, bound_type_params: *BoundTypeParams, fn_body: ?Ast.Node.Index) !?TypeWithHandle {
     const tree = handle.tree;
     if (isTypeFunction(tree, fn_decl) and fn_body != null) {
         // If this is a type function and it only contains a single return statement that returns
@@ -981,7 +981,7 @@ pub const Type = struct {
 
 pub const TypeWithHandle = struct {
     type: Type,
-    handle: *Workspace.Handle,
+    handle: *Document,
 
     pub fn typeVal(node_handle: NodeWithHandle) TypeWithHandle {
         return .{
@@ -1122,7 +1122,7 @@ pub fn collectImports(import_arr: *std.ArrayList([]const u8), tree: Ast) !void {
 
 pub const NodeWithHandle = struct {
     node: Ast.Node.Index,
-    handle: *Workspace.Handle,
+    handle: *Document,
 };
 
 pub const FieldAccessReturn = struct {
@@ -1130,7 +1130,7 @@ pub const FieldAccessReturn = struct {
     unwrapped: ?TypeWithHandle = null,
 };
 
-pub fn getFieldAccessType(session: *Session, handle: *Workspace.Handle, source_index: usize, tokenizer: *std.zig.Tokenizer) !?FieldAccessReturn {
+pub fn getFieldAccessType(session: *Session, handle: *Document, source_index: usize, tokenizer: *std.zig.Tokenizer) !?FieldAccessReturn {
     var current_type = TypeWithHandle.typeVal(.{
         .node = undefined,
         .handle = handle,
@@ -1623,7 +1623,7 @@ pub const Declaration = union(enum) {
 
 pub const DeclWithHandle = struct {
     decl: *Declaration,
-    handle: *Workspace.Handle,
+    handle: *Document,
 
     pub fn nameToken(self: DeclWithHandle) Ast.TokenIndex {
         const tree = self.handle.tree;
@@ -1754,7 +1754,7 @@ fn findContainerScope(container_handle: NodeWithHandle) ?*Scope {
     } else null;
 }
 
-fn iterateSymbolsContainerInternal(session: *Session, container_handle: NodeWithHandle, orig_handle: *Workspace.Handle, comptime callback: anytype, context: anytype, instance_access: bool, use_trail: *std.ArrayList(*const Ast.Node.Index)) error{OutOfMemory}!void {
+fn iterateSymbolsContainerInternal(session: *Session, container_handle: NodeWithHandle, orig_handle: *Document, comptime callback: anytype, context: anytype, instance_access: bool, use_trail: *std.ArrayList(*const Ast.Node.Index)) error{OutOfMemory}!void {
     const container = container_handle.node;
     const handle = container_handle.handle;
 
@@ -1820,12 +1820,12 @@ fn iterateSymbolsContainerInternal(session: *Session, container_handle: NodeWith
     }
 }
 
-pub fn iterateSymbolsContainer(session: *Session, container_handle: NodeWithHandle, orig_handle: *Workspace.Handle, comptime callback: anytype, context: anytype, instance_access: bool) error{OutOfMemory}!void {
+pub fn iterateSymbolsContainer(session: *Session, container_handle: NodeWithHandle, orig_handle: *Document, comptime callback: anytype, context: anytype, instance_access: bool) error{OutOfMemory}!void {
     var use_trail = std.ArrayList(*const Ast.Node.Index).init(session.arena.allocator());
     return try iterateSymbolsContainerInternal(session, container_handle, orig_handle, callback, context, instance_access, &use_trail);
 }
 
-pub fn iterateLabels(session: *Session, handle: *Workspace.Handle, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
+pub fn iterateLabels(session: *Session, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
     for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             var decl_it = scope.decls.iterator();
@@ -1841,7 +1841,7 @@ pub fn iterateLabels(session: *Session, handle: *Workspace.Handle, source_index:
     }
 }
 
-fn iterateSymbolsGlobalInternal(session: *Session, handle: *Workspace.Handle, source_index: usize, comptime callback: anytype, context: anytype, use_trail: *std.ArrayList(*const Ast.Node.Index)) error{OutOfMemory}!void {
+fn iterateSymbolsGlobalInternal(session: *Session, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype, use_trail: *std.ArrayList(*const Ast.Node.Index)) error{OutOfMemory}!void {
     for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             var decl_it = scope.decls.iterator();
@@ -1880,12 +1880,12 @@ fn iterateSymbolsGlobalInternal(session: *Session, handle: *Workspace.Handle, so
     }
 }
 
-pub fn iterateSymbolsGlobal(session: *Session, handle: *Workspace.Handle, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
+pub fn iterateSymbolsGlobal(session: *Session, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
     var use_trail = std.ArrayList(*const Ast.Node.Index).init(session.arena.allocator());
     return try iterateSymbolsGlobalInternal(session, handle, source_index, callback, context, &use_trail);
 }
 
-pub fn innermostBlockScopeIndex(handle: Workspace.Handle, source_index: usize) usize {
+pub fn innermostBlockScopeIndex(handle: Document, source_index: usize) usize {
     if (handle.document_scope.scopes.len == 1) return 0;
 
     var current: usize = 0;
@@ -1901,11 +1901,11 @@ pub fn innermostBlockScopeIndex(handle: Workspace.Handle, source_index: usize) u
     return current;
 }
 
-pub fn innermostBlockScope(handle: Workspace.Handle, source_index: usize) Ast.Node.Index {
+pub fn innermostBlockScope(handle: Document, source_index: usize) Ast.Node.Index {
     return handle.document_scope.scopes[innermostBlockScopeIndex(handle, source_index)].toNodeIndex().?;
 }
 
-pub fn innermostContainer(handle: *Workspace.Handle, source_index: usize) TypeWithHandle {
+pub fn innermostContainer(handle: *Document, source_index: usize) TypeWithHandle {
     var current = handle.document_scope.scopes[0].data.container;
     if (handle.document_scope.scopes.len == 1) return TypeWithHandle.typeVal(.{ .node = current, .handle = handle });
 
@@ -1921,7 +1921,7 @@ pub fn innermostContainer(handle: *Workspace.Handle, source_index: usize) TypeWi
     return TypeWithHandle.typeVal(.{ .node = current, .handle = handle });
 }
 
-fn resolveUse(session: *Session, uses: []const *const Ast.Node.Index, symbol: []const u8, handle: *Workspace.Handle) error{OutOfMemory}!?DeclWithHandle {
+fn resolveUse(session: *Session, uses: []const *const Ast.Node.Index, symbol: []const u8, handle: *Document) error{OutOfMemory}!?DeclWithHandle {
     // If we were asked to resolve this symbol before,
     // it is self-referential and we cannot resolve it.
     if (std.mem.indexOfScalar([*]const u8, using_trail.items, symbol.ptr) != null)
@@ -1955,7 +1955,7 @@ fn resolveUse(session: *Session, uses: []const *const Ast.Node.Index, symbol: []
     return null;
 }
 
-pub fn lookupLabel(handle: *Workspace.Handle, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
+pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
     for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             if (scope.decls.getEntry(symbol)) |candidate| {
@@ -1974,7 +1974,7 @@ pub fn lookupLabel(handle: *Workspace.Handle, symbol: []const u8, source_index: 
     return null;
 }
 
-pub fn lookupSymbolGlobal(session: *Session, handle: *Workspace.Handle, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
+pub fn lookupSymbolGlobal(session: *Session, handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
     const innermost_scope_idx = innermostBlockScopeIndex(handle.*, source_index);
 
     var curr = innermost_scope_idx;

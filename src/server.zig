@@ -1,6 +1,7 @@
 const std = @import("std");
 const Config = @import("./Config.zig");
 const Workspace = @import("./Workspace.zig");
+const Document = @import("./Document.zig");
 const requests = @import("lsp").requests;
 const lsp = @import("lsp");
 const analysis = @import("./analysis.zig");
@@ -63,7 +64,7 @@ fn astLocationToRange(loc: Ast.Location) lsp.Range {
     };
 }
 
-fn createNotifyDiagnostics(session: *Session, handle: *const Workspace.Handle) !lsp.Notification {
+fn createNotifyDiagnostics(session: *Session, handle: *const Document) !lsp.Notification {
     const tree = handle.tree;
 
     var diagnostics = std.ArrayList(lsp.Diagnostic).init(session.arena.allocator());
@@ -145,7 +146,7 @@ fn createNotifyDiagnostics(session: *Session, handle: *const Workspace.Handle) !
     // try notifyQueue.insert(0, notification);
 }
 
-fn typeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *Workspace.Handle) error{OutOfMemory}!void {
+fn typeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem), field_access: analysis.FieldAccessReturn, orig_handle: *Document) error{OutOfMemory}!void {
     const type_handle = field_access.original;
     switch (type_handle.type.data) {
         .slice => {
@@ -181,7 +182,7 @@ fn typeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem),
     }
 }
 
-fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem), node_handle: analysis.NodeWithHandle, unwrapped: ?analysis.TypeWithHandle, orig_handle: *Workspace.Handle, is_type_val: bool, parent_is_type_val: ?bool) error{OutOfMemory}!void {
+fn nodeToCompletion(session: *Session, list: *std.ArrayList(lsp.CompletionItem), node_handle: analysis.NodeWithHandle, unwrapped: ?analysis.TypeWithHandle, orig_handle: *Document, is_type_val: bool, parent_is_type_val: ?bool) error{OutOfMemory}!void {
     const arena = session.arena;
     const node = node_handle.node;
     const handle = node_handle.handle;
@@ -452,7 +453,7 @@ fn hoverSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWithHandle)
     };
 }
 
-fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *Workspace.Handle) !lsp.Response {
+fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
     const name = try offsets.identifierFromPosition(pos_index, handle.document.text);
     inline for (builtin_completions.data.builtins) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
@@ -476,7 +477,7 @@ fn hoverDefinitionBuiltin(session: *Session, id: i64, pos_index: usize, handle: 
     unreachable;
 }
 
-fn renameDefinitionGlobal(session: *Session, id: i64, handle: *Workspace.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
+fn renameDefinitionGlobal(session: *Session, id: i64, handle: *Document, pos_index: usize, new_name: []const u8) !lsp.Response {
     const decl = try offsets.getSymbolGlobal(session, pos_index, handle);
 
     var workspace_edit = lsp.WorkspaceEdit{
@@ -489,7 +490,7 @@ fn renameDefinitionGlobal(session: *Session, id: i64, handle: *Workspace.Handle,
     };
 }
 
-fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *Workspace.Handle, position: DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
+fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *Document, position: DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
     const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
 
     var workspace_edit = lsp.WorkspaceEdit{
@@ -502,7 +503,7 @@ fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *Workspace.Ha
     };
 }
 
-fn renameDefinitionLabel(session: *Session, id: i64, handle: *Workspace.Handle, pos_index: usize, new_name: []const u8) !lsp.Response {
+fn renameDefinitionLabel(session: *Session, id: i64, handle: *Document, pos_index: usize, new_name: []const u8) !lsp.Response {
     const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
 
     var workspace_edit = lsp.WorkspaceEdit{
@@ -515,7 +516,7 @@ fn renameDefinitionLabel(session: *Session, id: i64, handle: *Workspace.Handle, 
     };
 }
 
-fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *Workspace.Handle, pos_index: usize, include_decl: bool, skip_std_references: bool) !lsp.Response {
+fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *Document, pos_index: usize, include_decl: bool, skip_std_references: bool) !lsp.Response {
     const decl = try offsets.getSymbolGlobal(session, pos_index, handle);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
     try references.symbolReferences(
@@ -533,7 +534,7 @@ fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *Workspace.Han
     };
 }
 
-fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *Workspace.Handle, position: DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
+fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *Document, position: DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
     const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
     try references.symbolReferences(session, decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, session.config.skip_std_references);
@@ -543,7 +544,7 @@ fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *Workspac
     };
 }
 
-fn referencesDefinitionLabel(session: *Session, id: i64, handle: *Workspace.Handle, pos_index: usize, include_decl: bool) !lsp.Response {
+fn referencesDefinitionLabel(session: *Session, id: i64, handle: *Document, pos_index: usize, include_decl: bool) !lsp.Response {
     const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
     try references.labelReferences(decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
@@ -566,7 +567,7 @@ const DeclToCompletionContext = struct {
     completions: *std.ArrayList(lsp.CompletionItem),
     config: *const Config,
     arena: *std.heap.ArenaAllocator,
-    orig_handle: *Workspace.Handle,
+    orig_handle: *Document,
     parent_is_type_val: ?bool = null,
 };
 
@@ -650,7 +651,7 @@ fn declToCompletion(session: *Session, context: DeclToCompletionContext, decl_ha
     }
 }
 
-fn completeLabel(session: *Session, id: i64, pos_index: usize, handle: *Workspace.Handle) !lsp.Response {
+fn completeLabel(session: *Session, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
     var completions = std.ArrayList(lsp.CompletionItem).init(session.arena.allocator());
 
     const context = DeclToCompletionContext{
@@ -673,7 +674,7 @@ fn completeLabel(session: *Session, id: i64, pos_index: usize, handle: *Workspac
     };
 }
 
-fn completeGlobal(session: *Session, id: i64, pos_index: usize, handle: *Workspace.Handle) !lsp.Response {
+fn completeGlobal(session: *Session, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
     var completions = std.ArrayList(lsp.CompletionItem).init(session.arena.allocator());
 
     const context = DeclToCompletionContext{
@@ -696,7 +697,7 @@ fn completeGlobal(session: *Session, id: i64, pos_index: usize, handle: *Workspa
     };
 }
 
-fn completeFieldAccess(session: *Session, id: i64, handle: *Workspace.Handle, position: DocumentPosition, range: analysis.SourceRange) !lsp.Response {
+fn completeFieldAccess(session: *Session, id: i64, handle: *Document, position: DocumentPosition, range: analysis.SourceRange) !lsp.Response {
     var completions = std.ArrayList(lsp.CompletionItem).init(session.arena.allocator());
 
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
@@ -721,7 +722,7 @@ fn completeFieldAccess(session: *Session, id: i64, handle: *Workspace.Handle, po
     };
 }
 
-fn completeError(session: *Session, id: i64, handle: *Workspace.Handle) !lsp.Response {
+fn completeError(session: *Session, id: i64, handle: *Document) !lsp.Response {
     const completions = try session.document_store.errorCompletionItems(session.arena, handle);
     builtin_completions.truncateCompletions(completions, session.config.max_detail_length);
     logger.debug("Completing error:", .{});
@@ -737,7 +738,7 @@ fn completeError(session: *Session, id: i64, handle: *Workspace.Handle) !lsp.Res
     };
 }
 
-fn completeDot(session: *Session, id: i64, handle: *Workspace.Handle) !lsp.Response {
+fn completeDot(session: *Session, id: i64, handle: *Document) !lsp.Response {
     var completions = try session.document_store.enumCompletionItems(session.arena, handle);
     builtin_completions.truncateCompletions(completions, session.config.max_detail_length);
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
-const Workspace = @import("./Workspace.zig");
+const Document = @import("./Document.zig");
 const analysis = @import("./analysis.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
@@ -8,7 +8,7 @@ const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
 const Session = @import("./Session.zig");
 
-fn tokenReference(handle: *Workspace.Handle, tok: Ast.TokenIndex, encoding: offsets.Encoding, context: anytype, comptime handler: anytype) !void {
+fn tokenReference(handle: *Document, tok: Ast.TokenIndex, encoding: offsets.Encoding, context: anytype, comptime handler: anytype) !void {
     const loc = offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[tok], encoding) catch return;
     try handler(context, lsp.Location{
         .uri = handle.uri(),
@@ -500,7 +500,7 @@ pub fn symbolReferences(session: *Session, decl_handle: analysis.DeclWithHandle,
         .ast_node => {
             try symbolReferencesInternal(session, .{ .node = 0, .handle = curr_handle }, decl_handle, encoding, context, handler);
 
-            var imports = std.ArrayList(*Workspace.Handle).init(session.arena.allocator());
+            var imports = std.ArrayList(*Document).init(session.arena.allocator());
 
             var handle_it = session.document_store.handles.iterator();
             while (handle_it.next()) |entry| {
