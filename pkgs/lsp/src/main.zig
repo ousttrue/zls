@@ -26,3 +26,5 @@ pub const ResponseParams = response.ResponseParams;
 
 pub const SemanticTokenType = semantic_token.SemanticTokenType;
 pub const SemanticTokenModifiers = semantic_token.SemanticTokenModifiers;
+
+pub const fromDynamicTree = @import("./deserializer.zig").fromDynamicTree;

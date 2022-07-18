@@ -72,7 +72,7 @@ pub const Session = struct {
     }
 
     pub fn getParam(self: *Self, comptime ParamType: type) !ParamType {
-        return lsp.requests.fromDynamicTree(self.arena, ParamType, self.tree.root);
+        return lsp.fromDynamicTree(self.arena, ParamType, self.tree.root);
     }
 
     /// Sends a request or response
