@@ -10,20 +10,26 @@ const requests = @import("lsp").requests;
 const lsp = @import("lsp");
 const analysis = @import("./analysis.zig");
 const Dispatcher = @import("./Dispatcher.zig");
+const Stdio = @import("./Stdio.zig");
 
 const logger = std.log.scoped(.main);
 
 // Always set this to debug to make std.log call into our handler, then control the runtime
 // value in the definition below.
 pub const log_level = .debug;
-var stdout: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
+var transport: Stdio = undefined;
 
 var actual_log_level: std.log.Level = switch (zig_builtin.mode) {
     .Debug => .debug,
     else => @intToEnum(std.log.Level, @enumToInt(build_options.log_level)), //temporary fix to build failing on release-safe due to a Zig bug
 };
 
-pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLiteral), comptime format: []const u8, args: anytype) void {
+pub fn log(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
     if (@enumToInt(message_level) > @enumToInt(actual_log_level)) {
         return;
     }
@@ -56,13 +62,7 @@ pub fn log(comptime message_level: std.log.Level, comptime scope: @Type(.EnumLit
         },
     };
 
-    var arr = std.ArrayList(u8).init(arena.allocator());
-    std.json.stringify(notification, .{}, arr.writer()) catch @panic("stringify");
-
-    const stdout_stream = stdout.writer();
-    stdout_stream.print("Content-Length: {}\r\n\r\n", .{arr.items.len}) catch @panic("send");
-    stdout_stream.writeAll(arr.items) catch @panic("send");
-    stdout.flush() catch @panic("send");
+    transport.sendToJson(notification);
 }
 
 fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
@@ -79,7 +79,7 @@ fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
     @setEvalBranchQuota(3000);
     // TODO: Better errors? Doesn't seem like std.json can provide us positions or context.
     var config = std.json.parse(Config, &std.json.TokenStream.init(file_buf), std.json.ParseOptions{ .allocator = allocator }) catch |err| {
-        logger.warn("Error while parsing configuration file: {s} {}", .{file_path, err});
+        logger.warn("Error while parsing configuration file: {s} {}", .{ file_path, err });
         return null;
     };
 
@@ -101,10 +101,11 @@ fn loadConfigInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Co
 }
 
 pub fn main() anyerror!void {
-    // allocator = &gpa_state.allocator;
-    // @TODO Using the GPA here, realloc calls hang currently for some reason
-    const allocator = std.heap.page_allocator;
-    stdout = std.io.bufferedWriter(std.io.getStdOut().writer());
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer std.debug.assert(!gpa.deinit());
+
+    transport = Stdio.init(allocator);
 
     // Check arguments.
     var args_it = try std.process.ArgIterator.initWithAllocator(allocator);
@@ -265,7 +266,7 @@ pub fn main() anyerror!void {
         config.builtin_path = try std.fs.path.join(allocator, &.{ config_path.?, "builtin.zig" });
     }
 
-    if(config.build_runner_path == null){
+    if (config.build_runner_path == null) {
         var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
         const exe_dir_path = try std.fs.selfExeDirPath(&exe_dir_bytes);
         config.build_runner_path = try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
@@ -304,5 +305,5 @@ pub fn main() anyerror!void {
     dispatcher.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
     dispatcher.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, std.io.getStdIn(), stdout, &config, &dispatcher);
+    jsonrpc.readloop(allocator, &transport, &config, &dispatcher);
 }

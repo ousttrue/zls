@@ -6,6 +6,9 @@ const DocumentStore = @import("./DocumentStore.zig");
 const Config = @import("./Config.zig");
 const Completion = @import("./builtin_completions.zig").Completion;
 const Dispatcher = @import("./Dispatcher.zig");
+const Stdio = @import("./Stdio.zig");
+
+const logger = std.log.scoped(.jsonrpc);
 
 pub var keep_running = false;
 pub fn shutdownHandler(session: *Session, id: i64, _: void) !lsp.Response {
@@ -14,9 +17,8 @@ pub fn shutdownHandler(session: *Session, id: i64, _: void) !lsp.Response {
     return lsp.Response.createNull(id);
 }
 
-pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, stdout: anytype, config: *Config, dispatcher: *Dispatcher) void {
+pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, config: *Config, dispatcher: *Dispatcher) void {
     keep_running = true;
-    const reader = r.reader();
 
     // This JSON parser is passed to processJsonRpc and reset.
     var json_parser = std.json.Parser.init(allocator, false);
@@ -46,40 +48,53 @@ pub fn readloop(allocator: std.mem.Allocator, r: std.fs.File, stdout: anytype, c
     defer completion.deinit();
 
     while (keep_running) {
-        var session = Session.init(allocator, config, &document_store, &completion, stdout, &arena, reader, &json_parser);
-        defer session.deinit();
+        if (transport.readNext()) |content| {
+            logger.info("{s}", .{content});
+            // parse
+            json_parser.reset();
+            if (json_parser.parse(content)) |tree| {
+                var session = Session.init(allocator, &arena, config, &document_store, &completion, transport, tree);
+                defer session.deinit();
 
-        // request: id, method, ?params
-        // reponse: id, ?result, ?error
-        // notify: method, ?params
-        if (session.getId()) |id| {
-            if (session.getMethod()) |method| {
-                // request
-                if (dispatcher.dispatchRequest(&session, id, method)) |res| {
-                    session.send(res);
-                } else |err| switch (err) {
-                    Dispatcher.Error.InvalidRequest => session.send(lsp.Response.createInvalidRequest(id)),
-                    Dispatcher.Error.MethodNotFound => session.send(lsp.Response.createMethodNotFound(id)),
-                    Dispatcher.Error.InvalidParams => session.send(lsp.Response.createInvalidParams(id)),
-                    Dispatcher.Error.InternalError => session.send(lsp.Response.createInternalError(id)),
+                // request: id, method, ?params
+                // reponse: id, ?result, ?error
+                // notify: method, ?params
+                if (session.getId()) |id| {
+                    if (session.getMethod()) |method| {
+                        // request
+                        if (dispatcher.dispatchRequest(&session, id, method)) |res| {
+                            transport.sendToJson(res);
+                        } else |err| switch (err) {
+                            Dispatcher.Error.InvalidRequest => transport.sendToJson(lsp.Response.createInvalidRequest(id)),
+                            Dispatcher.Error.MethodNotFound => transport.sendToJson(lsp.Response.createMethodNotFound(id)),
+                            Dispatcher.Error.InvalidParams => transport.sendToJson(lsp.Response.createInvalidParams(id)),
+                            Dispatcher.Error.InternalError => transport.sendToJson(lsp.Response.createInternalError(id)),
+                        }
+                    } else {
+                        // response
+                        @panic("jsonrpc response is not implemented(not send request)");
+                    }
+                } else {
+                    if (session.getMethod()) |method| {
+                        // notify
+                        dispatcher.dispatchNotify(&session, method) catch |err| switch (err) {
+                            Dispatcher.Error.InvalidRequest => transport.sendToJson(lsp.Response.createInvalidRequest(null)),
+                            Dispatcher.Error.MethodNotFound => transport.sendToJson(lsp.Response.createMethodNotFound(null)),
+                            Dispatcher.Error.InvalidParams => transport.sendToJson(lsp.Response.createInvalidParams(null)),
+                            Dispatcher.Error.InternalError => transport.sendToJson(lsp.Response.createInternalError(null)),
+                        };
+                    } else {
+                        // invalid
+                        transport.sendToJson(lsp.Response.createParseError());
+                    }
                 }
-            } else {
-                // response
-                @panic("jsonrpc response is not implemented(not send request)");
+            } else |err| {
+                logger.err("{s}", .{@errorName(err)});
             }
-        } else {
-            if (session.getMethod()) |method| {
-                // notify
-                dispatcher.dispatchNotify(&session, method) catch |err| switch (err) {
-                    Dispatcher.Error.InvalidRequest => session.send(lsp.Response.createInvalidRequest(null)),
-                    Dispatcher.Error.MethodNotFound => session.send(lsp.Response.createMethodNotFound(null)),
-                    Dispatcher.Error.InvalidParams => session.send(lsp.Response.createInvalidParams(null)),
-                    Dispatcher.Error.InternalError => session.send(lsp.Response.createInternalError(null)),
-                };
-            } else {
-                // invalid
-                session.send(lsp.Response.createParseError());
-            }
+        } else |err| {
+            logger.err("{s}", .{@errorName(err)});
+            keep_running = false;
+            break;
         }
     }
 }

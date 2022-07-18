@@ -862,7 +862,7 @@ pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !
 pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
     const handle = try session.document_store.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
     if (createNotifyDiagnostics(session, handle)) |notification| {
-        session.send(notification);
+        session.transport.sendToJson(notification);
     } else |_| {}
 }
 
@@ -870,7 +870,7 @@ pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !v
     const handle = try session.getHandle(req.params.textDocument.uri);
     try session.document_store.applyChanges(handle, req.params.contentChanges.Array, offsets.offset_encoding);
     if (createNotifyDiagnostics(session, handle)) |notification| {
-        session.send(notification);
+        session.transport.sendToJson(notification);
     } else |_| {}
 }
 
