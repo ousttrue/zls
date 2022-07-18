@@ -6,7 +6,7 @@ const Ast = std.zig.Ast;
 const log = std.log.scoped(.semantic_tokens);
 const ast = @import("./ast.zig");
 const lsp = @import("lsp");
-const Session = @import("./session.zig").Session;
+const Session = @import("./Session.zig");
 
 const logger = std.log.scoped(.semantic_tokens);
 

@@ -5,7 +5,7 @@ const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.analysis);
 const ast = @import("./ast.zig");
-const Session = @import("./session.zig").Session;
+const Session = @import("./Session.zig");
 
 var using_trail: std.ArrayList([*]const u8) = undefined;
 var resolve_trail: std.ArrayList(NodeWithHandle) = undefined;

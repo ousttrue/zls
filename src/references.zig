@@ -6,7 +6,7 @@ const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
-const Session = @import("./session.zig").Session;
+const Session = @import("./Session.zig");
 
 fn tokenReference(handle: *DocumentStore.Handle, tok: Ast.TokenIndex, encoding: offsets.Encoding, context: anytype, comptime handler: anytype) !void {
     const loc = offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[tok], encoding) catch return;

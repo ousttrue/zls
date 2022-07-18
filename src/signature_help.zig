@@ -6,7 +6,7 @@ const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const ast = @import("./ast.zig");
-const Session = @import("./session.zig").Session;
+const Session = @import("./Session.zig");
 
 fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *DocumentStore.Handle, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
