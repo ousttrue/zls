@@ -49,7 +49,6 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, config: *Config
 
     while (keep_running) {
         if (transport.readNext()) |content| {
-            logger.info("{s}", .{content});
             // parse
             json_parser.reset();
             if (json_parser.parse(content)) |tree| {
