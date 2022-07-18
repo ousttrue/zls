@@ -8,10 +8,10 @@ const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
 const Session = @import("./Session.zig");
 
-fn tokenReference(handle: *Document, tok: Ast.TokenIndex, encoding: offsets.Encoding, context: anytype, comptime handler: anytype) !void {
-    const loc = offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[tok], encoding) catch return;
+fn tokenReference(document: *Document, tok: Ast.TokenIndex, encoding: offsets.Encoding, context: anytype, comptime handler: anytype) !void {
+    const loc = offsets.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok], encoding) catch return;
     try handler(context, lsp.Location{
-        .uri = handle.uri(),
+        .uri = document.document.uri,
         .range = .{
             .start = .{
                 .line = @intCast(i64, loc.line),
@@ -19,7 +19,7 @@ fn tokenReference(handle: *Document, tok: Ast.TokenIndex, encoding: offsets.Enco
             },
             .end = .{
                 .line = @intCast(i64, loc.line),
-                .character = @intCast(i64, loc.column + offsets.tokenLength(handle.tree, tok, encoding)),
+                .character = @intCast(i64, loc.column + offsets.tokenLength(document.tree, tok, encoding)),
             },
         },
     });

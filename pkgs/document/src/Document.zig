@@ -1,7 +1,7 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const analysis = @import("./analysis.zig");
+const TextDocument = @import("./TextDocument.zig");
 const Self = @This();
 
 pub const BuildFile = struct {
@@ -22,7 +22,7 @@ pub const BuildFile = struct {
     }
 };
 
-document: lsp.TextDocument,
+document: TextDocument,
 count: usize,
 /// Contains one entry for every import in the document
 import_uris: []const []const u8,
@@ -33,7 +33,3 @@ document_scope: analysis.DocumentScope,
 
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
-
-pub fn uri(handle: Self) []const u8 {
-    return handle.document.uri;
-}

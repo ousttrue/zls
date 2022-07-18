@@ -449,7 +449,7 @@ fn collectImportUris(self: *Self, handle: *Document) ![]const []const u8 {
 }
 
 fn refreshDocument(self: *Self, handle: *Document) !void {
-    log.debug("New text for document {s}", .{handle.uri()});
+    log.debug("New text for document {s}", .{handle.document.uri});
     handle.tree.deinit(self.allocator);
     handle.tree = try std.zig.parse(self.allocator, handle.document.text);
 
@@ -601,7 +601,7 @@ pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Docum
         }
         return null;
     } else {
-        const base = handle.uri();
+        const base = handle.document.uri;
         var base_len = base.len;
         while (base[base_len - 1] != '/' and base_len > 0) {
             base_len -= 1;

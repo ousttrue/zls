@@ -137,7 +137,7 @@ fn createNotifyDiagnostics(session: *Session, handle: *const Document) !lsp.Noti
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .PublishDiagnostics = .{
-                .uri = handle.uri(),
+                .uri = handle.document.uri,
                 .diagnostics = diagnostics.items,
             },
         },
