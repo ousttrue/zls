@@ -295,7 +295,7 @@ fn isContainerDecl(decl_handle: DeclWithHandle) bool {
     };
 }
 
-fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, node_handle: NodeWithHandle, root: bool) error{OutOfMemory}!?DeclWithHandle {
+fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, node_handle: NodeWithHandle, root: bool) error{OutOfMemory}!?DeclWithHandle {
     _ = root;
     const handle = node_handle.handle;
     const tree = handle.tree;
@@ -307,6 +307,7 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, node_handle: Nod
         const token = main_tokens[node_handle.node];
         return try lookupSymbolGlobal(
             arena,
+            workspace,
             handle,
             tree.tokenSlice(token),
             tree.tokens.items(.start)[token],
@@ -320,13 +321,13 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, node_handle: Nod
             if (!std.mem.eql(u8, tree.tokenSlice(main_tokens[lhs]), "@import"))
                 return null;
 
-            const inner_node = (try resolveTypeOfNode(arena, .{ .node = lhs, .handle = handle })) orelse return null;
+            const inner_node = (try resolveTypeOfNode(arena, workspace, .{ .node = lhs, .handle = handle })) orelse return null;
             // assert root node
             std.debug.assert(inner_node.type.data.other == 0);
             break :block NodeWithHandle{ .node = inner_node.type.data.other, .handle = inner_node.handle };
-        } else if (try resolveVarDeclAliasInternal(arena, .{ .node = lhs, .handle = handle }, false)) |decl_handle| block: {
+        } else if (try resolveVarDeclAliasInternal(arena, workspace, .{ .node = lhs, .handle = handle }, false)) |decl_handle| block: {
             if (decl_handle.decl.* != .ast_node) return null;
-            const resolved = (try resolveTypeOfNode(arena, .{ .node = decl_handle.decl.ast_node, .handle = decl_handle.handle })) orelse return null;
+            const resolved = (try resolveTypeOfNode(arena, workspace, .{ .node = decl_handle.decl.ast_node, .handle = decl_handle.handle })) orelse return null;
             const resolved_node = switch (resolved.type.data) {
                 .other => |n| n,
                 else => return null,
@@ -335,7 +336,7 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, node_handle: Nod
             break :block NodeWithHandle{ .node = resolved_node, .handle = resolved.handle };
         } else return null;
 
-        return try lookupSymbolContainer(arena, container_node, tree.tokenSlice(datas[node_handle.node].rhs), false);
+        return try lookupSymbolContainer(arena, workspace, container_node, tree.tokenSlice(datas[node_handle.node].rhs), false);
     }
     return null;
 }
@@ -346,7 +347,7 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, node_handle: Nod
 /// const decl = @import("decl-file.zig").decl;
 /// const other = decl.middle.other;
 ///```
-pub fn resolveVarDeclAlias(arena: *std.heap.ArenaAllocator, decl_handle: NodeWithHandle) !?DeclWithHandle {
+pub fn resolveVarDeclAlias(arena: *std.heap.ArenaAllocator, workspace: *Workspace, decl_handle: NodeWithHandle) !?DeclWithHandle {
     const decl = decl_handle.node;
     const handle = decl_handle.handle;
     const tree = handle.tree;
@@ -363,7 +364,7 @@ pub fn resolveVarDeclAlias(arena: *std.heap.ArenaAllocator, decl_handle: NodeWit
             if (!std.mem.eql(u8, tree.tokenSlice(var_decl.ast.mut_token + 1), name))
                 return null;
 
-            return try resolveVarDeclAliasInternal(arena, .{ .node = base_exp, .handle = handle }, true);
+            return try resolveVarDeclAliasInternal(arena, workspace, .{ .node = base_exp, .handle = handle }, true);
         }
     }
 
@@ -1136,29 +1137,30 @@ pub const FieldAccessReturn = struct {
     unwrapped: ?TypeWithHandle = null,
 };
 
-pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, source_index: usize, tokenizer: *std.zig.Tokenizer) !?FieldAccessReturn {
+pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, source_index: usize, tokenizer: *std.zig.Tokenizer) !?FieldAccessReturn {
     var current_type = TypeWithHandle.typeVal(.{
         .node = undefined,
         .handle = handle,
     });
 
-    var bound_type_params = BoundTypeParams.init(arena.arena.allocator());
+    var bound_type_params = BoundTypeParams.init(arena.allocator());
 
     while (true) {
         const tok = tokenizer.next();
         switch (tok.tag) {
             .eof => return FieldAccessReturn{
                 .original = current_type,
-                .unwrapped = try resolveDerefType(arena, current_type, &bound_type_params),
+                .unwrapped = try resolveDerefType(arena, workspace, current_type, &bound_type_params),
             },
             .identifier => {
                 if (try lookupSymbolGlobal(
                     arena,
+                    workspace,
                     current_type.handle,
                     tokenizer.buffer[tok.loc.start..tok.loc.end],
                     source_index,
                 )) |child| {
-                    if (try child.resolveType(arena, &bound_type_params)) |child_type| {
+                    if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {
                         current_type = child_type;
                     } else {
                         log.warn("fail to child.resolveType: {}", .{child.decl});
@@ -1177,18 +1179,18 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, so
                         if (current_type.isFunc()) return null;
                         return FieldAccessReturn{
                             .original = current_type,
-                            .unwrapped = try resolveDerefType(arena, current_type, &bound_type_params),
+                            .unwrapped = try resolveDerefType(arena, workspace, current_type, &bound_type_params),
                         };
                     },
                     .identifier => {
                         if (after_period.loc.end == tokenizer.buffer.len) {
                             return FieldAccessReturn{
                                 .original = current_type,
-                                .unwrapped = try resolveDerefType(arena, current_type, &bound_type_params),
+                                .unwrapped = try resolveDerefType(arena, workspace, current_type, &bound_type_params),
                             };
                         }
 
-                        current_type = try resolveFieldAccessLhsType(arena, current_type, &bound_type_params);
+                        current_type = try resolveFieldAccessLhsType(arena, workspace, current_type, &bound_type_params);
                         const current_type_node = switch (current_type.type.data) {
                             .other => |n| n,
                             else => return null,
@@ -1196,12 +1198,14 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, so
 
                         if (try lookupSymbolContainer(
                             arena,
+                            workspace,
                             .{ .node = current_type_node, .handle = current_type.handle },
                             tokenizer.buffer[after_period.loc.start..after_period.loc.end],
                             !current_type.type.is_type_val,
                         )) |child| {
                             current_type = (try child.resolveType(
                                 arena,
+                                workspace,
                                 &bound_type_params,
                             )) orelse return null;
                         } else return null;
@@ -1209,6 +1213,7 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, so
                     .question_mark => {
                         current_type = (try resolveUnwrapOptionalType(
                             arena,
+                            workspace,
                             current_type,
                             &bound_type_params,
                         )) orelse return null;
@@ -1222,6 +1227,7 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, so
             .period_asterisk => {
                 current_type = (try resolveDerefType(
                     arena,
+                    workspace,
                     current_type,
                     &bound_type_params,
                 )) orelse return null;
@@ -1244,7 +1250,7 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, so
                     const body = cur_tree.nodes.items(.data)[current_type_node].rhs;
 
                     // TODO Actually bind params here when calling functions instead of just skipping args.
-                    if (try resolveReturnType(arena, func, current_type.handle, &bound_type_params, if (has_body) body else null)) |ret| {
+                    if (try resolveReturnType(arena, workspace, func, current_type.handle, &bound_type_params, if (has_body) body else null)) |ret| {
                         current_type = ret;
                         // Skip to the right paren
                         var paren_count: usize = 1;
@@ -1275,7 +1281,7 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, handle: *Document, so
                     }
                 } else return null;
 
-                current_type = (try resolveBracketAccessType(arena, current_type, if (is_range) .Range else .Single, &bound_type_params)) orelse return null;
+                current_type = (try resolveBracketAccessType(arena, workspace, current_type, if (is_range) .Range else .Single, &bound_type_params)) orelse return null;
             },
             else => {
                 log.debug("Unimplemented token: {}", .{tok.tag});
@@ -1577,7 +1583,7 @@ fn iterateSymbolsContainerInternal(arena: *std.heap.ArenaAllocator, container_ha
 }
 
 pub fn iterateSymbolsContainer(arena: *std.heap.ArenaAllocator, container_handle: NodeWithHandle, orig_handle: *Document, comptime callback: anytype, context: anytype, instance_access: bool) error{OutOfMemory}!void {
-    var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.arena.allocator());
+    var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.allocator());
     return try iterateSymbolsContainerInternal(arena, container_handle, orig_handle, callback, context, instance_access, &use_trail);
 }
 
@@ -1637,7 +1643,7 @@ fn iterateSymbolsGlobalInternal(arena: *std.heap.ArenaAllocator, handle: *Docume
 }
 
 pub fn iterateSymbolsGlobal(arena: *std.heap.ArenaAllocator, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
-    var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.arena.allocator());
+    var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.allocator());
     return try iterateSymbolsGlobalInternal(arena, handle, source_index, callback, context, &use_trail);
 }
 
@@ -1730,7 +1736,7 @@ pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) e
     return null;
 }
 
-pub fn lookupSymbolGlobal(arena: *std.heap.ArenaAllocator,workspace:*Workspace,  handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
+pub fn lookupSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace:*Workspace,  handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
     const innermost_scope_idx = innermostBlockScopeIndex(handle.*, source_index);
 
     var curr = innermost_scope_idx;

@@ -2,10 +2,11 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
+const Workspace = @import("./Workspace.zig");
 const TextDocument = @import("./TextDocument.zig");
 const analysis = @import("./analysis.zig");
 const ast = @import("./ast.zig");
-const DocumentPosition = @import("./document_position.zig").DocumentPosition;
+const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
 const Session = struct {};
 const logger = std.log.scoped(.offset);
@@ -269,9 +270,9 @@ test "identifierFromPosition" {
     // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }
 
-pub fn getSymbolGlobal(session: *Session, pos_index: usize, handle: *Document) !analysis.DeclWithHandle {
+pub fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, pos_index: usize, handle: *Document) !analysis.DeclWithHandle {
     const name = try identifierFromPosition(pos_index, handle.document.text);
-    return (try analysis.lookupSymbolGlobal(session, handle, name, pos_index)) orelse return OffsetError.GlobalSymbolNotFound;
+    return (try analysis.lookupSymbolGlobal(arena, workspace, handle, name, pos_index)) orelse return OffsetError.GlobalSymbolNotFound;
 }
 
 pub fn getLabelGlobal(pos_index: usize, handle: *Document) !?analysis.DeclWithHandle {
@@ -318,14 +319,14 @@ fn gotoDefinitionSymbol(session: *Session, id: i64, decl_handle: analysis.DeclWi
     };
 }
 
-pub fn getSymbolFieldAccess(session: *Session, handle: *Document, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
+pub fn getSymbolFieldAccess(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
     const name = try identifierFromPosition(position.absolute_index, handle.document.text);
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
     var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
     errdefer held_range.release();
-    const result = (try analysis.getFieldAccessType(session, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
+    const result = (try analysis.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
     held_range.release();
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {
@@ -333,7 +334,8 @@ pub fn getSymbolFieldAccess(session: *Session, handle: *Document, position: Docu
         else => return OffsetError.NodeNotFound,
     };
     return (try analysis.lookupSymbolContainer(
-        session,
+        arena,
+        workspace,
         .{ .node = container_handle_node, .handle = container_handle.handle },
         name,
         true,

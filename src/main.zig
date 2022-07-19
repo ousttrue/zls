@@ -308,7 +308,7 @@ pub fn main() anyerror!void {
     dispatcher.registerNotify(&ls, "textDocument/didClose");
     dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
     dispatcher.registerRequest(&ls, "textDocument/documentSymbol");
-    // dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
+    dispatcher.registerRequest(&ls, "textDocument/hover");
     // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);

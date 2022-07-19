@@ -1,6 +1,6 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const DocumentPosition = @import("./document_position.zig").DocumentPosition;
+const DocumentPosition = @import("./DocumentPosition.zig");
 const logger = std.log.scoped(.position_context);
 const SourceRange = std.zig.Token.Loc;
 

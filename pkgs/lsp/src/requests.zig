@@ -98,10 +98,8 @@ pub const CloseDocument = TextDocumentIdentifierRequest;
 pub const SemanticTokensFull = TextDocumentIdentifierRequest;
 
 const TextDocumentIdentifierPositionRequest = struct {
-    params: struct {
-        textDocument: TextDocumentIdentifier,
-        position: types.Position,
-    },
+    textDocument: TextDocumentIdentifier,
+    position: types.Position,
 };
 
 pub const SignatureHelp = struct {

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn find(src: []const u8) ?usize {
+fn find(src: []const u8) ?usize {
     for (src) |c, i| {
         if (c == '\n') {
             return i;
@@ -9,7 +9,6 @@ pub fn find(src: []const u8) ?usize {
     return null;
 }
 
-pub const DocumentPosition = struct {
     const Self = @This();
 
     row: usize,
@@ -54,8 +53,8 @@ pub const DocumentPosition = struct {
         };
     }
 
-    pub fn advance(self: Self, delta: usize) DocumentPosition {
-        return DocumentPosition{
+    pub fn advance(self: Self, delta: usize) Self {
+        return Self{
             .row = self.row,
             .col = self.col + delta,
             .line = self.line,
@@ -64,8 +63,8 @@ pub const DocumentPosition = struct {
         };
     }
 
-    pub fn back(self: Self, delta: usize) DocumentPosition {
-        return DocumentPosition{
+    pub fn back(self: Self, delta: usize) Self {
+        return Self{
             .row = self.row,
             .col = self.col - delta,
             .line = self.line,
@@ -73,7 +72,7 @@ pub const DocumentPosition = struct {
             .all = self.all,
         };
     }
-};
+
 
 test "getLine" {
     const src =
@@ -81,10 +80,10 @@ test "getLine" {
         \\b
         \\c
     ;
-    const result = DocumentPosition.getLine(src, 0).?;
+    const result = Self.getLine(src, 0).?;
     try std.testing.expectEqual(@as(usize, 0), result.absolute_index);
     try std.testing.expectEqual(@as(usize, 1), result.line.len);
     try std.testing.expectEqualStrings("a", result.line);
-    try std.testing.expectEqualStrings("c", DocumentPosition.getLine(src, 2).?.line);
-    try std.testing.expect(DocumentPosition.getLine(src, 3) == null);
+    try std.testing.expectEqualStrings("c", Self.getLine(src, 2).?.line);
+    try std.testing.expect(Self.getLine(src, 3) == null);
 }
