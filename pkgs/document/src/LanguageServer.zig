@@ -194,7 +194,9 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     const handle = try self.workspace.getHandle(params.textDocument.uri);
     return lsp.Response{
         .id = id,
-        .result = .{ .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), handle.tree, offsets.offset_encoding) ,},
+        .result = .{
+            .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), handle.tree, offsets.offset_encoding),
+        },
     };
 }
 
@@ -223,4 +225,46 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
         .id = id,
         .result = .{ .SemanticTokensFull = .{ .data = token_array } },
     };
+}
+
+pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const zig_exe_path = self.config.zig_exe_path orelse {
+        logger.warn("no zig_exe_path", .{});
+        return lsp.Response.createNull(id);
+    };
+
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
+    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, arena.allocator());
+    process.stdin_behavior = .Pipe;
+    process.stdout_behavior = .Pipe;
+    process.spawn() catch |err| {
+        logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
+        return lsp.Response.createNull(id);
+    };
+    try process.stdin.?.writeAll(handle.document.text);
+    process.stdin.?.close();
+    process.stdin = null;
+
+    const stdout_bytes = try process.stdout.?.reader().readAllAlloc(arena.allocator(), std.math.maxInt(usize));
+
+    var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
+    edits[0] = .{
+        .range = try offsets.documentRange(handle.document, offsets.offset_encoding),
+        .newText = stdout_bytes,
+    };
+
+    switch (try process.wait()) {
+        .Exited => |code| if (code == 0) {
+            return lsp.Response{
+                .id = id,
+                .result = .{
+                    .TextEdits = edits,
+                },
+            };
+        },
+        else => {},
+    }
+
+    return lsp.Response.createNull(id);
 }

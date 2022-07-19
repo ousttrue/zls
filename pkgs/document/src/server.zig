@@ -719,51 +719,6 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
     return try offsets.gotoHandler(session, id, req, false);
 }
 
-fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response {
-    const zig_exe_path = session.config.zig_exe_path orelse {
-        logger.warn("no zig_exe_path", .{});
-        return lsp.Response.createNull(id);
-    };
-
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
-    var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, session.arena.allocator());
-    process.stdin_behavior = .Pipe;
-    process.stdout_behavior = .Pipe;
-    process.spawn() catch |err| {
-        logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
-        return lsp.Response.createNull(id);
-    };
-    try process.stdin.?.writeAll(handle.document.text);
-    process.stdin.?.close();
-    process.stdin = null;
-
-    const stdout_bytes = try process.stdout.?.reader().readAllAlloc(session.arena.allocator(), std.math.maxInt(usize));
-
-    var edits = try session.arena.allocator().alloc(lsp.TextEdit, 1);
-    edits[0] = .{
-        .range = try offsets.documentRange(handle.document, offsets.offset_encoding),
-        .newText = stdout_bytes,
-    };
-
-    switch (try process.wait()) {
-        .Exited => |code| if (code == 0) {
-            return lsp.Response{
-                .id = id,
-                .result = .{
-                    .TextEdits = edits,
-                },
-            };
-        },
-        else => {},
-    }
-
-    return lsp.Response.createNull(id);
-}
-
-pub fn formattingHandler(session: *Session, id: i64, req: requests.Formatting) !lsp.Response {
-    return try doFormat(session, id, req);
-}
-
 fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
     const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);

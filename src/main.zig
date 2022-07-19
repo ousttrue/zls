@@ -309,13 +309,13 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
     dispatcher.registerRequest(&ls, "textDocument/documentSymbol");
     dispatcher.registerRequest(&ls, "textDocument/hover");
+    dispatcher.registerRequest(&ls, "textDocument/formatting");
     // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
-    // dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
     // dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
     // dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
 
