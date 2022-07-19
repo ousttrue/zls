@@ -853,13 +853,6 @@ pub fn initializeHandler(id: i64, req: requests.Initialize) !lsp.Response {
     };
 }
 
-pub fn openDocumentHandler(session: *Session, req: requests.OpenDocument) !void {
-    const handle = try session.workspace.openDocument(req.params.textDocument.uri, req.params.textDocument.text);
-    if (createNotifyDiagnostics(session, handle)) |notification| {
-        session.transport.sendToJson(notification);
-    } else |_| {}
-}
-
 pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
     const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     try session.workspace.applyChanges(handle, req.params.contentChanges.Array, offsets.offset_encoding);

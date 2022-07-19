@@ -302,6 +302,7 @@ pub fn main() anyerror!void {
 
     dispatcher.registerRequest(&ls, "initialize");
     dispatcher.registerRequest(&ls, "shutdown");
+    dispatcher.registerNotify(&ls, "textDocument/didOpen");
     dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
     // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
@@ -314,7 +315,6 @@ pub fn main() anyerror!void {
     // dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
     // dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
     // dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
-    // dispatcher.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
     // dispatcher.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
     // dispatcher.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
     // dispatcher.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);

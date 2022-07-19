@@ -71,7 +71,7 @@ pub fn registerNotify(
     const field = @field(document.LanguageServer, method);
     const S = struct {
         fn call(ptr: *document.LanguageServer, arena: *std.heap.ArenaAllocator, params: ?std.json.Value) anyerror!void {
-            @call(.{}, field, .{ ptr, arena, params });
+            return @call(.{}, field, .{ ptr, arena, params });
         }
     };
     self.notify_map.put(method, NotifyFunctor{

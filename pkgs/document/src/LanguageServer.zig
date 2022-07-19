@@ -54,6 +54,15 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
     return lsp.Response.createNull(id);
 }
 
+pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    _ = self;
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
+    _ = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
+    // if (createNotifyDiagnostics(session, handle)) |notification| {
+    //     session.transport.sendToJson(notification);
+    // } else |_| {}
+}
+
 const no_semantic_tokens_response = lsp.ResponseParams{
     .SemanticTokensFull = .{
         .data = &.{},

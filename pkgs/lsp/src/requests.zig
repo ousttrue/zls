@@ -74,11 +74,9 @@ pub const WorkspaceFoldersChange = struct {
 };
 
 pub const OpenDocument = struct {
-    params: struct {
-        textDocument: struct {
-            uri: []const u8,
-            text: []const u8,
-        },
+    textDocument: struct {
+        uri: []const u8,
+        text: []const u8,
     },
 };
 
