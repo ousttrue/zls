@@ -1,19 +1,19 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const Config = @import("./Config.zig");
-const Workspace = @import("./Workspace.zig");
-const analysis = @import("./analysis.zig");
-const semantic_tokens = @import("./semantic_tokens.zig");
-const offsets = @import("./offsets.zig");
-const document_symbols = @import("./document_symbols.zig");
-const hover_util = @import("./hover_util.zig");
-const completion_util = @import("./completion_util.zig");
+const document = @import("document");
+const Config = document.Config;
+const Workspace = document.Workspace;
+const analysis = document.analysis;
+const semantic_tokens = document.semantic_tokens;
+const offsets = document.offsets;
+const document_symbols = document.document_symbols;
+const hover_util = document.hover_util;
+const completion_util = document.completion_util;
+const ClientCapabilities = document.ClientCapabilities;
 const Self = @This();
-const root = @import("root");
 pub var keep_running: bool = true;
 const logger = std.log.scoped(.LanguageServer);
 
-const ClientCapabilities = @import("./ClientCapabilities.zig");
 
 config: *Config,
 workspace: Workspace = undefined,

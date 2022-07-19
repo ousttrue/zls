@@ -11,6 +11,11 @@ const document_pkg = std.build.Pkg{
     .source = .{ .path = "pkgs/document/src/main.zig" },
     .dependencies = &.{lsp_pkg},
 };
+const ls_pkg = std.build.Pkg{
+    .name = "language_server",
+    .source = .{ .path = "pkgs/language_server/src/main.zig" },
+    .dependencies = &.{lsp_pkg, document_pkg},
+};
 
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
@@ -36,6 +41,7 @@ pub fn build(b: *std.build.Builder) !void {
     exe.addPackage(.{ .name = "zinput", .source = .{ .path = "src/zinput/src/main.zig" } });
     exe.addPackage(lsp_pkg);
     exe.addPackage(document_pkg);
+    exe.addPackage(ls_pkg);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);

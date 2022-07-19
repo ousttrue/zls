@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const document = @import("document");
+const language_server = @import("language_server");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
 const Session = document.Session;
@@ -41,7 +42,7 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Di
 
     var arena = std.heap.ArenaAllocator.init(allocator);
 
-    while (document.LanguageServer.keep_running) {
+    while (language_server.LanguageServer.keep_running) {
         if (transport.readNext()) |content| {
             // parse
             json_parser.reset();
@@ -88,7 +89,7 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Di
             }
         } else |err| {
             logger.err("{s}", .{@errorName(err)});
-            document.LanguageServer.keep_running = false;
+            language_server.LanguageServer.keep_running = false;
             break;
         }
     }

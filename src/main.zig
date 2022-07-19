@@ -3,6 +3,7 @@ const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
 const known_folders = @import("known-folders");
 const document = @import("document");
+const language_server = @import("language_server");
 const lsp = @import("lsp");
 const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
@@ -43,7 +44,7 @@ pub fn log(
         return;
     }
     // After shutdown, pipe output to stderr
-    if (!document.LanguageServer.keep_running) {
+    if (!language_server.LanguageServer.keep_running) {
         std.debug.print("[{s}-{s}] " ++ format ++ "\n", .{ @tagName(message_level), @tagName(scope) } ++ args);
         return;
     }
@@ -297,7 +298,7 @@ pub fn main() anyerror!void {
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();
 
-    var ls = document.LanguageServer.init(allocator, &config);
+    var ls = language_server.LanguageServer.init(allocator, &config);
     defer ls.deinit();
 
     dispatcher.registerRequest(&ls, "initialize");

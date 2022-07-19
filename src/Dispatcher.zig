@@ -1,21 +1,22 @@
 const std = @import("std");
 const lsp = @import("lsp");
+const language_server = @import("language_server");
 const document = @import("document");
 const Session = document.Session;
 const logger = std.log.scoped(.jsonrpc);
 
-const RequestProto = fn (self: *document.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response;
+const RequestProto = fn (self: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response;
 const RequestFunctor = struct {
-    ls: *document.LanguageServer,
+    ls: *language_server.LanguageServer,
     proto: RequestProto,
     pub fn call(self: RequestFunctor, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response {
         return self.proto(self.ls, arena, id, params);
     }
 };
 
-const NotifyProto = fn (self: *document.LanguageServer, arena: *std.heap.ArenaAllocator, prams: ?std.json.Value) anyerror!void;
+const NotifyProto = fn (self: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, prams: ?std.json.Value) anyerror!void;
 const NotifyFunctor = struct {
-    ls: *document.LanguageServer,
+    ls: *language_server.LanguageServer,
     proto: NotifyProto,
     pub fn call(self: NotifyFunctor, arena: *std.heap.ArenaAllocator, params: ?std.json.Value) anyerror!void {
         return self.proto(self.ls, arena, params);
@@ -48,12 +49,12 @@ pub fn deinit(self: *Self) void {
 
 pub fn registerRequest(
     self: *Self,
-    ls: *document.LanguageServer,
+    ls: *language_server.LanguageServer,
     comptime method: []const u8,
 ) void {
-    const field = @field(document.LanguageServer, method);
+    const field = @field(language_server.LanguageServer, method);
     const S = struct {
-        fn call(ptr: *document.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response {
+        fn call(ptr: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response {
             return @call(.{}, field, .{ ptr, arena, id, params });
         }
     };
@@ -65,12 +66,12 @@ pub fn registerRequest(
 
 pub fn registerNotify(
     self: *Self,
-    ls: *document.LanguageServer,
+    ls: *language_server.LanguageServer,
     comptime method: []const u8,
 ) void {
-    const field = @field(document.LanguageServer, method);
+    const field = @field(language_server.LanguageServer, method);
     const S = struct {
-        fn call(ptr: *document.LanguageServer, arena: *std.heap.ArenaAllocator, params: ?std.json.Value) anyerror!void {
+        fn call(ptr: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, params: ?std.json.Value) anyerror!void {
             return @call(.{}, field, .{ ptr, arena, params });
         }
     };

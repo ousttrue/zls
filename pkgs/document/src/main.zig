@@ -1,10 +1,15 @@
 const std = @import("std");
 pub const Workspace = @import("./Workspace.zig");
+pub const Document = @import("./Document.zig");
 pub const Config = @import("./Config.zig");
 pub const Stdio = @import("./Stdio.zig");
 pub const Builtin = @import("./Builtin.zig");
-// pub const server = @import("server.zig");
-pub const LanguageServer = @import("./LanguageServer.zig");
+pub const ClientCapabilities = @import("./ClientCapabilities.zig");
+pub const semantic_tokens = @import("./semantic_tokens.zig");
+pub const offsets = @import("./offsets.zig");
+pub const document_symbols = @import("./document_symbols.zig");
+pub const hover_util = @import("./hover_util.zig");
+pub const completion_util = @import("./completion_util.zig");
 
 const analysis = @import("./analysis.zig");
 const builtin_completions = @import("./builtin_completions.zig");
