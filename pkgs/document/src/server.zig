@@ -711,10 +711,6 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
     return try getSignature(session, id, req);
 }
 
-pub fn gotoDefinitionHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
-    return try offsets.gotoHandler(session, id, req, true);
-}
-
 pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
     return try offsets.gotoHandler(session, id, req, false);
 }
