@@ -1,20 +1,20 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const shared = @import("./pkgs/document/src/shared.zig");
+const shared = @import("./pkgs/workspace/src/shared.zig");
 
 const lsp_pkg = std.build.Pkg{
     .name = "lsp",
     .source = .{ .path = "pkgs/lsp/src/main.zig" },
 };
-const document_pkg = std.build.Pkg{
-    .name = "document",
-    .source = .{ .path = "pkgs/document/src/main.zig" },
+const workspace_pkg = std.build.Pkg{
+    .name = "workspace",
+    .source = .{ .path = "pkgs/workspace/src/main.zig" },
     .dependencies = &.{lsp_pkg},
 };
 const ls_pkg = std.build.Pkg{
     .name = "language_server",
     .source = .{ .path = "pkgs/language_server/src/main.zig" },
-    .dependencies = &.{lsp_pkg, document_pkg},
+    .dependencies = &.{ lsp_pkg, workspace_pkg },
 };
 
 pub fn build(b: *std.build.Builder) !void {
@@ -40,7 +40,7 @@ pub fn build(b: *std.build.Builder) !void {
     exe.addPackage(.{ .name = "known-folders", .source = .{ .path = "src/known-folders/known-folders.zig" } });
     exe.addPackage(.{ .name = "zinput", .source = .{ .path = "src/zinput/src/main.zig" } });
     exe.addPackage(lsp_pkg);
-    exe.addPackage(document_pkg);
+    exe.addPackage(workspace_pkg);
     exe.addPackage(ls_pkg);
 
     exe.setTarget(target);

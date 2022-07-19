@@ -1,4 +1,4 @@
-const Builtin = @import("document").Builtin;
+const Builtin = @import("workspace").Builtin;
 
 pub const builtins = [_]Builtin{
     .{

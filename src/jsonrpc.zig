@@ -1,13 +1,13 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const document = @import("document");
+const ws = @import("workspace");
 const language_server = @import("language_server");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
-const Session = document.Session;
-const Workspace = document.Workspace;
-const Config = document.Config;
-const Stdio = document.Stdio;
+const Session = ws.Session;
+const Workspace = ws.Workspace;
+const Config = ws.Config;
+const Stdio = ws.Stdio;
 
 const logger = std.log.scoped(.jsonrpc);
 

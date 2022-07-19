@@ -2,16 +2,16 @@ const std = @import("std");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
 const known_folders = @import("known-folders");
-const document = @import("document");
+const workspace = @import("workspace");
 const language_server = @import("language_server");
 const lsp = @import("lsp");
 const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
-const Config = document.Config;
-const Stdio = document.Stdio;
-// const server = document.server;
+const Config = workspace.Config;
+const Stdio = workspace.Stdio;
+// const server = workspace.server;
 
 const logger = std.log.scoped(.main);
 
@@ -292,8 +292,8 @@ pub fn main() anyerror!void {
         config.build_runner_cache_path = try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
     }
 
-    document.init(allocator, &data.builtins, &config);
-    defer document.deinit();
+    workspace.init(allocator, &data.builtins, &config);
+    defer workspace.deinit();
 
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();
