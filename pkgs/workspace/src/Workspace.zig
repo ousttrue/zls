@@ -420,7 +420,7 @@ pub fn closeDocument(self: *Self, uri: []const u8) void {
     self.decrementCount(uri);
 }
 
-pub fn getHandle(self: *Self, uri: []const u8) !*Document {
+pub fn getDocument(self: *Self, uri: []const u8) !*Document {
     return self.handles.get(uri) orelse return error.NoDocument;
 }
 
@@ -625,7 +625,7 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
 
     for (handle.imports_used.items) |uri| {
         if (std.mem.eql(u8, uri, final_uri)) {
-            return self.getHandle(final_uri);
+            return self.getDocument(final_uri);
         }
     }
     // The URI must be somewhere in the import_uris or the package uris
@@ -647,7 +647,7 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
 
     // New import.
     // Check if the import is already opened by others.
-    if (self.getHandle(final_uri)) |new_handle| {
+    if (self.getDocument(final_uri)) |new_handle| {
         // If it is, append it to our imports, increment the count, set our new handle
         // and return the parsed tree root node.
         try handle.imports_used.append(self.allocator, handle_uri);

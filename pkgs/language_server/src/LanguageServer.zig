@@ -165,24 +165,24 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     _ = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
-    // if (createNotifyDiagnostics(self, handle)) |notification| {
+    // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}
 }
 
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
-    try self.workspace.applyChanges(handle, params.contentChanges.Array, offsets.offset_encoding);
-    // if (createNotifyDiagnostics(self, handle)) |notification| {
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    try self.workspace.applyChanges(doc, params.contentChanges.Array, offsets.offset_encoding);
+    // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}
 }
 
 pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SaveDocument, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
-    try self.workspace.applySave(handle);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    try self.workspace.applySave(doc);
 }
 
 pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
@@ -192,21 +192,21 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
 
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
     return lsp.Response{
         .id = id,
         .result = .{
-            .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), handle.tree, offsets.offset_encoding),
+            .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree, offsets.offset_encoding),
         },
     };
 }
 
 pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
     logger.debug("[hover]{s} {}", .{ params.textDocument.uri, params.position });
-    const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
-    return try hover_util.process(arena, &self.workspace, id, handle, doc_position, &self.client_capabilities);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    return try hover_util.process(arena, &self.workspace, id, doc, doc_position, &self.client_capabilities);
 }
 
 pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
@@ -219,8 +219,8 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
         };
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
-    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, handle, offsets.offset_encoding);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, doc, offsets.offset_encoding);
     return lsp.Response{
         .id = id,
         .result = .{ .SemanticTokensFull = .{ .data = token_array } },
@@ -234,7 +234,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
     };
 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
     var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, arena.allocator());
     process.stdin_behavior = .Pipe;
     process.stdout_behavior = .Pipe;
@@ -242,7 +242,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
         logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
         return lsp.Response.createNull(id);
     };
-    try process.stdin.?.writeAll(handle.document.text);
+    try process.stdin.?.writeAll(doc.document.text);
     process.stdin.?.close();
     process.stdin = null;
 
@@ -250,7 +250,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 
     var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
-        .range = try offsets.documentRange(handle.document, offsets.offset_encoding),
+        .range = try offsets.documentRange(doc.document, offsets.offset_encoding),
         .newText = stdout_bytes,
     };
 
@@ -272,9 +272,9 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
-    return try offsets.gotoHandler(arena, &self.workspace, id, handle, doc_position, true);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    return try offsets.gotoHandler(arena, &self.workspace, id, doc, doc_position, true);
 }
 
 pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
@@ -285,14 +285,14 @@ pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonPara
 
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Completion, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
-    return completion_util.process(arena, &self.workspace, id, handle, doc_position, self.config, &self.client_capabilities);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    return completion_util.process(arena, &self.workspace, id, doc, doc_position, self.config, &self.client_capabilities);
 }
 
 pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
-    const handle = try self.workspace.getHandle(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
-    return rename_util.process(arena, &self.workspace, id, handle, doc_position, params.newName);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName);
 }

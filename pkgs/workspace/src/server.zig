@@ -177,7 +177,7 @@ fn getSignature(session: *Session, id: i64, req: requests.SignatureHelp) !lsp.Re
         return lsp.Response{ .id = id, .result = no_signatures_response };
     }
 
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getDocument(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     if (try getSignatureInfo(
         session,
@@ -209,7 +209,7 @@ pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefi
 }
 
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
+    const handle = try session.workspace.getDocument(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
     const pos_context = position_context.documentPositionContext(session.arena, doc_position);
 
