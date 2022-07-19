@@ -314,11 +314,11 @@ pub fn main() anyerror!void {
     dispatcher.registerNotify(&ls, "$/cancelRequest");
     dispatcher.registerRequest(&ls, "textDocument/completion");
     dispatcher.registerRequest(&ls, "textDocument/rename");
+    dispatcher.registerRequest(&ls, "textDocument/references");
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
-    // dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
 
     jsonrpc.readloop(allocator, &transport, &dispatcher);
 }

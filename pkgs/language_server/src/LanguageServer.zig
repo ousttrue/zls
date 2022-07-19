@@ -11,6 +11,7 @@ const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
 const ClientCapabilities = ws.ClientCapabilities;
 const rename_util = @import("./rename_util.zig");
+const references_util = @import("./references_util.zig");
 const Self = @This();
 pub var keep_running: bool = true;
 const logger = std.log.scoped(.LanguageServer);
@@ -295,4 +296,11 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
     return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName);
+}
+
+pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    return references_util.process(arena, &self.workspace, id, doc, doc_position, params.context.includeDeclaration, self.config);
 }

@@ -125,44 +125,6 @@ fn createNotifyDiagnostics(session: *Session, handle: *const Document) !lsp.Noti
     // try notifyQueue.insert(0, notification);
 }
 
-fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *Document, pos_index: usize, include_decl: bool, skip_std_references: bool) !lsp.Response {
-    const decl = try offsets.getSymbolGlobal(session, pos_index, handle);
-    var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
-    try references.symbolReferences(
-        session,
-        decl,
-        offsets.offset_encoding,
-        include_decl,
-        &locs,
-        std.ArrayList(lsp.Location).append,
-        skip_std_references,
-    );
-    return lsp.Response{
-        .id = id,
-        .result = .{ .Locations = locs.items },
-    };
-}
-
-fn referencesDefinitionFieldAccess(session: *Session, id: i64, handle: *Document, position: DocumentPosition, range: analysis.SourceRange, include_decl: bool) !lsp.Response {
-    const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
-    var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
-    try references.symbolReferences(session, decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, session.config.skip_std_references);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .Locations = locs.items },
-    };
-}
-
-fn referencesDefinitionLabel(session: *Session, id: i64, handle: *Document, pos_index: usize, include_decl: bool) !lsp.Response {
-    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
-    var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
-    try references.labelReferences(decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .Locations = locs.items },
-    };
-}
-
 fn hasComment(tree: Ast.Tree, start_token: Ast.TokenIndex, end_token: Ast.TokenIndex) bool {
     const token_starts = tree.tokens.items(.start);
 
@@ -206,22 +168,4 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
 
 pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
     return try offsets.gotoHandler(session, id, req, false);
-}
-
-fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {
-    const handle = try session.workspace.getDocument(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
-
-    const include_decl = req.params.context.includeDeclaration;
-    return switch (pos_context) {
-        .var_access => try referencesDefinitionGlobal(session, id, handle, doc_position.absolute_index, include_decl, session.config.skip_std_references),
-        .field_access => |range| try referencesDefinitionFieldAccess(session, id, handle, doc_position, range, include_decl),
-        .label => try referencesDefinitionLabel(session, id, handle, doc_position.absolute_index, include_decl),
-        else => lsp.Response.createNull(id),
-    };
-}
-
-pub fn referencesHandler(session: *Session, id: i64, req: requests.References) !lsp.Response {
-    return try getReference(session, id, req);
 }
