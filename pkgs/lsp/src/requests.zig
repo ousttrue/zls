@@ -94,9 +94,7 @@ pub const ChangeDocument = struct {
 };
 
 const TextDocumentIdentifierRequest = struct {
-    params: struct {
-        textDocument: TextDocumentIdentifier,
-    },
+    textDocument: TextDocumentIdentifier,
 };
 
 pub const SaveDocument = TextDocumentIdentifierRequest;

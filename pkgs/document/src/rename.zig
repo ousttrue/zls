@@ -4,7 +4,7 @@ const analysis = @import("./analysis.zig");
 const references = @import("./references.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
-const Session = @import("./Session.zig");
+const Session = struct{};
 
 // TODO Use a map to array lists and collect at the end instead?
 const RefHandlerContext = struct {

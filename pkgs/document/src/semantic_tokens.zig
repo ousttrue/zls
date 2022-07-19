@@ -1,12 +1,12 @@
 const std = @import("std");
 const offsets = @import("./offsets.zig");
 const Document = @import("./Document.zig");
+const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
 const Ast = std.zig.Ast;
 const log = std.log.scoped(.semantic_tokens);
 const ast = @import("./ast.zig");
 const lsp = @import("lsp");
-const Session = @import("./Session.zig");
 
 const logger = std.log.scoped(.semantic_tokens);
 
@@ -239,7 +239,7 @@ const WriteTokensError = error{
     MovedBackwards,
 };
 
-fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.Index) WriteTokensError!void {
+fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace: *Workspace, maybe_node: ?Ast.Node.Index) WriteTokensError!void {
     const node = maybe_node orelse return;
 
     const handle = builder.handle;
@@ -251,8 +251,8 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
     if (node == 0 or node > node_data.len) return;
 
     const FrameSize = @sizeOf(@Frame(writeNodeTokens));
-    var child_frame = try session.arena.child_allocator.alignedAlloc(u8, std.Target.stack_align, FrameSize);
-    defer session.arena.child_allocator.free(child_frame);
+    var child_frame = try arena.child_allocator.alignedAlloc(u8, std.Target.stack_align, FrameSize);
+    defer arena.child_allocator.free(child_frame);
 
     const tag = node_tags[node];
     const main_token = main_tokens[node];
@@ -262,7 +262,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
         .container_field,
         .container_field_align,
         .container_field_init,
-        => try writeContainerField(builder, session, node, .property, child_frame),
+        => try writeContainerField(builder, arena, workspace, node, .property, child_frame),
         .@"errdefer" => {
             try builder.writeToken(main_token, .keyword);
 
@@ -273,7 +273,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 try builder.writeToken(payload_tok + 1, .operator);
             }
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .block,
         .block_semicolon,
@@ -301,9 +301,9 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
 
             for (statements) |child| {
                 if (node_tags[child].isContainerField()) {
-                    try writeContainerField(builder, session, child, .property, child_frame);
+                    try writeContainerField(builder, arena, workspace, child, .property, child_frame);
                 } else {
-                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, child });
+                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, child });
                 }
             }
         },
@@ -322,18 +322,18 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             try builder.writeToken(var_decl.comptime_token, .keyword);
             try builder.writeToken(var_decl.ast.mut_token, .keyword);
 
-            if (try analysis.resolveTypeOfNode(session, .{ .node = node, .handle = handle })) |decl_type| {
+            if (try analysis.resolveTypeOfNode(arena, workspace, .{ .node = node, .handle = handle })) |decl_type| {
                 try colorIdentifierBasedOnType(builder, decl_type, var_decl.ast.mut_token + 1, .{ .declaration = true });
             } else {
                 try builder.writeTokenMod(var_decl.ast.mut_token + 1, .variable, .{ .declaration = true });
             }
             try builder.writeToken(var_decl.ast.mut_token + 2, .operator);
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, var_decl.ast.type_node });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, var_decl.ast.align_node });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, var_decl.ast.section_node });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, var_decl.ast.type_node });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, var_decl.ast.align_node });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, var_decl.ast.section_node });
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, var_decl.ast.init_node });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, var_decl.ast.init_node });
         },
         .@"usingnamespace" => {
             const first_tok = tree.firstToken(node);
@@ -341,7 +341,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 try writeDocComments(builder, tree, first_tok - 1);
             try builder.writeToken(if (token_tags[first_tok] == .keyword_pub) first_tok else null, .keyword);
             try builder.writeToken(main_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
         },
         .container_decl,
         .container_decl_trailing,
@@ -371,17 +371,17 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             try builder.writeToken(decl.ast.main_token, .keyword);
             if (decl.ast.enum_token) |enum_token| {
                 if (decl.ast.arg != 0)
-                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, decl.ast.arg })
+                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, decl.ast.arg })
                 else
                     try builder.writeToken(enum_token, .keyword);
-            } else try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, decl.ast.arg });
+            } else try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, decl.ast.arg });
 
             const field_token_type = fieldTokenType(node, handle);
             for (decl.ast.members) |child| {
                 if (node_tags[child].isContainerField()) {
-                    try writeContainerField(builder, session, child, field_token_type, child_frame);
+                    try writeContainerField(builder, arena, workspace, child, field_token_type, child_frame);
                 } else {
-                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, child });
+                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, child });
                 }
             }
         },
@@ -397,7 +397,8 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             }
 
             if (try analysis.lookupSymbolGlobal(
-                session,
+                arena,
+                workspace,
                 handle,
                 tree.getNodeSource(node),
                 tree.tokens.items(.start)[main_token],
@@ -405,8 +406,8 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 if (child.decl.* == .param_decl) {
                     return try builder.writeToken(main_token, .parameter);
                 }
-                var bound_type_params = analysis.BoundTypeParams.init(session.arena.allocator());
-                if (try child.resolveType(session, &bound_type_params)) |decl_type| {
+                var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
+                if (try child.resolveType(arena, workspace, &bound_type_params)) |decl_type| {
                     try colorIdentifierBasedOnType(builder, decl_type, main_token, .{});
                 } else {
                     try builder.writeTokenMod(main_token, .variable, .{});
@@ -451,28 +452,28 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 try builder.writeTokenMod(param_decl.name_token, .parameter, .{ .declaration = true });
                 if (param_decl.anytype_ellipsis3) |any_token| {
                     try builder.writeToken(any_token, .type);
-                } else try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, param_decl.type_expr });
+                } else try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, param_decl.type_expr });
             }
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, fn_proto.ast.align_expr });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, fn_proto.ast.section_expr });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, fn_proto.ast.callconv_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, fn_proto.ast.align_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, fn_proto.ast.section_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, fn_proto.ast.callconv_expr });
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, fn_proto.ast.return_type });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, fn_proto.ast.return_type });
 
             if (tag == .fn_decl)
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .anyframe_type => {
             try builder.writeToken(main_token, .type);
             if (node_data[node].rhs != 0) {
                 try builder.writeToken(node_data[node].lhs, .type);
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
             }
         },
         .@"defer" => {
             try builder.writeToken(main_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .@"comptime",
         .@"nosuspend",
@@ -480,25 +481,25 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             if (analysis.getDocCommentTokenIndex(token_tags, main_token)) |doc|
                 try writeDocComments(builder, tree, doc);
             try builder.writeToken(main_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
         },
         .@"switch",
         .switch_comma,
         => {
             try builder.writeToken(main_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
             const extra = tree.extraData(node_data[node].rhs, Ast.Node.SubRange);
             const cases = tree.extra_data[extra.start..extra.end];
 
             for (cases) |case_node| {
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, case_node });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, case_node });
             }
         },
         .switch_case_one,
         .switch_case,
         => {
             const switch_case = if (tag == .switch_case) tree.switchCase(node) else tree.switchCaseOne(node);
-            for (switch_case.ast.values) |item_node| try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, item_node });
+            for (switch_case.ast.values) |item_node| try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, item_node });
             // check it it's 'else'
             if (switch_case.ast.values.len == 0) try builder.writeToken(switch_case.ast.arrow_token - 1, .keyword);
             try builder.writeToken(switch_case.ast.arrow_token, .operator);
@@ -506,7 +507,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 const actual_payload = payload_token + @boolToInt(token_tags[payload_token] == .asterisk);
                 try builder.writeToken(actual_payload, .variable);
             }
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, switch_case.ast.target_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, switch_case.ast.target_expr });
         },
         .@"while",
         .while_simple,
@@ -518,7 +519,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             try builder.writeToken(while_node.label_token, .event);
             try builder.writeToken(while_node.inline_token, .keyword);
             try builder.writeToken(while_node.ast.while_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, while_node.ast.cond_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, while_node.ast.cond_expr });
             if (while_node.payload_token) |payload| {
                 try builder.writeToken(payload - 1, .operator);
                 try builder.writeToken(payload, .variable);
@@ -530,9 +531,9 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 }
                 try builder.writeToken(r_pipe, .operator);
             }
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, while_node.ast.cont_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, while_node.ast.cont_expr });
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, while_node.ast.then_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, while_node.ast.then_expr });
 
             if (while_node.ast.else_expr != 0) {
                 try builder.writeToken(while_node.else_token, .keyword);
@@ -542,7 +543,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                     try builder.writeToken(err_token, .variable);
                     try builder.writeToken(err_token + 1, .operator);
                 }
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, while_node.ast.else_expr });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, while_node.ast.else_expr });
             }
         },
         .@"if",
@@ -551,7 +552,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             const if_node = ast.ifFull(tree, node);
 
             try builder.writeToken(if_node.ast.if_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, if_node.ast.cond_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, if_node.ast.cond_expr });
 
             if (if_node.payload_token) |payload| {
                 // if (?x) |x|
@@ -559,7 +560,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 try builder.writeToken(payload, .variable); // 	x
                 try builder.writeToken(payload + 1, .operator); // |
             }
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, if_node.ast.then_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, if_node.ast.then_expr });
 
             if (if_node.ast.else_expr != 0) {
                 try builder.writeToken(if_node.else_token, .keyword);
@@ -569,7 +570,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                     try builder.writeToken(err_token, .variable); // 	  err
                     try builder.writeToken(err_token + 1, .operator); // |
                 }
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, if_node.ast.else_expr });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, if_node.ast.else_expr });
             }
         },
         .array_init,
@@ -590,8 +591,8 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 else => unreachable,
             };
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, array_init.ast.type_expr });
-            for (array_init.ast.elements) |elem| try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, elem });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, array_init.ast.type_expr });
+            for (array_init.ast.elements) |elem| try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, elem });
         },
         .struct_init,
         .struct_init_comma,
@@ -614,9 +615,9 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             var field_token_type: ?lsp.SemanticTokenType = null;
 
             if (struct_init.ast.type_expr != 0) {
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, struct_init.ast.type_expr });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, struct_init.ast.type_expr });
 
-                field_token_type = if (try analysis.resolveTypeOfNode(session, .{
+                field_token_type = if (try analysis.resolveTypeOfNode(arena, workspace, .{
                     .node = struct_init.ast.type_expr,
                     .handle = handle,
                 })) |struct_type| switch (struct_type.type.data) {
@@ -633,7 +634,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 try builder.writeToken(init_token - 3, field_token_type orelse .property); // '.'
                 try builder.writeToken(init_token - 2, field_token_type orelse .property); // name
                 try builder.writeToken(init_token - 1, .operator); // '='
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, field_init });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, field_init });
             }
         },
         .call,
@@ -653,14 +654,14 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             };
 
             try builder.writeToken(call.async_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, call.ast.fn_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, call.ast.fn_expr });
 
             if (builder.previous_token) |prev| {
                 if (prev != ast.lastToken(tree, call.ast.fn_expr) and token_tags[ast.lastToken(tree, call.ast.fn_expr)] == .identifier) {
                     try builder.writeToken(ast.lastToken(tree, call.ast.fn_expr), .function);
                 }
             }
-            for (call.ast.params) |param| try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, param });
+            for (call.ast.params) |param| try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, param });
         },
         .slice,
         .slice_open,
@@ -673,27 +674,27 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 else => unreachable,
             };
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, slice.ast.sliced });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, slice.ast.start });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, slice.ast.sliced });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, slice.ast.start });
             try builder.writeToken(ast.lastToken(tree, slice.ast.start) + 1, .operator);
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, slice.ast.end });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, slice.ast.sentinel });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, slice.ast.end });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, slice.ast.sentinel });
         },
         .array_access => {
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .deref => {
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
             try builder.writeToken(main_token, .operator);
         },
         .unwrap_optional => {
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
             try builder.writeToken(main_token + 1, .operator);
         },
         .grouped_expression => {
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
         },
         .@"break",
         .@"continue",
@@ -701,11 +702,11 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             try builder.writeToken(main_token, .keyword);
             if (node_data[node].lhs != 0)
                 try builder.writeToken(node_data[node].lhs, .event);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .@"suspend", .@"return" => {
             try builder.writeToken(main_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
         },
         .integer_literal,
         .float_literal,
@@ -735,7 +736,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
 
             try builder.writeToken(main_token, .function);
             for (params) |param|
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, param });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, param });
         },
         .string_literal,
         .char_literal,
@@ -767,7 +768,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
 
             try builder.writeToken(main_token, .keyword);
             try builder.writeToken(asm_node.volatile_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, asm_node.ast.template });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, asm_node.ast.template });
             // TODO Inputs, outputs.
         },
         .test_decl => {
@@ -778,14 +779,14 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             if (token_tags[main_token + 1] == .string_literal)
                 try builder.writeToken(main_token + 1, .string);
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .@"catch" => {
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
             try builder.writeToken(main_token, .keyword);
             if (token_tags[main_token + 1] == .pipe)
                 try builder.writeToken(main_token + 1, .variable);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .add,
         .add_wrap,
@@ -837,29 +838,30 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
         .sub_sat,
         .@"orelse",
         => {
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
             const token_type: lsp.SemanticTokenType = switch (tag) {
                 .bool_and, .bool_or, .@"orelse" => .keyword,
                 else => .operator,
             };
 
             try builder.writeToken(main_token, token_type);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].rhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].rhs });
         },
         .field_access => {
             const data = node_data[node];
             if (data.rhs == 0) return;
             const rhs_str = tree.tokenSlice(data.rhs);
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, data.lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, data.lhs });
 
             // TODO This is basically exactly the same as what is done in analysis.resolveTypeOfNode, with the added
             //      writeToken code.
             // Maybe we can hook into it insead? Also applies to Identifier and VarDecl
-            var bound_type_params = analysis.BoundTypeParams.init(session.arena.allocator());
+            var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
             const lhs_type = try analysis.resolveFieldAccessLhsType(
-                session,
-                (try analysis.resolveTypeOfNodeInternal(session, .{
+                arena,
+                workspace,
+                (try analysis.resolveTypeOfNodeInternal(arena, workspace, .{
                     .node = data.lhs,
                     .handle = handle,
                 }, &bound_type_params)) orelse return,
@@ -869,7 +871,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                 .other => |n| n,
                 else => return,
             };
-            if (try analysis.lookupSymbolContainer(session, .{
+            if (try analysis.lookupSymbolContainer(arena, workspace, .{
                 .node = left_type_node,
                 .handle = lhs_type.handle,
             }, rhs_str, !lhs_type.type.is_type_val)) |decl_type| {
@@ -892,7 +894,7 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
                     else => {},
                 }
 
-                if (try decl_type.resolveType(session, &bound_type_params)) |resolved_type| {
+                if (try decl_type.resolveType(arena, workspace, &bound_type_params)) |resolved_type| {
                     try colorIdentifierBasedOnType(builder, resolved_type, data.rhs, .{});
                 }
             }
@@ -907,12 +909,12 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             if (ptr_type.size == .One and token_tags[main_token] == .asterisk_asterisk and
                 main_token == main_tokens[ptr_type.ast.child_type])
             {
-                return try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, ptr_type.ast.child_type });
+                return try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, ptr_type.ast.child_type });
             }
 
             if (ptr_type.size == .One) try builder.writeToken(main_token, .operator);
             if (ptr_type.ast.sentinel != 0) {
-                return try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, ptr_type.ast.sentinel });
+                return try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, ptr_type.ast.sentinel });
             }
 
             try builder.writeToken(ptr_type.allowzero_token, .keyword);
@@ -920,19 +922,19 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             if (ptr_type.ast.align_node != 0) {
                 const first_tok = tree.firstToken(ptr_type.ast.align_node);
                 try builder.writeToken(first_tok - 2, .keyword);
-                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, ptr_type.ast.align_node });
+                try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, ptr_type.ast.align_node });
 
                 if (ptr_type.ast.bit_range_start != 0) {
-                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, ptr_type.ast.bit_range_start });
+                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, ptr_type.ast.bit_range_start });
                     try builder.writeToken(tree.firstToken(ptr_type.ast.bit_range_end - 1), .operator);
-                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, ptr_type.ast.bit_range_end });
+                    try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, ptr_type.ast.bit_range_end });
                 }
             }
 
             try builder.writeToken(ptr_type.const_token, .keyword);
             try builder.writeToken(ptr_type.volatile_token, .keyword);
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, ptr_type.ast.child_type });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, ptr_type.ast.child_type });
         },
         .array_type,
         .array_type_sentinel,
@@ -942,10 +944,10 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
             else
                 tree.arrayTypeSentinel(node);
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, array_type.ast.elem_count });
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, array_type.ast.sentinel });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, array_type.ast.elem_count });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, array_type.ast.sentinel });
 
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, array_type.ast.elem_type });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, array_type.ast.elem_type });
         },
         .address_of,
         .bit_not,
@@ -955,20 +957,20 @@ fn writeNodeTokens(builder: *Builder, session: *Session, maybe_node: ?Ast.Node.I
         .negation_wrap,
         => {
             try builder.writeToken(main_token, .operator);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
         },
         .@"try",
         .@"resume",
         .@"await",
         => {
             try builder.writeToken(main_token, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, node_data[node].lhs });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
         },
         .anyframe_literal => try builder.writeToken(main_token, .keyword),
     }
 }
 
-fn writeContainerField(builder: *Builder, session: *Session, node: Ast.Node.Index, field_token_type: ?lsp.SemanticTokenType, child_frame: anytype) !void {
+fn writeContainerField(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace: *Workspace, node: Ast.Node.Index, field_token_type: ?lsp.SemanticTokenType, child_frame: anytype) !void {
     const tree = builder.handle.tree;
     const container_field = ast.containerField(tree, node).?;
     const base = tree.nodes.items(.main_token)[node];
@@ -981,10 +983,10 @@ fn writeContainerField(builder: *Builder, session: *Session, node: Ast.Node.Inde
     if (field_token_type) |tok_type| try builder.writeToken(container_field.ast.name_token, tok_type);
 
     if (container_field.ast.type_expr != 0) {
-        try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, container_field.ast.type_expr });
+        try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, container_field.ast.type_expr });
         if (container_field.ast.align_expr != 0) {
             try builder.writeToken(tree.firstToken(container_field.ast.align_expr) - 2, .keyword);
-            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, container_field.ast.align_expr });
+            try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, container_field.ast.align_expr });
         }
     }
 
@@ -997,19 +999,19 @@ fn writeContainerField(builder: *Builder, session: *Session, node: Ast.Node.Inde
             break :block;
 
         try builder.writeToken(eq_tok, .operator);
-        try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, session, container_field.ast.value_expr });
+        try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, container_field.ast.value_expr });
     }
 }
 
 // TODO Range version, edit version.
-pub fn writeAllSemanticTokens(session: *Session, handle: *Document, encoding: offsets.Encoding) ![]u32 {
-    var builder = Builder.init(session.arena.child_allocator, handle, encoding);
+pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, encoding: offsets.Encoding) ![]u32 {
+    var builder = Builder.init(arena.child_allocator, handle, encoding);
     errdefer builder.arr.deinit();
 
     // reverse the ast from the root declarations
     var buf: [2]Ast.Node.Index = undefined;
     for (ast.declMembers(handle.tree, 0, &buf)) |child| {
-        writeNodeTokens(&builder, session, child) catch |err| switch (err) {
+        writeNodeTokens(&builder, arena, workspace, child) catch |err| switch (err) {
             error.MovedBackwards => break,
             else => |e| return e,
         };

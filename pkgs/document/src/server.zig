@@ -13,10 +13,11 @@ const semantic_tokens = @import("./semantic_tokens.zig");
 const shared = @import("./shared.zig");
 const Ast = std.zig.Ast;
 const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
-const Session = @import("./Session.zig");
 const builtin_completions = @import("./builtin_completions.zig");
 const position_context = @import("./position_context.zig");
 const DocumentPosition = @import("./document_position.zig").DocumentPosition;
+
+const Session = struct {};
 
 const logger = std.log.scoped(.main);
 
@@ -41,12 +42,6 @@ const no_signatures_response = lsp.ResponseParams{
         .signatures = &.{},
         .activeSignature = null,
         .activeParameter = null,
-    },
-};
-
-const no_semantic_tokens_response = lsp.ResponseParams{
-    .SemanticTokensFull = .{
-        .data = &.{},
     },
 };
 
@@ -880,19 +875,6 @@ pub fn saveDocumentHandler(session: *Session, req: requests.SaveDocument) !void 
 
 pub fn closeDocumentHandler(session: *Session, req: requests.CloseDocument) !void {
     session.workspace.closeDocument(req.params.textDocument.uri);
-}
-
-pub fn semanticTokensFullHandler(session: *Session, id: i64, req: requests.SemanticTokensFull) !lsp.Response {
-    if (!session.config.enable_semantic_tokens) {
-        return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
-    }
-
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
-    const token_array = try semantic_tokens.writeAllSemanticTokens(session, handle, offsets.offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .SemanticTokensFull = .{ .data = token_array } },
-    };
 }
 
 pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {

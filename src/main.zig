@@ -302,7 +302,7 @@ pub fn main() anyerror!void {
 
     dispatcher.registerRequest(&ls, "initialize");
     dispatcher.registerRequest(&ls, "shutdown");
-    // dispatcher.registerRequest("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
+    dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
     // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);

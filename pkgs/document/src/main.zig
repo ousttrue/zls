@@ -1,5 +1,4 @@
 const std = @import("std");
-pub const Session = @import("./Session.zig");
 pub const Workspace = @import("./Workspace.zig");
 pub const Config = @import("./Config.zig");
 pub const Stdio = @import("./Stdio.zig");

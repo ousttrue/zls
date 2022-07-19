@@ -1,14 +1,13 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
-const Session = @import("./Session.zig");
 const Document = @import("./Document.zig");
 const TextDocument = @import("./TextDocument.zig");
 const analysis = @import("./analysis.zig");
 const ast = @import("./ast.zig");
 const DocumentPosition = @import("./document_position.zig").DocumentPosition;
 const position_context = @import("./position_context.zig");
-
+const Session = struct {};
 const logger = std.log.scoped(.offset);
 
 pub const OffsetError = error{
