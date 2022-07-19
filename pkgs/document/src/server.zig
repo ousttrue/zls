@@ -962,19 +962,6 @@ pub fn hoverHandler(session: *Session, id: i64, req: requests.Hover) !lsp.Respon
     }
 }
 
-fn getDocumentSymbol(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
-
-    return lsp.Response{
-        .id = id,
-        .result = .{ .DocumentSymbols = try analysis.getDocumentSymbols(session.arena.allocator(), handle.tree, offsets.offset_encoding) },
-    };
-}
-
-pub fn documentSymbolsHandler(session: *Session, id: i64, req: requests.DocumentSymbols) !lsp.Response {
-    return try getDocumentSymbol(session, id, req);
-}
-
 fn doFormat(session: *Session, id: i64, req: requests.Formatting) !lsp.Response {
     const zig_exe_path = session.config.zig_exe_path orelse {
         logger.warn("no zig_exe_path", .{});

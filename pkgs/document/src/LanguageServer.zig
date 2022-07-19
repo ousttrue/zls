@@ -3,8 +3,10 @@ const lsp = @import("lsp");
 const Config = @import("./Config.zig");
 const Workspace = @import("./Workspace.zig");
 const server = @import("./server.zig");
+const analysis = @import("./analysis.zig");
 const semantic_tokens = @import("./semantic_tokens.zig");
 const offsets = @import("./offsets.zig");
+const document_symbols = @import("./document_symbols.zig");
 const Self = @This();
 const root = @import("root");
 pub var keep_running: bool = true;
@@ -82,6 +84,15 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
     self.workspace.closeDocument(params.textDocument.uri);
 }
 
+pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
+    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    return lsp.Response{
+        .id = id,
+        .result = .{ .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), handle.tree, offsets.offset_encoding) ,},
+    };
+}
+
 const no_semantic_tokens_response = lsp.ResponseParams{
     .SemanticTokensFull = .{
         .data = &.{},
@@ -94,7 +105,6 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const handle = try self.workspace.getHandle(params.textDocument.uri);
-    // return try server.semanticTokensFullHandler(id, handle);
     const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, handle, offsets.offset_encoding);
     return lsp.Response{
         .id = id,

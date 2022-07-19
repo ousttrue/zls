@@ -307,14 +307,14 @@ pub fn main() anyerror!void {
     dispatcher.registerNotify(&ls, "textDocument/didSave");
     dispatcher.registerNotify(&ls, "textDocument/didClose");
     dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
-    // dispatcher.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
+    dispatcher.registerRequest(&ls, "textDocument/documentSymbol");
+    // dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
     // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
-    // dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
     // dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
     // dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
     // dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
