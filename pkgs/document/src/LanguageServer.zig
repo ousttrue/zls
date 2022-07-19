@@ -209,15 +209,14 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     return try hover_util.process(arena, &self.workspace, id, handle, doc_position, &self.client_capabilities);
 }
 
-const no_semantic_tokens_response = lsp.ResponseParams{
-    .SemanticTokensFull = .{
-        .data = &.{},
-    },
-};
-
 pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     if (!self.config.enable_semantic_tokens) {
-        return lsp.Response{ .id = id, .result = no_semantic_tokens_response };
+        return lsp.Response{
+            .id = id,
+            .result = lsp.ResponseParams{ .SemanticTokensFull = .{
+                .data = &.{},
+            } },
+        };
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const handle = try self.workspace.getHandle(params.textDocument.uri);
