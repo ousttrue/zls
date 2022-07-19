@@ -303,7 +303,11 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&ls, "initialize");
     dispatcher.registerRequest(&ls, "shutdown");
     dispatcher.registerNotify(&ls, "textDocument/didOpen");
+    dispatcher.registerNotify(&ls, "textDocument/didChange");
+    dispatcher.registerNotify(&ls, "textDocument/didSave");
+    dispatcher.registerNotify(&ls, "textDocument/didClose");
     dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
+    // dispatcher.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
     // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
@@ -311,13 +315,9 @@ pub fn main() anyerror!void {
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
     // dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
-    // dispatcher.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
     // dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
     // dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
     // dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
-    // dispatcher.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
-    // dispatcher.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
-    // dispatcher.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
 
     jsonrpc.readloop(allocator, &transport, &dispatcher);
 }

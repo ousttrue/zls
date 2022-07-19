@@ -853,23 +853,6 @@ pub fn initializeHandler(id: i64, req: requests.Initialize) !lsp.Response {
     };
 }
 
-pub fn changeDocumentHandler(session: *Session, req: requests.ChangeDocument) !void {
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
-    try session.workspace.applyChanges(handle, req.params.contentChanges.Array, offsets.offset_encoding);
-    if (createNotifyDiagnostics(session, handle)) |notification| {
-        session.transport.sendToJson(notification);
-    } else |_| {}
-}
-
-pub fn saveDocumentHandler(session: *Session, req: requests.SaveDocument) !void {
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
-    try session.workspace.applySave(handle);
-}
-
-pub fn closeDocumentHandler(session: *Session, req: requests.CloseDocument) !void {
-    session.workspace.closeDocument(req.params.textDocument.uri);
-}
-
 pub fn completionHandler(session: *Session, id: i64, req: requests.Completion) !lsp.Response {
     const handle = try session.workspace.getHandle(req.params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);

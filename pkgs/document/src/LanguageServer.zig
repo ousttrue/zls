@@ -55,12 +55,31 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
 }
 
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    _ = self;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     _ = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
-    // if (createNotifyDiagnostics(session, handle)) |notification| {
-    //     session.transport.sendToJson(notification);
+    // if (createNotifyDiagnostics(self, handle)) |notification| {
+    //     self.transport.sendToJson(notification);
     // } else |_| {}
+}
+
+pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
+    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    try self.workspace.applyChanges(handle, params.contentChanges.Array, offsets.offset_encoding);
+    // if (createNotifyDiagnostics(self, handle)) |notification| {
+    //     self.transport.sendToJson(notification);
+    // } else |_| {}
+}
+
+pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.SaveDocument, jsonParams.?);
+    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    try self.workspace.applySave(handle);
+}
+
+pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.CloseDocument, jsonParams.?);
+    self.workspace.closeDocument(params.textDocument.uri);
 }
 
 const no_semantic_tokens_response = lsp.ResponseParams{
