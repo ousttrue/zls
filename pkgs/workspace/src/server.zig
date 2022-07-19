@@ -125,47 +125,6 @@ fn createNotifyDiagnostics(session: *Session, handle: *const Document) !lsp.Noti
     // try notifyQueue.insert(0, notification);
 }
 
-
-
-fn renameDefinitionGlobal(session: *Session, id: i64, handle: *Document, pos_index: usize, new_name: []const u8) !lsp.Response {
-    const decl = try offsets.getSymbolGlobal(session, pos_index, handle);
-
-    var workspace_edit = lsp.WorkspaceEdit{
-        .changes = std.StringHashMap([]lsp.TextEdit).init(session.arena.allocator()),
-    };
-    try rename.renameSymbol(session, decl, new_name, &workspace_edit.changes.?, offsets.offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .WorkspaceEdit = workspace_edit },
-    };
-}
-
-fn renameDefinitionFieldAccess(session: *Session, id: i64, handle: *Document, position: DocumentPosition, range: analysis.SourceRange, new_name: []const u8) !lsp.Response {
-    const decl = try offsets.getSymbolFieldAccess(session, handle, position, range);
-
-    var workspace_edit = lsp.WorkspaceEdit{
-        .changes = std.StringHashMap([]lsp.TextEdit).init(session.arena.allocator()),
-    };
-    try rename.renameSymbol(session, decl, new_name, &workspace_edit.changes.?, offsets.offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .WorkspaceEdit = workspace_edit },
-    };
-}
-
-fn renameDefinitionLabel(session: *Session, id: i64, handle: *Document, pos_index: usize, new_name: []const u8) !lsp.Response {
-    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
-
-    var workspace_edit = lsp.WorkspaceEdit{
-        .changes = std.StringHashMap([]lsp.TextEdit).init(session.arena.allocator()),
-    };
-    try rename.renameLabel(session, decl, new_name, &workspace_edit.changes.?, offsets.offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .WorkspaceEdit = workspace_edit },
-    };
-}
-
 fn referencesDefinitionGlobal(session: *Session, id: i64, handle: *Document, pos_index: usize, include_decl: bool, skip_std_references: bool) !lsp.Response {
     const decl = try offsets.getSymbolGlobal(session, pos_index, handle);
     var locs = std.ArrayList(lsp.Location).init(session.arena.allocator());
@@ -247,23 +206,6 @@ pub fn signatureHelpHandler(session: *Session, id: i64, req: requests.SignatureH
 
 pub fn gotoDeclarationHandler(session: *Session, id: i64, req: requests.GotoDefinition) !lsp.Response {
     return try offsets.gotoHandler(session, id, req, false);
-}
-
-fn doRename(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
-    const handle = try session.workspace.getHandle(req.params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(handle.document, req.params.position, offsets.offset_encoding);
-    const pos_context = position_context.documentPositionContext(session.arena, doc_position);
-
-    return switch (pos_context) {
-        .var_access => try renameDefinitionGlobal(session, id, handle, doc_position.absolute_index, req.params.newName),
-        .field_access => |range| try renameDefinitionFieldAccess(session, id, handle, doc_position, range, req.params.newName),
-        .label => try renameDefinitionLabel(session, id, handle, doc_position.absolute_index, req.params.newName),
-        else => lsp.Response.createNull(id),
-    };
-}
-
-pub fn renameHandler(session: *Session, id: i64, req: requests.Rename) !lsp.Response {
-    return try doRename(session, id, req);
 }
 
 fn getReference(session: *Session, id: i64, req: requests.References) !lsp.Response {

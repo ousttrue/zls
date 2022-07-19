@@ -37,7 +37,6 @@ fn Transform(comptime Original: type, comptime transform_fn: anytype) type {
     };
 }
 
-
 const MaybeStringArray = Default([]const []const u8, &.{});
 
 pub const Initialize = struct {
@@ -126,19 +125,15 @@ pub const Hover = TextDocumentIdentifierPositionRequest;
 pub const DocumentSymbols = TextDocumentIdentifierRequest;
 pub const Formatting = TextDocumentIdentifierRequest;
 pub const Rename = struct {
-    params: struct {
-        textDocument: TextDocumentIdentifier,
-        position: types.Position,
-        newName: []const u8,
-    },
+    textDocument: TextDocumentIdentifier,
+    position: types.Position,
+    newName: []const u8,
 };
 
 pub const References = struct {
-    params: struct {
-        textDocument: TextDocumentIdentifier,
-        position: types.Position,
-        context: struct {
-            includeDeclaration: bool,
-        },
+    textDocument: TextDocumentIdentifier,
+    position: types.Position,
+    context: struct {
+        includeDeclaration: bool,
     },
 };

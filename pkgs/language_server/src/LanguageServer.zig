@@ -10,10 +10,10 @@ const document_symbols = ws.document_symbols;
 const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
 const ClientCapabilities = ws.ClientCapabilities;
+const rename_util = @import("./rename_util.zig");
 const Self = @This();
 pub var keep_running: bool = true;
 const logger = std.log.scoped(.LanguageServer);
-
 
 config: *Config,
 workspace: Workspace = undefined,
@@ -288,4 +288,11 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const handle = try self.workspace.getHandle(params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
     return completion_util.process(arena, &self.workspace, id, handle, doc_position, self.config, &self.client_capabilities);
+}
+
+pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
+    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
+    return rename_util.process(arena, &self.workspace, id, handle, doc_position, params.newName);
 }

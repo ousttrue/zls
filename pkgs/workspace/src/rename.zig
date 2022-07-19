@@ -4,7 +4,7 @@ const analysis = @import("./analysis.zig");
 const references = @import("./references.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
-const Session = struct{};
+const Session = struct {};
 
 // TODO Use a map to array lists and collect at the end instead?
 const RefHandlerContext = struct {
@@ -26,20 +26,27 @@ fn refHandler(context: RefHandlerContext, loc: lsp.Location) !void {
     try context.edits.put(loc.uri, text_edits.toOwnedSlice());
 }
 
-pub fn renameSymbol(session: *Session, decl_handle: analysis.DeclWithHandle, new_name: []const u8, edits: *std.StringHashMap([]lsp.TextEdit), encoding: offsets.Encoding) !void {
+pub fn renameSymbol(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    decl_handle: analysis.DeclWithHandle,
+    new_name: []const u8,
+    edits: *std.StringHashMap([]lsp.TextEdit),
+    encoding: offsets.Encoding,
+) !void {
     std.debug.assert(decl_handle.decl.* != .label_decl);
-    try references.symbolReferences(session, decl_handle, encoding, true, RefHandlerContext{
+    try references.symbolReferences(arena, workspace, decl_handle, encoding, true, RefHandlerContext{
         .edits = edits,
-        .allocator = session.arena.allocator(),
+        .allocator = arena.allocator(),
         .new_name = new_name,
     }, refHandler, true);
 }
 
-pub fn renameLabel(session: *Session, decl_handle: analysis.DeclWithHandle, new_name: []const u8, edits: *std.StringHashMap([]lsp.TextEdit), encoding: offsets.Encoding) !void {
+pub fn renameLabel(arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle, new_name: []const u8, edits: *std.StringHashMap([]lsp.TextEdit), encoding: offsets.Encoding) !void {
     std.debug.assert(decl_handle.decl.* == .label_decl);
     try references.labelReferences(decl_handle, encoding, true, RefHandlerContext{
         .edits = edits,
-        .allocator = session.arena.allocator(),
+        .allocator = arena.allocator(),
         .new_name = new_name,
     }, refHandler);
 }
