@@ -4,8 +4,24 @@ const document = @import("document");
 const Session = document.Session;
 const logger = std.log.scoped(.jsonrpc);
 
-const RequestProto = fn (session: *Session, id: i64) anyerror!lsp.Response;
-const NotifyProto = fn (session: *Session) anyerror!void;
+const RequestProto = fn (self: *document.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response;
+const RequestFunctor = struct {
+    ls: *document.LanguageServer,
+    proto: RequestProto,
+    pub fn call(self: RequestFunctor, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response {
+        return self.proto(self.ls, arena, id, params);
+    }
+};
+
+const NotifyProto = fn (self: *document.LanguageServer, arena: *std.heap.ArenaAllocator, prams: ?std.json.Value) anyerror!void;
+const NotifyFunctor = struct {
+    ls: *document.LanguageServer,
+    proto: NotifyProto,
+    pub fn call(self: NotifyFunctor, arena: *std.heap.ArenaAllocator, params: ?std.json.Value) anyerror!void {
+        return self.proto(self.ls, arena, params);
+    }
+};
+
 const Self = @This();
 
 pub const Error = error{
@@ -15,13 +31,13 @@ pub const Error = error{
     InternalError,
 };
 
-request_map: std.StringHashMap(RequestProto),
-notify_map: std.StringHashMap(NotifyProto),
+request_map: std.StringHashMap(RequestFunctor),
+notify_map: std.StringHashMap(NotifyFunctor),
 
 pub fn init(allocator: std.mem.Allocator) Self {
     return .{
-        .request_map = std.StringHashMap(RequestProto).init(allocator),
-        .notify_map = std.StringHashMap(NotifyProto).init(allocator),
+        .request_map = std.StringHashMap(RequestFunctor).init(allocator),
+        .notify_map = std.StringHashMap(NotifyFunctor).init(allocator),
     };
 }
 
@@ -32,53 +48,42 @@ pub fn deinit(self: *Self) void {
 
 pub fn registerRequest(
     self: *Self,
-    method: []const u8,
-    comptime ParamType: type,
-    comptime callback: fn (session: *Session, id: i64, req: ParamType) anyerror!lsp.Response,
+    ls: *document.LanguageServer,
+    comptime method: []const u8,
 ) void {
-    if (ParamType == void) {
-        const T = struct {
-            pub fn request(session: *Session, id: i64) anyerror!lsp.Response {
-                return callback(session, id, .{});
-            }
-        };
-        self.request_map.put(method, T.request) catch @panic("put");
-    } else {
-        const T = struct {
-            pub fn request(session: *Session, id: i64) anyerror!lsp.Response {
-                if (session.getParam(ParamType)) |req| {
-                    return try callback(session, id, req);
-                } else |_| {
-                    return Error.InvalidParams;
-                }
-            }
-        };
-        self.request_map.put(method, T.request) catch @panic("put");
-    }
+    const field = @field(document.LanguageServer, method);
+    const S = struct {
+        fn call(ptr: *document.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response {
+            return @call(.{}, field, .{ ptr, arena, id, params });
+        }
+    };
+    self.request_map.put(method, RequestFunctor{
+        .ls = ls,
+        .proto = S.call,
+    }) catch @panic("put");
 }
 
 pub fn registerNotify(
     self: *Self,
-    method: []const u8,
-    comptime ParamType: type,
-    comptime callback: fn (session: *Session, req: ParamType) anyerror!void,
+    ls: *document.LanguageServer,
+    comptime method: []const u8,
 ) void {
-    const T = struct {
-        pub fn notify(session: *Session) anyerror!void {
-            if (session.getParam(ParamType)) |req| {
-                try callback(session, req);
-            } else |_| {
-                return Error.InvalidParams;
-            }
+    const field = @field(document.LanguageServer, method);
+    const S = struct {
+        fn call(ptr: *document.LanguageServer, arena: *std.heap.ArenaAllocator, params: ?std.json.Value) anyerror!void {
+            @call(.{}, field, .{ ptr, arena, params });
         }
     };
-    self.notify_map.put(method, T.notify) catch @panic("put");
+    self.notify_map.put(method, NotifyFunctor{
+        .ls = ls,
+        .proto = S.call,
+    }) catch @panic("put");
 }
 
-pub fn dispatchRequest(self: Self, session: *Session, id: i64, method: []const u8) !lsp.Response {
-    if (self.request_map.get(method)) |handler| {
+pub fn dispatchRequest(self: Self, arena: *std.heap.ArenaAllocator, id: i64, method: []const u8, params: ?std.json.Value) !lsp.Response {
+    if (self.request_map.get(method)) |functor| {
         const start_time = std.time.milliTimestamp();
-        if (handler(session, id)) |res| {
+        if (functor.call(arena, id, params)) |res| {
             const end_time = std.time.milliTimestamp();
             logger.info("id[{}] {s} => {}ms", .{ id, method, end_time - start_time });
             return res;
@@ -93,10 +98,10 @@ pub fn dispatchRequest(self: Self, session: *Session, id: i64, method: []const u
     }
 }
 
-pub fn dispatchNotify(self: *Self, session: *Session, method: []const u8) !void {
-    if (self.notify_map.get(method)) |handler| {
+pub fn dispatchNotify(self: *Self, arena: *std.heap.ArenaAllocator, method: []const u8, params: ?std.json.Value) !void {
+    if (self.notify_map.get(method)) |functor| {
         const start_time = std.time.milliTimestamp();
-        if (handler(session)) {
+        if (functor.call(arena, params)) {
             const end_time = std.time.milliTimestamp();
             logger.info("{s} => {}ms", .{ method, end_time - start_time });
         } else |err| {

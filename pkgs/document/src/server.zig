@@ -753,16 +753,14 @@ fn completeDot(session: *Session, id: i64, handle: *Document) !lsp.Response {
     };
 }
 
-pub fn initializeHandler(session: *Session, id: i64, req: requests.Initialize) !lsp.Response {
-    _ = session;
-
-    for (req.params.capabilities.offsetEncoding.value) |encoding| {
+pub fn initializeHandler(id: i64, req: requests.Initialize) !lsp.Response {
+    for (req.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
             offsets.offset_encoding = .utf8;
         }
     }
 
-    if (req.params.capabilities.textDocument) |textDocument| {
+    if (req.capabilities.textDocument) |textDocument| {
         client_capabilities.supports_semantic_tokens = textDocument.semanticTokens.exists;
         if (textDocument.hover) |hover| {
             for (hover.contentFormat.value) |format| {

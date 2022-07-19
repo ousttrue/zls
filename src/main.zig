@@ -10,7 +10,7 @@ const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
 const Config = document.Config;
 const Stdio = document.Stdio;
-const server = document.server;
+// const server = document.server;
 
 const logger = std.log.scoped(.main);
 
@@ -43,7 +43,7 @@ pub fn log(
         return;
     }
     // After shutdown, pipe output to stderr
-    if (!jsonrpc.keep_running) {
+    if (!document.LanguageServer.keep_running) {
         std.debug.print("[{s}-{s}] " ++ format ++ "\n", .{ @tagName(message_level), @tagName(scope) } ++ args);
         return;
     }
@@ -110,9 +110,10 @@ fn loadConfigInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Co
 }
 
 pub fn main() anyerror!void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer std.debug.assert(!gpa.deinit());
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    // defer std.debug.assert(!gpa.deinit());
+    const allocator = std.heap.page_allocator;
 
     transport = Stdio.init(allocator);
 
@@ -295,24 +296,28 @@ pub fn main() anyerror!void {
 
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();
-    dispatcher.registerRequest("initialize", requests.Initialize, server.initializeHandler);
-    dispatcher.registerRequest("shutdown", void, jsonrpc.shutdownHandler);
-    dispatcher.registerRequest("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
-    dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
-    dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
-    dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
-    dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
-    dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
-    dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
-    dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
-    dispatcher.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
-    dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
-    dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
-    dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
-    dispatcher.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
-    dispatcher.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
-    dispatcher.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
-    dispatcher.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
 
-    jsonrpc.readloop(allocator, &transport, &config, &dispatcher);
+    var ls = document.LanguageServer.init(allocator, &config);
+    defer ls.deinit();
+
+    dispatcher.registerRequest(&ls, "initialize");
+    dispatcher.registerRequest(&ls, "shutdown");
+    // dispatcher.registerRequest("textDocument/semanticTokens/full", requests.SemanticTokensFull, server.semanticTokensFullHandler);
+    // dispatcher.registerRequest("textDocument/completion", requests.Completion, server.completionHandler);
+    // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
+    // dispatcher.registerRequest("textDocument/definition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
+    // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
+    // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
+    // dispatcher.registerRequest("textDocument/hover", requests.Hover, server.hoverHandler);
+    // dispatcher.registerRequest("textDocument/documentSymbol", requests.DocumentSymbols, server.documentSymbolsHandler);
+    // dispatcher.registerRequest("textDocument/formatting", requests.Formatting, server.formattingHandler);
+    // dispatcher.registerRequest("textDocument/rename", requests.Rename, server.renameHandler);
+    // dispatcher.registerRequest("textDocument/references", requests.References, server.referencesHandler);
+    // dispatcher.registerNotify("textDocument/didOpen", requests.OpenDocument, server.openDocumentHandler);
+    // dispatcher.registerNotify("textDocument/didSave", requests.SaveDocument, server.saveDocumentHandler);
+    // dispatcher.registerNotify("textDocument/didChange", requests.ChangeDocument, server.changeDocumentHandler);
+    // dispatcher.registerNotify("textDocument/didClose", requests.CloseDocument, server.closeDocumentHandler);
+
+    jsonrpc.readloop(allocator, &transport, &dispatcher);
 }

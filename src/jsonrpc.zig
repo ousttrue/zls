@@ -10,86 +10,85 @@ const Stdio = document.Stdio;
 
 const logger = std.log.scoped(.jsonrpc);
 
-pub var keep_running = false;
-pub fn shutdownHandler(session: *Session, id: i64, _: void) !lsp.Response {
-    _ = session;
-    keep_running = false;
-    return lsp.Response.createNull(id);
+fn getId(tree: std.json.ValueTree) ?i64 {
+    if (tree.root.Object.get("id")) |child| {
+        switch (child) {
+            .Integer => |int| return int,
+            else => {},
+        }
+    }
+    return null;
 }
 
-pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, config: *Config, dispatcher: *Dispatcher) void {
-    keep_running = true;
+pub fn getMethod(tree: std.json.ValueTree) ?[]const u8 {
+    if (tree.root.Object.get("method")) |child| {
+        switch (child) {
+            .String => |str| return str,
+            else => {},
+        }
+    }
+    return null;
+}
 
+pub fn getParams(tree: std.json.ValueTree) ?std.json.Value {
+    return tree.root.Object.get("params");
+}
+
+pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Dispatcher) void {
     // This JSON parser is passed to processJsonRpc and reset.
     var json_parser = std.json.Parser.init(allocator, false);
     defer json_parser.deinit();
 
     var arena = std.heap.ArenaAllocator.init(allocator);
 
-    var document_store: Workspace = undefined;
-    document_store.init(
-        allocator,
-        config.zig_exe_path,
-        config.build_runner_path orelse @panic("no build_runner_path"),
-        config.build_runner_cache_path orelse @panic("build_runner_cache_path"),
-        config.zig_lib_path,
-        // TODO make this configurable
-        // We can't figure it out ourselves since we don't know what arguments
-        // the user will use to run "zig build"
-        "zig-cache",
-        // Since we don't compile anything and no packages should put their
-        // files there this path can be ignored
-        "ZLS_DONT_CARE",
-        config.builtin_path,
-    ) catch @panic("Workspace.init");
-    defer document_store.deinit();
-
-    while (keep_running) {
+    while (document.LanguageServer.keep_running) {
         if (transport.readNext()) |content| {
             // parse
             json_parser.reset();
-            if (json_parser.parse(content)) |tree| {
-                var session = Session.init(allocator, &arena, config, &document_store, transport, tree);
-                defer session.deinit();
+            var tree = json_parser.parse(content) catch |err| {
+                logger.err("{s}", .{@errorName(err)});
+                transport.sendToJson(lsp.Response.createInvalidRequest(null));
+                continue;
+            };
+            defer tree.deinit();
+            // var session = Session.init(allocator, &arena, config, &document_store, transport, tree);
+            // defer session.deinit();
 
-                // request: id, method, ?params
-                // reponse: id, ?result, ?error
-                // notify: method, ?params
-                if (session.getId()) |id| {
-                    if (session.getMethod()) |method| {
-                        // request
-                        if (dispatcher.dispatchRequest(&session, id, method)) |res| {
-                            transport.sendToJson(res);
-                        } else |err| switch (err) {
-                            Dispatcher.Error.InvalidRequest => transport.sendToJson(lsp.Response.createInvalidRequest(id)),
-                            Dispatcher.Error.MethodNotFound => transport.sendToJson(lsp.Response.createMethodNotFound(id)),
-                            Dispatcher.Error.InvalidParams => transport.sendToJson(lsp.Response.createInvalidParams(id)),
-                            Dispatcher.Error.InternalError => transport.sendToJson(lsp.Response.createInternalError(id)),
-                        }
-                    } else {
-                        // response
-                        @panic("jsonrpc response is not implemented(not send request)");
+            // request: id, method, ?params
+            // reponse: id, ?result, ?error
+            // notify: method, ?params
+            if (getId(tree)) |id| {
+                if (getMethod(tree)) |method| {
+                    // request
+                    if (dispatcher.dispatchRequest(&arena, id, method, getParams(tree))) |res| {
+                        transport.sendToJson(res);
+                    } else |err| switch (err) {
+                        Dispatcher.Error.InvalidRequest => transport.sendToJson(lsp.Response.createInvalidRequest(id)),
+                        Dispatcher.Error.MethodNotFound => transport.sendToJson(lsp.Response.createMethodNotFound(id)),
+                        Dispatcher.Error.InvalidParams => transport.sendToJson(lsp.Response.createInvalidParams(id)),
+                        Dispatcher.Error.InternalError => transport.sendToJson(lsp.Response.createInternalError(id)),
                     }
                 } else {
-                    if (session.getMethod()) |method| {
-                        // notify
-                        dispatcher.dispatchNotify(&session, method) catch |err| switch (err) {
-                            Dispatcher.Error.InvalidRequest => transport.sendToJson(lsp.Response.createInvalidRequest(null)),
-                            Dispatcher.Error.MethodNotFound => transport.sendToJson(lsp.Response.createMethodNotFound(null)),
-                            Dispatcher.Error.InvalidParams => transport.sendToJson(lsp.Response.createInvalidParams(null)),
-                            Dispatcher.Error.InternalError => transport.sendToJson(lsp.Response.createInternalError(null)),
-                        };
-                    } else {
-                        // invalid
-                        transport.sendToJson(lsp.Response.createParseError());
-                    }
+                    // response
+                    @panic("jsonrpc response is not implemented(not send request)");
                 }
-            } else |err| {
-                logger.err("{s}", .{@errorName(err)});
+            } else {
+                if (getMethod(tree)) |method| {
+                    // notify
+                    dispatcher.dispatchNotify(&arena, method, getParams(tree)) catch |err| switch (err) {
+                        Dispatcher.Error.InvalidRequest => transport.sendToJson(lsp.Response.createInvalidRequest(null)),
+                        Dispatcher.Error.MethodNotFound => transport.sendToJson(lsp.Response.createMethodNotFound(null)),
+                        Dispatcher.Error.InvalidParams => transport.sendToJson(lsp.Response.createInvalidParams(null)),
+                        Dispatcher.Error.InternalError => transport.sendToJson(lsp.Response.createInternalError(null)),
+                    };
+                } else {
+                    // invalid
+                    transport.sendToJson(lsp.Response.createParseError());
+                }
             }
         } else |err| {
             logger.err("{s}", .{@errorName(err)});
-            keep_running = false;
+            document.LanguageServer.keep_running = false;
             break;
         }
     }

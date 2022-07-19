@@ -60,10 +60,8 @@ pub const Initialize = struct {
         offsetEncoding: MaybeStringArray,
     };
 
-    params: struct {
-        capabilities: ClientCapabilities,
-        workspaceFolders: ?[]const types.WorkspaceFolder,
-    },
+    capabilities: ClientCapabilities,
+    workspaceFolders: ?[]const types.WorkspaceFolder,
 };
 
 pub const WorkspaceFoldersChange = struct {

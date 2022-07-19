@@ -4,7 +4,8 @@ pub const Workspace = @import("./Workspace.zig");
 pub const Config = @import("./Config.zig");
 pub const Stdio = @import("./Stdio.zig");
 pub const Builtin = @import("./Builtin.zig");
-pub const server = @import("server.zig");
+// pub const server = @import("server.zig");
+pub const LanguageServer = @import("./LanguageServer.zig");
 
 const analysis = @import("./analysis.zig");
 const builtin_completions = @import("./builtin_completions.zig");
