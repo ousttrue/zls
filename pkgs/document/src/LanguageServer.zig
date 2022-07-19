@@ -7,7 +7,7 @@ const semantic_tokens = @import("./semantic_tokens.zig");
 const offsets = @import("./offsets.zig");
 const document_symbols = @import("./document_symbols.zig");
 const hover_util = @import("./hover_util.zig");
-const position_context = @import("./position_context.zig");
+const completion_util = @import("./completion_util.zig");
 const Self = @This();
 const root = @import("root");
 pub var keep_running: bool = true;
@@ -275,4 +275,17 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const handle = try self.workspace.getHandle(params.textDocument.uri);
     const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
     return try offsets.gotoHandler(arena, &self.workspace, id, handle, doc_position, true);
+}
+
+pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    _ = self;
+    _ = arena;
+    _ = jsonParams;
+}
+
+pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.Completion, jsonParams.?);
+    const handle = try self.workspace.getHandle(params.textDocument.uri);
+    const doc_position = try offsets.documentPosition(handle.document, params.position, offsets.offset_encoding);
+    return completion_util.process(arena, &self.workspace, id, handle, doc_position, self.config, &self.client_capabilities);
 }

@@ -1,6 +1,8 @@
 const std = @import("std");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
+const Config = @import("./Config.zig");
+const ClientCapabilities = @import("./ClientCapabilities.zig");
 const Ast = std.zig.Ast;
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
@@ -631,7 +633,11 @@ pub fn isTypeIdent(tree: Ast, token_idx: Ast.TokenIndex) bool {
 }
 
 /// Resolves the type of a node
-pub fn resolveTypeOfNodeInternal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, node_handle: NodeWithHandle, bound_type_params: *BoundTypeParams,
+pub fn resolveTypeOfNodeInternal(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    node_handle: NodeWithHandle,
+    bound_type_params: *BoundTypeParams,
 ) error{OutOfMemory}!?TypeWithHandle {
     // If we were asked to resolve this node before,
     // it is self-referential and we cannot resolve it.
@@ -1352,10 +1358,6 @@ pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
 
 pub const SourceRange = std.zig.Token.Loc;
 
-
-
-
-
 pub const Declaration = union(enum) {
     /// Index of the ast node
     ast_node: Ast.Node.Index,
@@ -1516,7 +1518,18 @@ fn findContainerScope(container_handle: NodeWithHandle) ?*Scope {
     } else null;
 }
 
-fn iterateSymbolsContainerInternal(arena: *std.heap.ArenaAllocator, container_handle: NodeWithHandle, orig_handle: *Document, comptime callback: anytype, context: anytype, instance_access: bool, use_trail: *std.ArrayList(*const Ast.Node.Index)) error{OutOfMemory}!void {
+fn iterateSymbolsContainerInternal(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    container_handle: NodeWithHandle,
+    orig_handle: *Document,
+    comptime callback: anytype,
+    context: anytype,
+    instance_access: bool,
+    use_trail: *std.ArrayList(*const Ast.Node.Index),
+    config: *Config,
+    client_capabilities: *ClientCapabilities,
+) error{OutOfMemory}!void {
     const container = container_handle.node;
     const handle = container_handle.handle;
 
@@ -1550,7 +1563,7 @@ fn iterateSymbolsContainerInternal(arena: *std.heap.ArenaAllocator, container_ha
 
         const decl = DeclWithHandle{ .decl = entry.value_ptr, .handle = handle };
         if (handle != orig_handle and !decl.isPublic()) continue;
-        try callback(arena, context, decl);
+        try callback(arena, workspace, context, decl, config, client_capabilities);
     }
 
     for (container_scope.uses) |use| {
@@ -1561,7 +1574,7 @@ fn iterateSymbolsContainerInternal(arena: *std.heap.ArenaAllocator, container_ha
         try use_trail.append(use);
 
         const lhs = tree.nodes.items(.data)[use.*].lhs;
-        const use_expr = (try resolveTypeOfNode(arena, .{
+        const use_expr = (try resolveTypeOfNode(arena, workspace, .{
             .node = lhs,
             .handle = handle,
         })) orelse continue;
@@ -1572,22 +1585,55 @@ fn iterateSymbolsContainerInternal(arena: *std.heap.ArenaAllocator, container_ha
         };
         try iterateSymbolsContainerInternal(
             arena,
+            workspace,
             .{ .node = use_expr_node, .handle = use_expr.handle },
             orig_handle,
             callback,
             context,
             false,
             use_trail,
+            config,
+            client_capabilities,
         );
     }
 }
 
-pub fn iterateSymbolsContainer(arena: *std.heap.ArenaAllocator, container_handle: NodeWithHandle, orig_handle: *Document, comptime callback: anytype, context: anytype, instance_access: bool) error{OutOfMemory}!void {
+pub fn iterateSymbolsContainer(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    container_handle: NodeWithHandle,
+    orig_handle: *Document,
+    comptime callback: anytype,
+    context: anytype,
+    instance_access: bool,
+    config: *Config,
+    client_capabilities: *ClientCapabilities,
+) error{OutOfMemory}!void {
     var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.allocator());
-    return try iterateSymbolsContainerInternal(arena, container_handle, orig_handle, callback, context, instance_access, &use_trail);
+    return try iterateSymbolsContainerInternal(
+        arena,
+        workspace,
+        container_handle,
+        orig_handle,
+        callback,
+        context,
+        instance_access,
+        &use_trail,
+        config,
+        client_capabilities,
+    );
 }
 
-pub fn iterateLabels(arena: *std.heap.ArenaAllocator, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
+pub fn iterateLabels(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    source_index: usize,
+    comptime callback: anytype,
+    context: anytype,
+    config: *Config,
+    client_capabilities: *ClientCapabilities,
+) error{OutOfMemory}!void {
     for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             var decl_it = scope.decls.iterator();
@@ -1596,14 +1642,24 @@ pub fn iterateLabels(arena: *std.heap.ArenaAllocator, handle: *Document, source_
                     .label_decl => {},
                     else => continue,
                 }
-                try callback(arena, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle });
+                try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, client_capabilities);
             }
         }
         if (scope.range.start >= source_index) return;
     }
 }
 
-fn iterateSymbolsGlobalInternal(arena: *std.heap.ArenaAllocator, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype, use_trail: *std.ArrayList(*const Ast.Node.Index)) error{OutOfMemory}!void {
+fn iterateSymbolsGlobalInternal(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    source_index: usize,
+    comptime callback: anytype,
+    context: anytype,
+    use_trail: *std.ArrayList(*const Ast.Node.Index),
+    config: *Config,
+    client_capabilities: *ClientCapabilities,
+) error{OutOfMemory}!void {
     for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             var decl_it = scope.decls.iterator();
@@ -1611,7 +1667,7 @@ fn iterateSymbolsGlobalInternal(arena: *std.heap.ArenaAllocator, handle: *Docume
                 if (entry.value_ptr.* == .ast_node and
                     handle.tree.nodes.items(.tag)[entry.value_ptr.*.ast_node].isContainerField()) continue;
                 if (entry.value_ptr.* == .label_decl) continue;
-                try callback(arena, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle });
+                try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, client_capabilities);
             }
 
             for (scope.uses) |use| {
@@ -1620,6 +1676,7 @@ fn iterateSymbolsGlobalInternal(arena: *std.heap.ArenaAllocator, handle: *Docume
 
                 const use_expr = (try resolveTypeOfNode(
                     arena,
+                    workspace,
                     .{ .node = handle.tree.nodes.items(.data)[use.*].lhs, .handle = handle },
                 )) orelse continue;
                 const use_expr_node = switch (use_expr.type.data) {
@@ -1628,12 +1685,15 @@ fn iterateSymbolsGlobalInternal(arena: *std.heap.ArenaAllocator, handle: *Docume
                 };
                 try iterateSymbolsContainerInternal(
                     arena,
+                    workspace,
                     .{ .node = use_expr_node, .handle = use_expr.handle },
                     handle,
                     callback,
                     context,
                     false,
                     use_trail,
+                    config,
+                    client_capabilities,
                 );
             }
         }
@@ -1642,9 +1702,18 @@ fn iterateSymbolsGlobalInternal(arena: *std.heap.ArenaAllocator, handle: *Docume
     }
 }
 
-pub fn iterateSymbolsGlobal(arena: *std.heap.ArenaAllocator, handle: *Document, source_index: usize, comptime callback: anytype, context: anytype) error{OutOfMemory}!void {
+pub fn iterateSymbolsGlobal(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    source_index: usize,
+    comptime callback: anytype,
+    context: anytype,
+    config: *Config,
+    client_capabilities: *ClientCapabilities,
+) error{OutOfMemory}!void {
     var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.allocator());
-    return try iterateSymbolsGlobalInternal(arena, handle, source_index, callback, context, &use_trail);
+    return try iterateSymbolsGlobalInternal(arena, workspace, handle, source_index, callback, context, &use_trail, config, client_capabilities);
 }
 
 pub fn innermostBlockScopeIndex(handle: Document, source_index: usize) usize {
@@ -1736,7 +1805,7 @@ pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) e
     return null;
 }
 
-pub fn lookupSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace:*Workspace,  handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
+pub fn lookupSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
     const innermost_scope_idx = innermostBlockScopeIndex(handle.*, source_index);
 
     var curr = innermost_scope_idx;
