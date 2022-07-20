@@ -19,66 +19,59 @@ const logger = std.log.scoped(.LanguageServer);
 config: *Config,
 workspace: Workspace = undefined,
 client_capabilities: ClientCapabilities = .{},
-server_capabilities: lsp.initialize.InitializeResult = .{
-    .offsetEncoding = "utf-16",
-    .serverInfo = .{
-        .name = "zls",
-        .version = "0.1.0",
+server_capabilities: lsp.initialize.ServerCapabilities = .{
+    .signatureHelpProvider = .{
+        .triggerCharacters = &.{"("},
+        .retriggerCharacters = &.{","},
     },
-    .capabilities = .{
-        .signatureHelpProvider = .{
-            .triggerCharacters = &.{"("},
-            .retriggerCharacters = &.{","},
+    .textDocumentSync = .Full,
+    .renameProvider = true,
+    .completionProvider = .{
+        .resolveProvider = false,
+        .triggerCharacters = &[_][]const u8{ ".", ":", "@" },
+    },
+    .documentHighlightProvider = false,
+    .hoverProvider = true,
+    .codeActionProvider = false,
+    .declarationProvider = true,
+    .definitionProvider = true,
+    .typeDefinitionProvider = true,
+    .implementationProvider = false,
+    .referencesProvider = true,
+    .documentSymbolProvider = true,
+    .colorProvider = false,
+    .documentFormattingProvider = true,
+    .documentRangeFormattingProvider = false,
+    .foldingRangeProvider = false,
+    .selectionRangeProvider = false,
+    .workspaceSymbolProvider = false,
+    .rangeProvider = false,
+    .documentProvider = true,
+    .workspace = .{
+        .workspaceFolders = .{
+            .supported = false,
+            .changeNotifications = false,
         },
-        .textDocumentSync = .Full,
-        .renameProvider = true,
-        .completionProvider = .{
-            .resolveProvider = false,
-            .triggerCharacters = &[_][]const u8{ ".", ":", "@" },
-        },
-        .documentHighlightProvider = false,
-        .hoverProvider = true,
-        .codeActionProvider = false,
-        .declarationProvider = true,
-        .definitionProvider = true,
-        .typeDefinitionProvider = true,
-        .implementationProvider = false,
-        .referencesProvider = true,
-        .documentSymbolProvider = true,
-        .colorProvider = false,
-        .documentFormattingProvider = true,
-        .documentRangeFormattingProvider = false,
-        .foldingRangeProvider = false,
-        .selectionRangeProvider = false,
-        .workspaceSymbolProvider = false,
-        .rangeProvider = false,
-        .documentProvider = true,
-        .workspace = .{
-            .workspaceFolders = .{
-                .supported = false,
-                .changeNotifications = false,
+    },
+    .semanticTokensProvider = .{
+        .full = true,
+        .range = false,
+        .legend = .{
+            .tokenTypes = block: {
+                const tokTypeFields = std.meta.fields(lsp.SemanticTokenType);
+                var names: [tokTypeFields.len][]const u8 = undefined;
+                for (tokTypeFields) |field, i| {
+                    names[i] = field.name;
+                }
+                break :block &names;
             },
-        },
-        .semanticTokensProvider = .{
-            .full = true,
-            .range = false,
-            .legend = .{
-                .tokenTypes = block: {
-                    const tokTypeFields = std.meta.fields(lsp.SemanticTokenType);
-                    var names: [tokTypeFields.len][]const u8 = undefined;
-                    for (tokTypeFields) |field, i| {
-                        names[i] = field.name;
-                    }
-                    break :block &names;
-                },
-                .tokenModifiers = block: {
-                    const tokModFields = std.meta.fields(lsp.SemanticTokenModifiers);
-                    var names: [tokModFields.len][]const u8 = undefined;
-                    for (tokModFields) |field, i| {
-                        names[i] = field.name;
-                    }
-                    break :block &names;
-                },
+            .tokenModifiers = block: {
+                const tokModFields = std.meta.fields(lsp.SemanticTokenModifiers);
+                var names: [tokModFields.len][]const u8 = undefined;
+                for (tokModFields) |field, i| {
+                    names[i] = field.name;
+                }
+                break :block &names;
             },
         },
     },
@@ -144,15 +137,20 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
     logger.info("zls initialized", .{});
     logger.info("{}", .{self.client_capabilities});
     logger.info("Using offset encoding: {s}", .{@tagName(offsets.offset_encoding)});
-    if (offsets.offset_encoding == .utf8) {
-        self.server_capabilities.offsetEncoding = @as([]const u8, "utf-8");
-    }
 
     return lsp.Response{
         .id = id,
-        .result = .{
-            .InitializeResult = self.server_capabilities,
-        },
+        .result = .{ .InitializeResult = .{
+            .offsetEncoding = if (offsets.offset_encoding == .utf8)
+                @as([]const u8, "utf-8")
+            else
+                "utf-16",
+            .serverInfo = .{
+                .name = "zls",
+                .version = "0.1.0",
+            },
+            .capabilities = self.server_capabilities,
+        } },
     };
 }
 
