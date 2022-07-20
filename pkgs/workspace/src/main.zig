@@ -4,6 +4,7 @@ pub const Document = @import("./Document.zig");
 pub const DocumentPosition = @import("./DocumentPosition.zig");
 pub const position_context = @import("./position_context.zig");
 pub const Config = @import("./Config.zig");
+pub const ZigEnv = @import("./ZigEnv.zig");
 pub const Stdio = @import("./Stdio.zig");
 pub const Builtin = @import("./Builtin.zig");
 pub const ClientCapabilities = @import("./ClientCapabilities.zig");

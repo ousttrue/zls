@@ -11,6 +11,7 @@ const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
 const Config = workspace.Config;
 const Stdio = workspace.Stdio;
+const ZigEnv = workspace.ZigEnv;
 
 const logger = std.log.scoped(.main);
 
@@ -74,34 +75,6 @@ pub fn log(
     transport.sendToJson(notification);
 }
 
-pub fn loadConfig(allocator: std.mem.Allocator, config_path: ?[]const u8) Config {
-    if (config_path) |path| {
-        defer allocator.free(path);
-        if (Config.load(allocator, path)) |config| {
-            std.debug.print("Could not open configuration file '{s}'\n", .{path});
-            std.debug.print("Falling back to a lookup in the local and global configuration folders\n", .{});
-            return config;
-        }
-    }
-
-    if (known_folders.getPath(allocator, .local_configuration)) |path| {
-        defer allocator.free(path.?);
-        if (Config.loadInFolder(allocator, path.?)) |config| {
-            return config;
-        }
-    } else |_| {}
-
-    if (known_folders.getPath(allocator, .global_configuration)) |path| {
-        defer allocator.free(path.?);
-        if (Config.loadInFolder(allocator, path.?)) |config| {
-            return config;
-        }
-    } else |_| {}
-
-    logger.info("No config file zls.json found.", .{});
-    return Config{};
-}
-
 pub fn main() anyerror!void {
     // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     // const allocator = gpa.allocator();
@@ -115,11 +88,15 @@ pub fn main() anyerror!void {
     defer args_it.deinit();
     if (!args_it.skip()) @panic("Could not find self argument");
 
+    var config = Config{};
     var config_path: ?[]const u8 = null;
     var next_arg_config_path = false;
     while (args_it.next()) |arg| {
         if (next_arg_config_path) {
-            config_path = try allocator.dupe(u8, arg);
+            if (Config.load(allocator, arg)) |c| {
+                config = c;
+                config_path = allocator.dupe(u8, arg) catch unreachable;
+            }
             next_arg_config_path = false;
             continue;
         }
@@ -144,118 +121,36 @@ pub fn main() anyerror!void {
         return;
     }
 
-    // Read the configuration, if any.
-    // const config_parse_options = std.json.ParseOptions{ .allocator = allocator };
-    // defer std.json.parseFree(Config, config, config_parse_options);
-
-    var config = loadConfig(allocator, config_path);
-
-    // Find the zig executable in PATH
-    find_zig: {
-        if (config.zig_exe_path) |exe_path| {
-            if (std.fs.path.isAbsolute(exe_path)) not_valid: {
-                std.fs.cwd().access(exe_path, .{}) catch break :not_valid;
-                break :find_zig;
+    if (config_path == null) {
+        if (known_folders.getPath(allocator, .local_configuration) catch unreachable) |path| {
+            if (Config.loadInFolder(allocator, path)) |c| {
+                config = c;
+                config_path = path;
             }
-            logger.debug("zig path `{s}` is not absolute, will look in path", .{exe_path});
-            allocator.free(exe_path);
+            defer allocator.free(path);
         }
-        config.zig_exe_path = try setup.findZig(allocator);
     }
 
-    if (config.zig_exe_path) |exe_path| {
-        logger.info("Using zig executable {s}", .{exe_path});
-
-        if (config.zig_lib_path == null) find_lib_path: {
-            // Use `zig env` to find the lib path
-            const zig_env_result = try std.ChildProcess.exec(.{
-                .allocator = allocator,
-                .argv = &[_][]const u8{ exe_path, "env" },
-            });
-
-            defer {
-                allocator.free(zig_env_result.stdout);
-                allocator.free(zig_env_result.stderr);
+    if (config_path == null) {
+        if (known_folders.getPath(allocator, .global_configuration) catch unreachable) |path| {
+            if (Config.loadInFolder(allocator, path)) |c| {
+                config = c;
+                config_path = path;
             }
-
-            switch (zig_env_result.term) {
-                .Exited => |exit_code| {
-                    if (exit_code == 0) {
-                        const Env = struct {
-                            zig_exe: []const u8,
-                            lib_dir: ?[]const u8,
-                            std_dir: []const u8,
-                            global_cache_dir: []const u8,
-                            version: []const u8,
-                        };
-
-                        var json_env = std.json.parse(
-                            Env,
-                            &std.json.TokenStream.init(zig_env_result.stdout),
-                            .{ .allocator = allocator },
-                        ) catch {
-                            logger.err("Failed to parse zig env JSON result", .{});
-                            break :find_lib_path;
-                        };
-                        defer std.json.parseFree(Env, json_env, .{ .allocator = allocator });
-                        // We know this is allocated with `allocator`, we just steal it!
-                        config.zig_lib_path = json_env.lib_dir.?;
-                        json_env.lib_dir = null;
-                        logger.info("Using zig lib path '{s}'", .{config.zig_lib_path});
-                    }
-                },
-                else => logger.err("zig env invocation failed", .{}),
-            }
+            defer allocator.free(path);
         }
-    } else {
-        logger.warn("Zig executable path not specified in zls.json and could not be found in PATH", .{});
     }
 
-    if (config.zig_lib_path == null) {
-        logger.warn("Zig standard library path not specified in zls.json and could not be resolved from the zig executable", .{});
-    }
-
-    if (config.builtin_path == null and config.zig_exe_path != null and config_path != null) blk: {
-        const result = try std.ChildProcess.exec(.{
-            .allocator = allocator,
-            .argv = &.{
-                config.zig_exe_path.?,
-                "build-exe",
-                "--show-builtin",
-            },
-            .max_output_bytes = 1024 * 1024 * 50,
-        });
-        defer allocator.free(result.stdout);
-        defer allocator.free(result.stderr);
-
-        var d = try std.fs.cwd().openDir(config_path.?, .{});
-        defer d.close();
-
-        const f = d.createFile("builtin.zig", .{}) catch |err| switch (err) {
-            error.AccessDenied => break :blk,
-            else => |e| return e,
-        };
-        defer f.close();
-
-        try f.writer().writeAll(result.stdout);
-
-        config.builtin_path = try std.fs.path.join(allocator, &.{ config_path.?, "builtin.zig" });
-    }
-
-    if (config.build_runner_path == null) {
-        var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-        const exe_dir_path = try std.fs.selfExeDirPath(&exe_dir_bytes);
-        config.build_runner_path = try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
-    }
-
-    if (config.build_runner_cache_path == null) {
-        const cache_dir_path = (try known_folders.getPath(allocator, .cache)) orelse {
-            logger.warn("Known-folders could not fetch the cache path", .{});
-            return;
-        };
-        defer allocator.free(cache_dir_path);
-        config.build_runner_cache_path = try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
-    }
+    var zigenv = try ZigEnv.init(
+        allocator,
+        config_path.?,
+        config.zig_exe_path,
+        config.zig_lib_path,
+        config.builtin_path,
+        config.build_runner_path,
+        config.build_runner_cache_path,
+    );
+    defer zigenv.deinit();
 
     workspace.init(allocator, &data.builtins, &config);
     defer workspace.deinit();
@@ -263,7 +158,7 @@ pub fn main() anyerror!void {
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();
 
-    var ls = language_server.LanguageServer.init(allocator, &config);
+    var ls = language_server.LanguageServer.init(allocator, &config, zigenv);
     defer ls.deinit();
 
     dispatcher.registerRequest(&ls, "initialize");

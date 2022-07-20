@@ -2,6 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const ws = @import("workspace");
 const Config = ws.Config;
+const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
 const analysis = ws.analysis;
 const semantic_tokens = ws.semantic_tokens;
@@ -17,6 +18,7 @@ pub var keep_running: bool = true;
 const logger = std.log.scoped(.LanguageServer);
 
 config: *Config,
+zigenv: ZigEnv,
 workspace: Workspace = undefined,
 client_capabilities: ClientCapabilities = .{},
 offset_encoding: offsets.Encoding = offsets.Encoding.utf16,
@@ -78,17 +80,15 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     },
 },
 
-pub fn init(allocator: std.mem.Allocator, config: *Config) Self {
+pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self {
     var self = Self{
         .config = config,
+        .zigenv = zigenv,
     };
 
     self.workspace.init(
         allocator,
-        config.zig_exe_path,
-        config.build_runner_path orelse @panic("no build_runner_path"),
-        config.build_runner_cache_path orelse @panic("build_runner_cache_path"),
-        config.zig_lib_path,
+        zigenv,
         // TODO make this configurable
         // We can't figure it out ourselves since we don't know what arguments
         // the user will use to run "zig build"
@@ -96,7 +96,6 @@ pub fn init(allocator: std.mem.Allocator, config: *Config) Self {
         // Since we don't compile anything and no packages should put their
         // files there this path can be ignored
         "ZLS_DONT_CARE",
-        config.builtin_path,
     ) catch @panic("Workspace.init");
 
     return self;

@@ -6,42 +6,46 @@ const offsets = @import("./offsets.zig");
 const Document = @import("./Document.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
+const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.Workspace);
 
 const Self = @This();
 
 allocator: std.mem.Allocator,
-handles: std.StringHashMap(*Document),
-zig_exe_path: ?[]const u8,
-build_files: std.ArrayListUnmanaged(*BuildFile),
-build_runner_path: []const u8,
-build_runner_cache_path: []const u8,
-std_uri: ?[]const u8,
+zigenv: ZigEnv,
+// zig_exe_path: ?[]const u8,
+// build_runner_path: []const u8,
+// build_runner_cache_path: []const u8,
+// builtin_path: ?[]const u8,
 zig_cache_root: []const u8,
 zig_global_cache_root: []const u8,
-builtin_path: ?[]const u8,
+handles: std.StringHashMap(*Document),
+build_files: std.ArrayListUnmanaged(*BuildFile),
+std_uri: ?[]const u8,
 
 pub fn init(
     self: *Self,
     allocator: std.mem.Allocator,
-    zig_exe_path: ?[]const u8,
-    build_runner_path: []const u8,
-    build_runner_cache_path: []const u8,
-    zig_lib_path: ?[]const u8,
+    zigenv: ZigEnv,
+    // zig_exe_path: ?[]const u8,
+    // build_runner_path: []const u8,
+    // build_runner_cache_path: []const u8,
+    // zig_lib_path: ?[]const u8,
+    // builtin_path: ?[]const u8,
     zig_cache_root: []const u8,
     zig_global_cache_root: []const u8,
-    builtin_path: ?[]const u8,
 ) !void {
     self.allocator = allocator;
+    self.zigenv = zigenv;
     self.handles = std.StringHashMap(*Document).init(allocator);
-    self.zig_exe_path = zig_exe_path;
+    // self.zig_exe_path = zig_exe_path;
+    // self.build_runner_path = build_runner_path;
+    // self.build_runner_cache_path = build_runner_cache_path;
+    // self.builtin_path = builtin_path;
     self.build_files = .{};
-    self.build_runner_path = build_runner_path;
-    self.build_runner_cache_path = build_runner_cache_path;
-    self.std_uri = try stdUriFromLibPath(allocator, zig_lib_path);
+    self.std_uri = try stdUriFromLibPath(allocator, zigenv.lib_path);
     self.zig_cache_root = zig_cache_root;
     self.zig_global_cache_root = zig_global_cache_root;
-    self.builtin_path = builtin_path;
 }
 
 /// This function asserts the document is not open yet and takes ownership
@@ -54,7 +58,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
 
     // TODO: Better logic for detecting std or subdirectories?
     const in_std = std.mem.indexOf(u8, uri, "/std/") != null;
-    if (self.zig_exe_path != null and std.mem.endsWith(u8, uri, "/build.zig") and !in_std) {
+    if (std.mem.endsWith(u8, uri, "/build.zig") and !in_std) {
         logger.debug("{s} => extracting packages...", .{uri});
         // This is a build file.
         var build_file = try self.allocator.create(BuildFile);
@@ -76,19 +80,17 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
         }
 
         if (build_file.builtin_uri == null) {
-            if (self.builtin_path != null) {
-                build_file.builtin_uri = try URI.fromPath(self.allocator, self.builtin_path.?);
-                logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_uri});
-            }
+            build_file.builtin_uri = try URI.fromPath(self.allocator, self.zigenv.builtin_path);
+            logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_uri});
         }
 
         // TODO: Do this in a separate thread?
         // It can take quite long.
         if (build_file.loadPackages(.{
             .allocator = self.allocator,
-            .build_runner_path = self.build_runner_path,
-            .build_runner_cache_path = self.build_runner_cache_path,
-            .zig_exe_path = self.zig_exe_path.?,
+            .build_runner_path = self.zigenv.build_runner_path,
+            .build_runner_cache_path = self.zigenv.build_runner_cache_path,
+            .zig_exe_path = self.zigenv.exe_path,
             .build_file_path = build_file_path,
             .cache_root = self.zig_cache_root,
             .global_cache_root = self.zig_global_cache_root,
@@ -100,7 +102,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
 
         try self.build_files.append(self.allocator, build_file);
         doc.is_build_file = build_file;
-    } else if (self.zig_exe_path != null and !in_std) {
+    } else if (!in_std) {
         // Look into build files and keep the one that lives closest to the document in the directory structure
         var candidate: ?*BuildFile = null;
         {
@@ -351,9 +353,9 @@ pub fn applySave(self: *Self, handle: *Document) !void {
     if (handle.is_build_file) |build_file| {
         build_file.loadPackages(.{
             .allocator = self.allocator,
-            .build_runner_path = self.build_runner_path,
-            .build_runner_cache_path = self.build_runner_cache_path,
-            .zig_exe_path = self.zig_exe_path.?,
+            .build_runner_path = self.zigenv.build_runner_path,
+            .build_runner_cache_path = self.zigenv.build_runner_cache_path,
+            .zig_exe_path = self.zigenv.exe_path,
             .cache_root = self.zig_cache_root,
             .global_cache_root = self.zig_global_cache_root,
         }) catch |err| {
@@ -441,10 +443,7 @@ pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Docum
                 return try allocator.dupe(u8, builtin_uri);
             }
         }
-        if (self.builtin_path) |_| {
-            return try URI.fromPath(allocator, self.builtin_path.?);
-        }
-        return null;
+        return try URI.fromPath(allocator, self.zigenv.builtin_path);
     } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
         if (handle.associated_build_file) |build_file| {
             for (build_file.packages.items) |pkg| {
@@ -584,8 +583,6 @@ pub fn deinit(self: *Self) void {
     if (self.std_uri) |std_uri| {
         self.allocator.free(std_uri);
     }
-    self.allocator.free(self.build_runner_path);
-    self.allocator.free(self.build_runner_cache_path);
     self.build_files.deinit(self.allocator);
 }
 

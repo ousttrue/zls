@@ -43,6 +43,7 @@ skip_std_references: bool = false,
 builtin_path: ?[]const u8 = null,
 
 pub fn load(allocator: std.mem.Allocator, path: []const u8) ?Self {
+    logger.info("config_path: {s}", .{path});
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {
         if (err != error.FileNotFound) {
             logger.warn("Error while reading configuration file: {}", .{err});

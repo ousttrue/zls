@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const zinput = @import("zinput");
 const known_folders = @import("known-folders");
+const workspace = @import("workspace");
 
 fn print(comptime fmt: []const u8, args: anytype) void {
     const stdout = std.io.getStdOut().writer();
@@ -66,7 +67,7 @@ pub fn wizard(allocator: std.mem.Allocator) !void {
     defer file.close();
     const out = file.writer();
 
-    var zig_exe_path = try findZig(allocator);
+    var zig_exe_path = try workspace.ZigEnv.findZig(allocator);
     defer if (zig_exe_path) |p| allocator.free(p);
 
     if (zig_exe_path) |path| {
@@ -225,37 +226,4 @@ pub fn wizard(allocator: std.mem.Allocator) !void {
     }
 
     write("\n\nThank you for choosing ZLS!\n");
-}
-
-pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
-    const env_path = std.process.getEnvVarOwned(allocator, "PATH") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => {
-            return null;
-        },
-        else => return err,
-    };
-    defer allocator.free(env_path);
-
-    const exe_extension = builtin.target.exeFileExt();
-    const zig_exe = try std.fmt.allocPrint(allocator, "zig{s}", .{exe_extension});
-    defer allocator.free(zig_exe);
-
-    var it = std.mem.tokenize(u8, env_path, &[_]u8{std.fs.path.delimiter});
-    while (it.next()) |path| {
-        if (builtin.os.tag == .windows) {
-            if (std.mem.indexOfScalar(u8, path, '/') != null) continue;
-        }
-        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ path, zig_exe });
-        defer allocator.free(full_path);
-
-        if (!std.fs.path.isAbsolute(full_path)) continue;
-
-        const file = std.fs.openFileAbsolute(full_path, .{}) catch continue;
-        defer file.close();
-        const stat = file.stat() catch continue;
-        if (stat.kind == .Directory) continue;
-
-        return try allocator.dupe(u8, full_path);
-    }
-    return null;
 }
