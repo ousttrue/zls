@@ -4,7 +4,7 @@ const analysis = @import("./analysis.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
-// const PositionContext = @import("./PositionContext.zig");
+const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
 const Self = @This();
 
@@ -63,6 +63,12 @@ pub fn delete(self: *Self) void {
     self.allocator.destroy(self);
 }
 
-// pub fn getPositionContext(self: Self, doc_position: DocumentPosition) PositionContext {
-//     unreachable;
-// }
+pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
+    if (self.ast_context.tokenIndexFromBytePos(byte_pos)) |token_index| {
+        const node_idx = self.ast_context.tokens_node[token_index];
+        _ = node_idx;
+        return .empty;
+    } else {
+        return .empty;
+    }
+}

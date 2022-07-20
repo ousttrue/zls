@@ -112,8 +112,8 @@ fn hoverSymbol(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, 
 
 pub fn process(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, doc: *Document, doc_position: DocumentPosition, client_capabilities: *ClientCapabilities,) !lsp.Response
 {
-    // const pos_context = doc.getPositionContext(doc_position);
-    const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    // const pos_context = position_context.documentPositionContext(arena, doc_position);
     switch (pos_context) {
         .builtin => {
             logger.debug("[hover][builtin]", .{});

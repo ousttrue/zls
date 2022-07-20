@@ -1,5 +1,6 @@
 const std = @import("std");
 const Self = @This();
+const PositionContext = @import("./position_context.zig").PositionContext;
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
     var tokens = std.ArrayList(std.zig.Token).init(allocator);
@@ -190,4 +191,17 @@ pub fn findAncestor(self: Self, idx: u32, target: u32) bool {
         }
     }
     return false;
+}
+
+pub fn isInToken(pos: usize, token: std.zig.Token) bool {
+    return pos >= token.loc.start and pos <= token.loc.end - 1;
+}
+
+pub fn tokenIndexFromBytePos(self: Self, byte_pos: usize) ?u32 {
+    for (self.tokens.items) |token, i| {
+        if (isInToken(byte_pos, token)) {
+            return @intCast(u32, i);
+        }
+    }
+    return null;
 }
