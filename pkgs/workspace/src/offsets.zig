@@ -3,7 +3,7 @@ const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
-const TextDocument = @import("./TextDocument.zig");
+const Utf8Buffer = @import("./Utf8Buffer.zig");
 const analysis = @import("./analysis.zig");
 const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
@@ -57,7 +57,7 @@ fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
     return utf8_idx;
 }
 
-pub fn documentPosition(doc: TextDocument, position: lsp.Position, encoding: Encoding) OffsetError!DocumentPosition {
+pub fn documentPosition(doc: Utf8Buffer, position: lsp.Position, encoding: Encoding) OffsetError!DocumentPosition {
     if (position.character < 0) {
         return OffsetError.PositionNegativeCharacter;
     }
@@ -194,7 +194,7 @@ pub fn tokenLocation(tree: Ast, token_index: Ast.TokenIndex) Loc {
     return .{ .start = token.loc.start, .end = token.loc.end };
 }
 
-pub fn documentRange(doc: TextDocument, encoding: Encoding) !lsp.Range {
+pub fn documentRange(doc: Utf8Buffer, encoding: Encoding) !lsp.Range {
     var line_idx: i64 = 0;
     var curr_line: []const u8 = doc.text;
 

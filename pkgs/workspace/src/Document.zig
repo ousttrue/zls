@@ -1,7 +1,7 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const analysis = @import("./analysis.zig");
-const TextDocument = @import("./TextDocument.zig");
+const Utf8Buffer = @import("./Utf8Buffer.zig");
 const Self = @This();
 
 pub const BuildFile = struct {
@@ -22,7 +22,7 @@ pub const BuildFile = struct {
     }
 };
 
-document: TextDocument,
+document: Utf8Buffer,
 count: usize,
 /// Contains one entry for every import in the document
 import_uris: []const []const u8,
