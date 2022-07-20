@@ -1,9 +1,11 @@
 const std = @import("std");
+const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
+const URI = @import("./uri.zig");
+const logger = std.log.scoped(.BuildFile);
 const Pkg = struct {
     name: []const u8,
     uri: []const u8,
 };
-
 const Self = @This();
 
 refs: usize,
@@ -15,4 +17,118 @@ builtin_uri: ?[]const u8 = null,
 pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
     if (self.builtin_uri) |builtin_uri| allocator.free(builtin_uri);
     allocator.destroy(self);
+}
+
+const LoadPackagesContext = struct {
+    allocator: std.mem.Allocator,
+    build_runner_path: []const u8,
+    build_runner_cache_path: []const u8,
+    zig_exe_path: []const u8,
+    build_file_path: ?[]const u8 = null,
+    cache_root: []const u8,
+    global_cache_root: []const u8,
+};
+
+pub fn loadBuildAssociatedConfiguration(build_file: *Self, allocator: std.mem.Allocator, build_file_path: []const u8) !void {
+    const directory_path = build_file_path[0 .. build_file_path.len - "build.zig".len];
+
+    const options = std.json.ParseOptions{ .allocator = allocator };
+    const build_associated_config = blk: {
+        const config_file_path = try std.fs.path.join(allocator, &[_][]const u8{ directory_path, "zls.build.json" });
+        defer allocator.free(config_file_path);
+
+        var config_file = std.fs.cwd().openFile(config_file_path, .{}) catch |err| {
+            if (err == error.FileNotFound) return;
+            return err;
+        };
+        defer config_file.close();
+
+        const file_buf = try config_file.readToEndAlloc(allocator, 0x1000000);
+        defer allocator.free(file_buf);
+
+        break :blk try std.json.parse(BuildAssociatedConfig, &std.json.TokenStream.init(file_buf), options);
+    };
+    defer std.json.parseFree(BuildAssociatedConfig, build_associated_config, options);
+
+    if (build_associated_config.relative_builtin_path) |relative_builtin_path| {
+        var absolute_builtin_path = try std.mem.concat(allocator, u8, &.{ directory_path, relative_builtin_path });
+        defer allocator.free(absolute_builtin_path);
+        build_file.builtin_uri = try URI.fromPath(allocator, absolute_builtin_path);
+    }
+}
+
+pub fn loadPackages(build_file: *Self, context: LoadPackagesContext) !void {
+    const allocator = context.allocator;
+    const build_runner_path = context.build_runner_path;
+    const build_runner_cache_path = context.build_runner_cache_path;
+    const zig_exe_path = context.zig_exe_path;
+
+    const build_file_path = context.build_file_path orelse try URI.parse(allocator, build_file.uri);
+    defer if (context.build_file_path == null) allocator.free(build_file_path);
+    const directory_path = build_file_path[0 .. build_file_path.len - "build.zig".len];
+
+    const zig_run_result = try std.ChildProcess.exec(.{
+        .allocator = allocator,
+        .argv = &[_][]const u8{
+            zig_exe_path,
+            "run",
+            build_runner_path,
+            "--cache-dir",
+            build_runner_cache_path,
+            "--pkg-begin",
+            "@build@",
+            build_file_path,
+            "--pkg-end",
+            "--",
+            zig_exe_path,
+            directory_path,
+            context.cache_root,
+            context.global_cache_root,
+        },
+    });
+
+    defer {
+        allocator.free(zig_run_result.stdout);
+        allocator.free(zig_run_result.stderr);
+    }
+
+    switch (zig_run_result.term) {
+        .Exited => |exit_code| {
+            if (exit_code == 0) {
+                logger.debug("Finished zig run for build file {s}", .{build_file.uri});
+
+                for (build_file.packages.items) |old_pkg| {
+                    allocator.free(old_pkg.name);
+                    allocator.free(old_pkg.uri);
+                }
+
+                build_file.packages.shrinkAndFree(allocator, 0);
+                var line_it = std.mem.split(u8, zig_run_result.stdout, "\n");
+                while (line_it.next()) |line| {
+                    if (std.mem.indexOfScalar(u8, line, '\x00')) |zero_byte_idx| {
+                        const name = line[0..zero_byte_idx];
+                        const rel_path = line[zero_byte_idx + 1 ..];
+
+                        const pkg_abs_path = try std.fs.path.resolve(allocator, &[_][]const u8{ directory_path, rel_path });
+                        defer allocator.free(pkg_abs_path);
+
+                        const pkg_uri = try URI.fromPath(allocator, pkg_abs_path);
+                        errdefer allocator.free(pkg_uri);
+
+                        const duped_name = try allocator.dupe(u8, name);
+                        errdefer allocator.free(duped_name);
+
+                        (try build_file.packages.addOne(allocator)).* = .{
+                            .name = duped_name,
+                            .uri = pkg_uri,
+                        };
+                    }
+                }
+            } else {
+                logger.debug("{s} => {s}", .{ build_file.uri, zig_run_result.stderr });
+                return error.RunFailed;
+            }
+        },
+        else => return error.RunFailed,
+    }
 }
