@@ -21,56 +21,60 @@ fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayLis
     return tokens;
 }
 
-pub fn getChildren(children: []u32, tree: *const std.zig.Ast, idx: u32) []u32 {
+pub fn getChildren(children: *std.ArrayList(u32), tree: *const std.zig.Ast, idx: u32) void {
     const tag = tree.nodes.items(.tag);
     const node_tag = tag[idx];
     const data = tree.nodes.items(.data);
     const node_data = data[idx];
-    var count: u32 = 0;
 
-    return switch (node_tag) {
-        .simple_var_decl => blk: {
+    switch (node_tag) {
+        .simple_var_decl => {
             const var_decl = tree.simpleVarDecl(idx);
             if (var_decl.ast.type_node != 0) {
-                children[count] = var_decl.ast.type_node;
-                count += 1;
+                children.append(var_decl.ast.type_node) catch unreachable;
             }
             if (var_decl.ast.init_node != 0) {
-                children[count] = var_decl.ast.init_node;
-                count += 1;
+                children.append(var_decl.ast.init_node) catch unreachable;
             }
-            break :blk children[0..count];
         },
-        .fn_decl => blk: {
+        .fn_decl => {
             // fn_proto
-            children[0] = node_data.lhs;
+            children.append(node_data.lhs) catch unreachable;
 
             // body
-            children[1] = node_data.rhs;
-
-            break :blk children[0..2];
+            children.append(node_data.rhs) catch unreachable;
         },
-        .builtin_call_two => blk: {
+        .builtin_call_two => {
             if (node_data.lhs != 0) {
-                children[count] = node_data.lhs;
-                count += 1;
+                children.append(node_data.lhs) catch unreachable;
             }
             if (node_data.rhs != 0) {
-                children[count] = node_data.lhs;
-                count += 1;
+                children.append(node_data.rhs) catch unreachable;
             }
-            break :blk children[0..count];
         },
-        .field_access => blk: {
-            children[0] = node_data.lhs;
-            break :blk children[0..1];
+        .field_access => {
+            children.append(node_data.lhs) catch unreachable;
         },
-        .string_literal => children[0..0],
-        else => blk: {
+        .string_literal => {
+            // leaf. no children
+        },
+        .block, .block_semicolon => {
+            for (tree.extra_data[node_data.lhs..node_data.rhs]) |child| {
+                children.append(child) catch unreachable;
+            }
+        },
+        .block_two, .block_two_semicolon => {
+            if (node_data.lhs != 0) {
+                children.append(node_data.lhs) catch unreachable;
+            }
+            if (node_data.rhs != 0) {
+                children.append(node_data.rhs) catch unreachable;
+            }
+        },
+        else => {
             // std.debug.print("unknown node: {s}\n", .{@tagName(node_tag)});
-            break :blk &.{};
         },
-    };
+    }
 }
 
 pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
@@ -84,8 +88,10 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
         context.tokens_node[token_idx] = idx;
     }
 
-    var children: [64]u32 = undefined;
-    for (getChildren(&children, context.tree, idx)) |child| {
+    var children = std.ArrayList(u32).init(context.allocator);
+    defer children.deinit();
+    getChildren(&children, context.tree, idx);
+    for (children.items) |child| {
         stack.append(child) catch unreachable;
         traverse(context, stack);
         _ = stack.pop();
