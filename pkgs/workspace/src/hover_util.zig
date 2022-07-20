@@ -127,8 +127,20 @@ pub fn process(
     if (doc.ast_context.tokenFromBytePos(doc_position.absolute_index)) |token_with_index| {
         switch (token_with_index.token.tag) {
             .builtin => {
-                logger.debug("[hover][builtin]", .{});
+                logger.debug("(hover)[builtin]", .{});
                 return try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, doc);
+            },
+            else => {},
+        }
+
+        const idx = doc.ast_context.tokens_node[token_with_index.index];
+        const tag = doc.tree.nodes.items(.tag);
+        const node_tag = tag[idx];
+        switch (node_tag) {
+            .simple_var_decl => {
+                logger.debug("(hover)[var_access]", .{});
+                const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
+                return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
             },
             else => {},
         }
