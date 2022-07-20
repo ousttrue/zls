@@ -12,7 +12,7 @@ const Session = struct {};
 fn tokenReference(document: *Document, tok: Ast.TokenIndex, encoding: offsets.Encoding, context: anytype, comptime handler: anytype) !void {
     const loc = offsets.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok], encoding) catch return;
     try handler(context, lsp.Location{
-        .uri = document.document.uri,
+        .uri = document.utf8_buffer.uri,
         .range = .{
             .start = .{
                 .line = @intCast(i64, loc.line),

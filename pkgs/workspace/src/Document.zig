@@ -2,27 +2,10 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const analysis = @import("./analysis.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
+const BuildFile = @import("./BuildFile.zig");
 const Self = @This();
 
-pub const BuildFile = struct {
-    const Pkg = struct {
-        name: []const u8,
-        uri: []const u8,
-    };
-
-    refs: usize,
-    uri: []const u8,
-    packages: std.ArrayListUnmanaged(Pkg),
-
-    builtin_uri: ?[]const u8 = null,
-
-    pub fn destroy(self: *BuildFile, allocator: std.mem.Allocator) void {
-        if (self.builtin_uri) |builtin_uri| allocator.free(builtin_uri);
-        allocator.destroy(self);
-    }
-};
-
-document: Utf8Buffer,
+utf8_buffer: Utf8Buffer,
 count: usize,
 /// Contains one entry for every import in the document
 import_uris: []const []const u8,

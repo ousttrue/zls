@@ -468,8 +468,8 @@ fn completeFieldAccess(
 ) !lsp.Response {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
-    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
-    var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
+    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
+    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
     errdefer held_range.release();
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 

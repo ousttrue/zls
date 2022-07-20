@@ -277,12 +277,12 @@ test "identifierFromPosition" {
 }
 
 pub fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, pos_index: usize, handle: *Document) !analysis.DeclWithHandle {
-    const name = try identifierFromPosition(pos_index, handle.document.text);
+    const name = try identifierFromPosition(pos_index, handle.utf8_buffer.text);
     return (try analysis.lookupSymbolGlobal(arena, workspace, handle, name, pos_index)) orelse return OffsetError.GlobalSymbolNotFound;
 }
 
 pub fn getLabelGlobal(pos_index: usize, handle: *Document) !?analysis.DeclWithHandle {
-    const name = try identifierFromPosition(pos_index, handle.document.text);
+    const name = try identifierFromPosition(pos_index, handle.utf8_buffer.text);
     return try analysis.lookupLabel(handle, name, pos_index);
 }
 
@@ -316,7 +316,7 @@ fn gotoDefinitionSymbol(
         .id = id,
         .result = .{
             .Location = .{
-                .uri = handle.document.uri,
+                .uri = handle.utf8_buffer.uri,
                 .range = .{
                     .start = .{
                         .line = @intCast(i64, location.line),
@@ -333,9 +333,9 @@ fn gotoDefinitionSymbol(
 }
 
 pub fn getSymbolFieldAccess(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
-    const name = try identifierFromPosition(position.absolute_index, handle.document.text);
-    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.document.mem.ptr);
-    var held_range = handle.document.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
+    const name = try identifierFromPosition(position.absolute_index, handle.utf8_buffer.text);
+    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
+    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
     errdefer held_range.release();

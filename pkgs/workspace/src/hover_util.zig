@@ -13,7 +13,7 @@ const Ast = std.zig.Ast;
 const logger = std.log.scoped(.hover);
 
 fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
-    const name = try offsets.identifierFromPosition(pos_index, handle.document.text);
+    const name = try offsets.identifierFromPosition(pos_index, handle.utf8_buffer.text);
     for (builtin_completions.data()) |builtin| {
         if (std.mem.eql(u8, builtin.name[1..], name)) {
             return lsp.Response{

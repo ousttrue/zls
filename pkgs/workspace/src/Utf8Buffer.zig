@@ -7,6 +7,15 @@ text: [:0]const u8,
 // This holds the memory that we have actually allocated.
 mem: []u8,
 
+pub fn init(uri: []const u8, text: [:0] u8) Self {
+    return .{
+        .uri = uri,
+        .text = text,
+        // Extra +1 to include the null terminator
+        .mem = text.ptr[0 .. text.len + 1],
+    };
+}
+
 const Held = struct {
     document: *const Self,
     popped: u8,

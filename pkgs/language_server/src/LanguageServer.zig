@@ -203,7 +203,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     logger.debug("[hover]{s} {}", .{ params.textDocument.uri, params.position });
-    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
     return try hover_util.process(arena, &self.workspace, id, doc, doc_position, &self.client_capabilities);
 }
 
@@ -240,7 +240,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
         logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
         return lsp.Response.createNull(id);
     };
-    try process.stdin.?.writeAll(doc.document.text);
+    try process.stdin.?.writeAll(doc.utf8_buffer.text);
     process.stdin.?.close();
     process.stdin = null;
 
@@ -248,7 +248,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 
     var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
-        .range = try offsets.documentRange(doc.document, self.offset_encoding),
+        .range = try offsets.documentRange(doc.utf8_buffer, self.offset_encoding),
         .newText = stdout_bytes,
     };
 
@@ -271,7 +271,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
     return try offsets.gotoHandler(arena, &self.workspace, id, doc, doc_position, true, self.offset_encoding);
 }
 
@@ -284,20 +284,20 @@ pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonPara
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Completion, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
     return completion_util.process(arena, &self.workspace, id, doc, doc_position, self.config, &self.client_capabilities);
 }
 
 pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
     return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName, self.offset_encoding);
 }
 
 pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
     return references_util.process(arena, &self.workspace, id, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding);
 }

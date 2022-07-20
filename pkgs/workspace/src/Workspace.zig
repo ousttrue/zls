@@ -6,7 +6,8 @@ const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.doc_store);
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
 const Document = @import("./Document.zig");
-const BuildFile = Document.BuildFile;
+const Utf8Buffer = @import("./Utf8Buffer.zig");
+const BuildFile = @import("./BuildFile.zig");
 
 const Self = @This();
 
@@ -178,12 +179,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
         .count = 1,
         .import_uris = &.{},
         .imports_used = .{},
-        .document = .{
-            .uri = uri,
-            .text = text,
-            // Extra +1 to include the null terminator
-            .mem = text.ptr[0 .. text.len + 1],
-        },
+        .utf8_buffer = Utf8Buffer.init(uri, text),
         .tree = tree,
         .document_scope = document_scope,
         .associated_build_file = null,
@@ -396,7 +392,7 @@ fn decrementCount(self: *Self, uri: []const u8) void {
         }
 
         handle.tree.deinit(self.allocator);
-        self.allocator.free(handle.document.mem);
+        self.allocator.free(handle.utf8_buffer.mem);
 
         for (handle.imports_used.items) |import_uri| {
             self.decrementCount(import_uri);
@@ -449,9 +445,9 @@ fn collectImportUris(self: *Self, handle: *Document) ![]const []const u8 {
 }
 
 fn refreshDocument(self: *Self, handle: *Document) !void {
-    log.debug("New text for document {s}", .{handle.document.uri});
+    log.debug("New text for document {s}", .{handle.utf8_buffer.uri});
     handle.tree.deinit(self.allocator);
-    handle.tree = try std.zig.parse(self.allocator, handle.document.text);
+    handle.tree = try std.zig.parse(self.allocator, handle.utf8_buffer.text);
 
     handle.document_scope.deinit(self.allocator);
     handle.document_scope = try analysis.makeDocumentScope(self.allocator, handle.tree);
@@ -509,7 +505,7 @@ pub fn applySave(self: *Self, handle: *Document) !void {
 }
 
 pub fn applyChanges(self: *Self, handle: *Document, content_changes: std.json.Array, offset_encoding: offsets.Encoding) !void {
-    const document = &handle.document;
+    const document = &handle.utf8_buffer;
 
     for (content_changes.items) |change| {
         if (change.Object.get("range")) |range| {
@@ -601,7 +597,7 @@ pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Docum
         }
         return null;
     } else {
-        const base = handle.document.uri;
+        const base = handle.utf8_buffer.uri;
         var base_len = base.len;
         while (base[base_len - 1] != '/' and base_len > 0) {
             base_len -= 1;
@@ -715,7 +711,7 @@ pub fn deinit(self: *Self) void {
     while (entry_iterator.next()) |entry| {
         entry.value_ptr.*.document_scope.deinit(self.allocator);
         entry.value_ptr.*.tree.deinit(self.allocator);
-        self.allocator.free(entry.value_ptr.*.document.mem);
+        self.allocator.free(entry.value_ptr.*.utf8_buffer.mem);
         for (entry.value_ptr.*.import_uris) |uri| {
             self.allocator.free(uri);
         }
