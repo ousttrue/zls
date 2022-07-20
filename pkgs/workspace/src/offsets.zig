@@ -5,6 +5,7 @@ const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const TextDocument = @import("./TextDocument.zig");
 const analysis = @import("./analysis.zig");
+const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
@@ -25,8 +26,14 @@ pub const OffsetError = error{
 pub const Encoding = enum {
     utf8,
     utf16,
+
+    pub fn toString(self: Encoding) []const u8 {
+        return if (self == .utf8)
+            @as([]const u8, "utf-8")
+        else
+            "utf-16";
+    }
 };
-pub var offset_encoding = Encoding.utf16;
 
 fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
     var utf8_idx: usize = 0;
@@ -279,7 +286,14 @@ pub fn getLabelGlobal(pos_index: usize, handle: *Document) !?analysis.DeclWithHa
     return try analysis.lookupLabel(handle, name, pos_index);
 }
 
-fn gotoDefinitionSymbol(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, decl_handle: analysis.DeclWithHandle, resolve_alias: bool) !lsp.Response {
+fn gotoDefinitionSymbol(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    id: i64,
+    decl_handle: analysis.DeclWithHandle,
+    resolve_alias: bool,
+    offset_encoding: Encoding,
+) !lsp.Response {
     var handle = decl_handle.handle;
 
     const location = switch (decl_handle.decl.*) {
@@ -489,9 +503,16 @@ fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, workspace: *Workspace, 
     return lsp.Response.createNull(id);
 }
 
-fn gotoDefinitionLabel(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
+fn gotoDefinitionLabel(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    id: i64,
+    pos_index: usize,
+    handle: *Document,
+    offset_encoding: offsets.Encoding,
+) !lsp.Response {
     const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
-    return try gotoDefinitionSymbol(arena, workspace, id, decl, false);
+    return try gotoDefinitionSymbol(arena, workspace, id, decl, false, offset_encoding);
 }
 
 pub fn gotoHandler(
@@ -501,22 +522,23 @@ pub fn gotoHandler(
     handle: *Document,
     doc_position: DocumentPosition,
     resolve_alias: bool,
+    offset_encoding: offsets.Encoding,
 ) !lsp.Response {
     const pos_context = position_context.documentPositionContext(arena, doc_position);
     switch (pos_context) {
         .var_access => {
             const decl = try getSymbolGlobal(arena, workspace, doc_position.absolute_index, handle);
-            return try gotoDefinitionSymbol(arena, workspace, id, decl, resolve_alias);
+            return try gotoDefinitionSymbol(arena, workspace, id, decl, resolve_alias, offset_encoding);
         },
         .field_access => |range| {
             const decl = try getSymbolFieldAccess(arena, workspace, handle, doc_position, range);
-            return try gotoDefinitionSymbol(arena, workspace, id, decl, resolve_alias);
+            return try gotoDefinitionSymbol(arena, workspace, id, decl, resolve_alias, offset_encoding);
         },
         .string_literal => {
             return try gotoDefinitionString(arena, workspace, id, doc_position.absolute_index, handle);
         },
         .label => {
-            return try gotoDefinitionLabel(arena, workspace, id, doc_position.absolute_index, handle);
+            return try gotoDefinitionLabel(arena, workspace, id, doc_position.absolute_index, handle, offset_encoding);
         },
         else => {
             logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});

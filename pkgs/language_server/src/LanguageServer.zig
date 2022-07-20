@@ -19,6 +19,7 @@ const logger = std.log.scoped(.LanguageServer);
 config: *Config,
 workspace: Workspace = undefined,
 client_capabilities: ClientCapabilities = .{},
+offset_encoding: offsets.Encoding = offsets.Encoding.utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
     .signatureHelpProvider = .{
         .triggerCharacters = &.{"("},
@@ -109,7 +110,7 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
     const params = try lsp.fromDynamicTree(arena, lsp.initialize.InitializeParams, jsonParams.?);
     for (params.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
-            offsets.offset_encoding = .utf8;
+            self.offset_encoding = .utf8;
         }
     }
 
@@ -136,15 +137,12 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
 
     logger.info("zls initialized", .{});
     logger.info("{}", .{self.client_capabilities});
-    logger.info("Using offset encoding: {s}", .{@tagName(offsets.offset_encoding)});
+    logger.info("Using offset encoding: {s}", .{@tagName(self.offset_encoding)});
 
     return lsp.Response{
         .id = id,
         .result = .{ .InitializeResult = .{
-            .offsetEncoding = if (offsets.offset_encoding == .utf8)
-                @as([]const u8, "utf-8")
-            else
-                "utf-16",
+            .offsetEncoding = self.offset_encoding.toString(),
             .serverInfo = .{
                 .name = "zls",
                 .version = "0.1.0",
@@ -173,7 +171,7 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    try self.workspace.applyChanges(doc, params.contentChanges.Array, offsets.offset_encoding);
+    try self.workspace.applyChanges(doc, params.contentChanges.Array, self.offset_encoding);
     // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}
@@ -196,7 +194,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     return lsp.Response{
         .id = id,
         .result = .{
-            .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree, offsets.offset_encoding),
+            .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree, self.offset_encoding),
         },
     };
 }
@@ -205,7 +203,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     logger.debug("[hover]{s} {}", .{ params.textDocument.uri, params.position });
-    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
     return try hover_util.process(arena, &self.workspace, id, doc, doc_position, &self.client_capabilities);
 }
 
@@ -220,7 +218,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, doc, offsets.offset_encoding);
+    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, doc, self.offset_encoding);
     return lsp.Response{
         .id = id,
         .result = .{ .SemanticTokensFull = .{ .data = token_array } },
@@ -250,7 +248,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 
     var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
-        .range = try offsets.documentRange(doc.document, offsets.offset_encoding),
+        .range = try offsets.documentRange(doc.document, self.offset_encoding),
         .newText = stdout_bytes,
     };
 
@@ -273,8 +271,8 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
-    return try offsets.gotoHandler(arena, &self.workspace, id, doc, doc_position, true);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    return try offsets.gotoHandler(arena, &self.workspace, id, doc, doc_position, true, self.offset_encoding);
 }
 
 pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
@@ -286,20 +284,20 @@ pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonPara
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Completion, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
     return completion_util.process(arena, &self.workspace, id, doc, doc_position, self.config, &self.client_capabilities);
 }
 
 pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
-    return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName, self.offset_encoding);
 }
 
 pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const doc_position = try offsets.documentPosition(doc.document, params.position, offsets.offset_encoding);
-    return references_util.process(arena, &self.workspace, id, doc, doc_position, params.context.includeDeclaration, self.config);
+    const doc_position = try offsets.documentPosition(doc.document, params.position, self.offset_encoding);
+    return references_util.process(arena, &self.workspace, id, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding);
 }

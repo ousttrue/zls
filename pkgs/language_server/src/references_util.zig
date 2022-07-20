@@ -18,6 +18,7 @@ fn referencesDefinitionGlobal(
     pos_index: usize,
     include_decl: bool,
     skip_std_references: bool,
+    offset_encoding: offsets.Encoding,
 ) !lsp.Response {
     const decl = try offsets.getSymbolGlobal(arena, workspace, pos_index, handle);
     var locs = std.ArrayList(lsp.Location).init(arena.allocator());
@@ -25,7 +26,7 @@ fn referencesDefinitionGlobal(
         arena,
         workspace,
         decl,
-        offsets.offset_encoding,
+        offset_encoding,
         include_decl,
         &locs,
         std.ArrayList(lsp.Location).append,
@@ -46,20 +47,28 @@ fn referencesDefinitionFieldAccess(
     range: analysis.SourceRange,
     include_decl: bool,
     config: *Config,
+    offset_encoding: offsets.Encoding,
 ) !lsp.Response {
     const decl = try offsets.getSymbolFieldAccess(arena, workspace, handle, position, range);
     var locs = std.ArrayList(lsp.Location).init(arena.allocator());
-    try references.symbolReferences(arena, workspace, decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, config.skip_std_references);
+    try references.symbolReferences(arena, workspace, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, config.skip_std_references);
     return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
     };
 }
 
-fn referencesDefinitionLabel(arena: *std.heap.ArenaAllocator, id: i64, handle: *Document, pos_index: usize, include_decl: bool) !lsp.Response {
+fn referencesDefinitionLabel(
+    arena: *std.heap.ArenaAllocator,
+    id: i64,
+    handle: *Document,
+    pos_index: usize,
+    include_decl: bool,
+    offset_encoding: offsets.Encoding,
+) !lsp.Response {
     const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(arena.allocator());
-    try references.labelReferences(decl, offsets.offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
+    try references.labelReferences(decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
     return lsp.Response{
         .id = id,
         .result = .{ .Locations = locs.items },
@@ -74,12 +83,13 @@ pub fn process(
     doc_position: DocumentPosition,
     include_decl: bool,
     config: *Config,
+    offset_encoding: offsets.Encoding,
 ) !lsp.Response {
     const pos_context = position_context.documentPositionContext(arena, doc_position);
     return switch (pos_context) {
-        .var_access => try referencesDefinitionGlobal(arena, workspace, id, doc, doc_position.absolute_index, include_decl, config.skip_std_references),
-        .field_access => |range| try referencesDefinitionFieldAccess(arena, workspace, id, doc, doc_position, range, include_decl, config),
-        .label => try referencesDefinitionLabel(arena, id, doc, doc_position.absolute_index, include_decl),
+        .var_access => try referencesDefinitionGlobal(arena, workspace, id, doc, doc_position.absolute_index, include_decl, config.skip_std_references, offset_encoding),
+        .field_access => |range| try referencesDefinitionFieldAccess(arena, workspace, id, doc, doc_position, range, include_decl, config, offset_encoding),
+        .label => try referencesDefinitionLabel(arena, id, doc, doc_position.absolute_index, include_decl, offset_encoding),
         else => lsp.Response.createNull(id),
     };
 }
