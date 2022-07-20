@@ -1,22 +1,13 @@
 const std = @import("std");
-const Config = @import("./Config.zig");
-const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const requests = @import("lsp").requests;
 const lsp = @import("lsp");
 const analysis = @import("./analysis.zig");
 const ast = @import("./ast.zig");
-const references = @import("./references.zig");
-const rename = @import("./rename.zig");
 const offsets = @import("./offsets.zig");
-const semantic_tokens = @import("./semantic_tokens.zig");
-const shared = @import("./shared.zig");
 const Ast = std.zig.Ast;
 const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 const builtin_completions = @import("./builtin_completions.zig");
-const position_context = @import("./position_context.zig");
-const DocumentPosition = @import("./document_position.zig").DocumentPosition;
-
 const Session = struct {};
 
 const logger = std.log.scoped(.main);
