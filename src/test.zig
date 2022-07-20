@@ -12,7 +12,7 @@ pub fn main() anyerror!void {
     var json_parser = std.json.Parser.init(allocator, false);
     defer json_parser.deinit();
     const tree = try json_parser.parse(req);
-    const value = try lsp.fromDynamicTree(&arena, lsp.requests.Initialize, tree.root);
+    const value = try lsp.fromDynamicTree(&arena, lsp.initialize.InitializeParams, tree.root);
     _ = value;
     std.debug.print("\n", .{});
 }

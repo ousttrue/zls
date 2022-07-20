@@ -1,4 +1,5 @@
 const types = @import("./types.zig");
+const initialize = @import("./initialize.zig");
 
 /// Params of a response (result)
 pub const ResponseParams = union(enum) {
@@ -11,7 +12,7 @@ pub const ResponseParams = union(enum) {
     TextEdits: []types.TextEdit,
     Locations: []types.Location,
     WorkspaceEdit: types.WorkspaceEdit,
-    InitializeResult: types.InitializeResult,
+    InitializeResult: initialize.InitializeResult,
     Null: ?struct {},
 };
 

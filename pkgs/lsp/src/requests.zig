@@ -4,19 +4,7 @@
 
 const std = @import("std");
 const types = @import("./types.zig");
-
-/// Only check for the field's existence.
-const Exists = struct {
-    exists: bool,
-};
-
-fn Default(comptime T: type, comptime default_value: T) type {
-    return struct {
-        pub const value_type = T;
-        pub const default = default_value;
-        value: T,
-    };
-}
+const Default = types.Default;
 
 pub fn ErrorUnwrappedReturnOf(comptime func: anytype) type {
     return switch (@typeInfo(@TypeOf(func))) {
@@ -36,32 +24,6 @@ fn Transform(comptime Original: type, comptime transform_fn: anytype) type {
         value: ErrorUnwrappedReturnOf(transform_fn),
     };
 }
-
-const MaybeStringArray = Default([]const []const u8, &.{});
-
-pub const Initialize = struct {
-    pub const ClientCapabilities = struct {
-        workspace: ?struct {
-            workspaceFolders: Default(bool, false),
-        },
-        textDocument: ?struct {
-            semanticTokens: Exists,
-            hover: ?struct {
-                contentFormat: MaybeStringArray,
-            },
-            completion: ?struct {
-                completionItem: ?struct {
-                    snippetSupport: Default(bool, false),
-                    documentationFormat: MaybeStringArray,
-                },
-            },
-        },
-        offsetEncoding: MaybeStringArray,
-    };
-
-    capabilities: ClientCapabilities,
-    workspaceFolders: ?[]const types.WorkspaceFolder,
-};
 
 pub const WorkspaceFoldersChange = struct {
     params: struct {
