@@ -7,6 +7,7 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
 const Self = @This();
+const logger = std.log.scoped(.Document);
 
 allocator: std.mem.Allocator,
 utf8_buffer: Utf8Buffer,
@@ -64,11 +65,78 @@ pub fn delete(self: *Self) void {
 }
 
 pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
-    if (self.ast_context.tokenIndexFromBytePos(byte_pos)) |token_index| {
-        const node_idx = self.ast_context.tokens_node[token_index];
-        _ = node_idx;
+    const token_with_index = self.ast_context.tokenFromBytePos(byte_pos) orelse {
         return .empty;
-    } else {
-        return .empty;
-    }
+    };
+    const token = token_with_index.token;
+    const token_index = token_with_index.index;
+    const token_text = self.ast_context.getTokenText(token);
+    const node_index = self.ast_context.tokens_node[token_index];
+    const tag = self.tree.nodes.items(.tag);
+    const node_tag = tag[node_index];
+    logger.info("{s}: {s} => {s}", .{ @tagName(token.tag), token_text, @tagName(node_tag) });
+
+    return switch (token_with_index.token.tag) {
+        .builtin => .{ .builtin = token.loc },
+        .string_literal => .{ .string_literal = token.loc },
+        // field_access: SourceRange,
+        // var_access: SourceRange,
+        // global_error_set,
+        // enum_literal,
+        // // pre_label,
+        // label: bool,
+        // // other,
+        .keyword_addrspace,
+        .keyword_align,
+        .keyword_allowzero,
+        .keyword_and,
+        .keyword_anyframe,
+        .keyword_anytype,
+        .keyword_asm,
+        .keyword_async,
+        .keyword_await,
+        .keyword_break,
+        .keyword_callconv,
+        .keyword_catch,
+        .keyword_comptime,
+        .keyword_const,
+        .keyword_continue,
+        .keyword_defer,
+        .keyword_else,
+        .keyword_enum,
+        .keyword_errdefer,
+        .keyword_error,
+        .keyword_export,
+        .keyword_extern,
+        .keyword_fn,
+        .keyword_for,
+        .keyword_if,
+        .keyword_inline,
+        .keyword_noalias,
+        .keyword_noinline,
+        .keyword_nosuspend,
+        .keyword_opaque,
+        .keyword_or,
+        .keyword_orelse,
+        .keyword_packed,
+        .keyword_pub,
+        .keyword_resume,
+        .keyword_return,
+        .keyword_linksection,
+        .keyword_struct,
+        .keyword_suspend,
+        .keyword_switch,
+        .keyword_test,
+        .keyword_threadlocal,
+        .keyword_try,
+        .keyword_union,
+        .keyword_unreachable,
+        .keyword_usingnamespace,
+        .keyword_var,
+        .keyword_volatile,
+        .keyword_while,
+        => .keyword,
+
+        else => .empty,
+    };
 }

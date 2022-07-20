@@ -197,10 +197,12 @@ pub fn isInToken(pos: usize, token: std.zig.Token) bool {
     return pos >= token.loc.start and pos <= token.loc.end - 1;
 }
 
-pub fn tokenIndexFromBytePos(self: Self, byte_pos: usize) ?u32 {
+pub const TokenWithIndex = struct { token: std.zig.Token, index: u32 };
+
+pub fn tokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
     for (self.tokens.items) |token, i| {
         if (isInToken(byte_pos, token)) {
-            return @intCast(u32, i);
+            return TokenWithIndex{ .token = token, .index = @intCast(u32, i) };
         }
     }
     return null;

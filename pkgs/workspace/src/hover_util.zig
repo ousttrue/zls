@@ -36,7 +36,13 @@ fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: i64, pos_index: u
     unreachable;
 }
 
-fn hoverSymbol(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, decl_handle: analysis.DeclWithHandle, client_capabilities: *ClientCapabilities,) (std.os.WriteError || error{OutOfMemory})!lsp.Response {
+fn hoverSymbol(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    id: i64,
+    decl_handle: analysis.DeclWithHandle,
+    client_capabilities: *ClientCapabilities,
+) (std.os.WriteError || error{OutOfMemory})!lsp.Response {
     const handle = decl_handle.handle;
     const tree = handle.tree;
 
@@ -110,15 +116,27 @@ fn hoverSymbol(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, 
     };
 }
 
-pub fn process(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, doc: *Document, doc_position: DocumentPosition, client_capabilities: *ClientCapabilities,) !lsp.Response
-{
-    const pos_context = doc.getPositionContext(doc_position.absolute_index);
+pub fn process(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    id: i64,
+    doc: *Document,
+    doc_position: DocumentPosition,
+    client_capabilities: *ClientCapabilities,
+) !lsp.Response {
+    if (doc.ast_context.tokenFromBytePos(doc_position.absolute_index)) |token_with_index| {
+        switch (token_with_index.token.tag) {
+            .builtin => {
+                logger.debug("[hover][builtin]", .{});
+                return try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, doc);
+            },
+            else => {},
+        }
+    }
+
     // const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = doc.getPositionContext(doc_position.absolute_index);
     switch (pos_context) {
-        .builtin => {
-            logger.debug("[hover][builtin]", .{});
-            return try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, doc);
-        },
         .var_access => {
             logger.debug("[hover][var_access]", .{});
             const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
