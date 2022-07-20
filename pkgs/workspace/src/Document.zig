@@ -8,6 +8,7 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const AstContext = @import("./AstContext.zig");
 const Self = @This();
 
+allocator: std.mem.Allocator,
 utf8_buffer: Utf8Buffer,
 count: usize,
 /// Contains one entry for every import in the document
@@ -31,6 +32,7 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     errdefer document_scope.deinit(allocator);
 
     self.* = Self{
+        .allocator = allocator,
         .count = 1,
         .import_uris = &.{},
         .imports_used = .{},
@@ -42,6 +44,18 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     };
 
     return self;
+}
+
+pub fn delete(self: *Self) void {
+    for (self.import_uris) |imp_uri| {
+        self.allocator.free(imp_uri);
+    }
+    self.allocator.free(self.import_uris);
+    self.imports_used.deinit(self.allocator);
+    self.document_scope.deinit(self.allocator);
+    self.tree.deinit(self.allocator);
+    self.allocator.free(self.utf8_buffer.mem);
+    self.allocator.destroy(self);
 }
 
 // pub fn getPositionContext(self: Self, doc_position: DocumentPosition) PositionContext {

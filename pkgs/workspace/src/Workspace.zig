@@ -166,7 +166,8 @@ fn loadPackages(context: LoadPackagesContext) !void {
 fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     // log.debug("Opened document: {s}", .{uri});
 
-    const handle = try Document.new(self.allocator, uri, text);
+    const doc = try Document.new(self.allocator, uri, text);
+    errdefer doc.delete();
 
     // TODO: Better logic for detecting std or subdirectories?
     const in_std = std.mem.indexOf(u8, uri, "/std/") != null;
@@ -216,7 +217,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
         }
 
         try self.build_files.append(self.allocator, build_file);
-        handle.is_build_file = build_file;
+        doc.is_build_file = build_file;
     } else if (self.zig_exe_path != null and !in_std) {
         // Look into build files and keep the one that lives closest to the document in the directory structure
         var candidate: ?*BuildFile = null;
@@ -297,21 +298,15 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
         // Finally, associate the candidate build file, if any, to the new document.
         if (candidate) |build_file| {
             build_file.refs += 1;
-            handle.associated_build_file = build_file;
+            doc.associated_build_file = build_file;
             // log.debug("Associated build file `{s}` to document `{s}`", .{ build_file.uri, handle.uri() });
         }
     }
 
-    handle.import_uris = try self.collectImportUris(handle);
-    errdefer {
-        for (handle.import_uris) |imp_uri| {
-            self.allocator.free(imp_uri);
-        }
-        self.allocator.free(handle.import_uris);
-    }
+    doc.import_uris = try self.collectImportUris(doc);
 
-    try self.handles.putNoClobber(uri, handle);
-    return handle;
+    try self.handles.putNoClobber(uri, doc);
+    return doc;
 }
 
 pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
@@ -691,19 +686,11 @@ fn stdUriFromLibPath(allocator: std.mem.Allocator, zig_lib_path: ?[]const u8) !?
 pub fn deinit(self: *Self) void {
     var entry_iterator = self.handles.iterator();
     while (entry_iterator.next()) |entry| {
-        entry.value_ptr.*.document_scope.deinit(self.allocator);
-        entry.value_ptr.*.tree.deinit(self.allocator);
-        self.allocator.free(entry.value_ptr.*.utf8_buffer.mem);
-        for (entry.value_ptr.*.import_uris) |uri| {
-            self.allocator.free(uri);
-        }
-        self.allocator.free(entry.value_ptr.*.import_uris);
-        entry.value_ptr.*.imports_used.deinit(self.allocator);
         self.allocator.free(entry.key_ptr.*);
-        self.allocator.destroy(entry.value_ptr.*);
+        entry.value_ptr.*.delete();
     }
-
     self.handles.deinit();
+
     for (self.build_files.items) |build_file| {
         for (build_file.packages.items) |pkg| {
             self.allocator.free(pkg.name);
