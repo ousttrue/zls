@@ -1,4 +1,8 @@
-// Configuration options for zls.
+//! Configuration options for zls.
+
+const std = @import("std");
+const logger = std.log.scoped(.Config);
+const Self = @This();
 
 /// Whether to enable snippet completions
 enable_snippets: bool = false,
@@ -38,3 +42,37 @@ skip_std_references: bool = false,
 
 builtin_path: ?[]const u8 = null,
 
+pub fn load(allocator: std.mem.Allocator, path: []const u8) ?Self {
+    var file = std.fs.cwd().openFile(path, .{}) catch |err| {
+        if (err != error.FileNotFound) {
+            logger.warn("Error while reading configuration file: {}", .{err});
+        }
+        return null;
+    };
+    defer file.close();
+
+    const file_buf = file.readToEndAlloc(allocator, 0x1000000) catch return null;
+    defer allocator.free(file_buf);
+    @setEvalBranchQuota(3000);
+    // TODO: Better errors? Doesn't seem like std.json can provide us positions or context.
+    var config = std.json.parse(Self, &std.json.TokenStream.init(file_buf), .{ .allocator = allocator }) catch |err| {
+        logger.warn("Error while parsing configuration file: {s} {}", .{ path, err });
+        return null;
+    };
+
+    if (config.zig_lib_path) |zig_lib_path| {
+        if (!std.fs.path.isAbsolute(zig_lib_path)) {
+            logger.warn("zig library path is not absolute, defaulting to null.", .{});
+            allocator.free(zig_lib_path);
+            config.zig_lib_path = null;
+        }
+    }
+
+    return config;
+}
+
+pub fn loadInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Self {
+    const full_path = std.fs.path.resolve(allocator, &.{ folder_path, "zls.json" }) catch return null;
+    defer allocator.free(full_path);
+    return load(allocator, full_path);
+}

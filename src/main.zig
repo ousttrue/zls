@@ -74,39 +74,32 @@ pub fn log(
     transport.sendToJson(notification);
 }
 
-fn loadConfigFile(allocator: std.mem.Allocator, file_path: []const u8) ?Config {
-    var file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
-        if (err != error.FileNotFound)
-            logger.warn("Error while reading configuration file: {}", .{err});
-        return null;
-    };
-
-    defer file.close();
-
-    const file_buf = file.readToEndAlloc(allocator, 0x1000000) catch return null;
-    defer allocator.free(file_buf);
-    @setEvalBranchQuota(3000);
-    // TODO: Better errors? Doesn't seem like std.json can provide us positions or context.
-    var config = std.json.parse(Config, &std.json.TokenStream.init(file_buf), std.json.ParseOptions{ .allocator = allocator }) catch |err| {
-        logger.warn("Error while parsing configuration file: {s} {}", .{ file_path, err });
-        return null;
-    };
-
-    if (config.zig_lib_path) |zig_lib_path| {
-        if (!std.fs.path.isAbsolute(zig_lib_path)) {
-            logger.warn("zig library path is not absolute, defaulting to null.", .{});
-            allocator.free(zig_lib_path);
-            config.zig_lib_path = null;
+pub fn loadConfig(allocator: std.mem.Allocator, config_path: ?[]const u8) Config {
+    if (config_path) |path| {
+        defer allocator.free(path);
+        if (Config.load(allocator, path)) |config| {
+            std.debug.print("Could not open configuration file '{s}'\n", .{path});
+            std.debug.print("Falling back to a lookup in the local and global configuration folders\n", .{});
+            return config;
         }
     }
 
-    return config;
-}
+    if (known_folders.getPath(allocator, .local_configuration)) |path| {
+        defer allocator.free(path.?);
+        if (Config.loadInFolder(allocator, path.?)) |config| {
+            return config;
+        }
+    } else |_| {}
 
-fn loadConfigInFolder(allocator: std.mem.Allocator, folder_path: []const u8) ?Config {
-    const full_path = std.fs.path.resolve(allocator, &.{ folder_path, "zls.json" }) catch return null;
-    defer allocator.free(full_path);
-    return loadConfigFile(allocator, full_path);
+    if (known_folders.getPath(allocator, .global_configuration)) |path| {
+        defer allocator.free(path.?);
+        if (Config.loadInFolder(allocator, path.?)) |config| {
+            return config;
+        }
+    } else |_| {}
+
+    logger.info("No config file zls.json found.", .{});
+    return Config{};
 }
 
 pub fn main() anyerror!void {
@@ -155,34 +148,7 @@ pub fn main() anyerror!void {
     // const config_parse_options = std.json.ParseOptions{ .allocator = allocator };
     // defer std.json.parseFree(Config, config, config_parse_options);
 
-    var config = Config{};
-    config_read: {
-        if (config_path) |path| {
-            defer allocator.free(path);
-            if (loadConfigFile(allocator, path)) |conf| {
-                config = conf;
-                break :config_read;
-            }
-            std.debug.print("Could not open configuration file '{s}'\n", .{path});
-            std.debug.print("Falling back to a lookup in the local and global configuration folders\n", .{});
-        }
-        if (try known_folders.getPath(allocator, .local_configuration)) |path| {
-            config_path = path;
-            if (loadConfigInFolder(allocator, path)) |conf| {
-                config = conf;
-                break :config_read;
-            }
-        }
-        if (try known_folders.getPath(allocator, .global_configuration)) |path| {
-            config_path = path;
-            if (loadConfigInFolder(allocator, path)) |conf| {
-                config = conf;
-                break :config_read;
-            }
-        }
-        logger.info("No config file zls.json found.", .{});
-        config_path = null;
-    }
+    var config = loadConfig(allocator, config_path);
 
     // Find the zig executable in PATH
     find_zig: {
