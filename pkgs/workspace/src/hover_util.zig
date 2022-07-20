@@ -12,30 +12,6 @@ const builtin_completions = @import("./builtin_completions.zig");
 const Ast = std.zig.Ast;
 const logger = std.log.scoped(.hover);
 
-fn hoverDefinitionBuiltin(arena: *std.heap.ArenaAllocator, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
-    const name = try offsets.identifierFromPosition(pos_index, handle.utf8_buffer.text);
-    for (builtin_completions.data()) |builtin| {
-        if (std.mem.eql(u8, builtin.name[1..], name)) {
-            return lsp.Response{
-                .id = id,
-                .result = .{
-                    .Hover = .{
-                        .contents = .{
-                            .value = try std.fmt.allocPrint(
-                                arena.allocator(),
-                                "```zig\n{s}\n```\n{s}",
-                                .{ builtin.signature, builtin.documentation },
-                            ),
-                        },
-                    },
-                },
-            };
-        }
-    }
-
-    unreachable;
-}
-
 fn hoverSymbol(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -127,8 +103,26 @@ pub fn process(
     if (doc.ast_context.tokenFromBytePos(doc_position.absolute_index)) |token_with_index| {
         switch (token_with_index.token.tag) {
             .builtin => {
-                logger.debug("(hover)[builtin]", .{});
-                return try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, doc);
+                const name = doc.ast_context.getTokenText(token_with_index.token);
+                logger.debug("(hover)[builtin]: {s}", .{name});
+                if (builtin_completions.find(name)) |builtin| {
+                    const hover_contents = try std.fmt.allocPrint(
+                        arena.allocator(),
+                        "```zig\n{s}\n```\n{s}",
+                        .{ builtin.signature, builtin.documentation },
+                    );
+                    return lsp.Response{
+                        .id = id,
+                        .result = .{
+                            .Hover = .{
+                                .contents = .{ .value = hover_contents },
+                            },
+                        },
+                    };
+                } else {
+                    logger.debug("builtin {s} not found", .{name});
+                    return lsp.Response.createNull(id);
+                }
             },
             else => {},
         }

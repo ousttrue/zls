@@ -69,3 +69,12 @@ pub fn completeBuiltin(id: i64) lsp.Response {
         },
     };
 }
+
+pub fn find(name: []const u8) ?Builtin {
+    for (data()) |builtin| {
+        if (std.mem.eql(u8, builtin.name, name)) {
+            return builtin;
+        }
+    }
+    return null;
+}
