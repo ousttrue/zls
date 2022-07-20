@@ -166,25 +166,7 @@ fn loadPackages(context: LoadPackagesContext) !void {
 fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     // log.debug("Opened document: {s}", .{uri});
 
-    var handle = try self.allocator.create(Document);
-    errdefer self.allocator.destroy(handle);
-
-    var tree = try std.zig.parse(self.allocator, text);
-    errdefer tree.deinit(self.allocator);
-
-    var document_scope = try analysis.makeDocumentScope(self.allocator, tree);
-    errdefer document_scope.deinit(self.allocator);
-
-    handle.* = Document{
-        .count = 1,
-        .import_uris = &.{},
-        .imports_used = .{},
-        .utf8_buffer = Utf8Buffer.init(uri, text),
-        .tree = tree,
-        .document_scope = document_scope,
-        .associated_build_file = null,
-        .is_build_file = null,
-    };
+    const handle = try Document.new(self.allocator, uri, text);
 
     // TODO: Better logic for detecting std or subdirectories?
     const in_std = std.mem.indexOf(u8, uri, "/std/") != null;

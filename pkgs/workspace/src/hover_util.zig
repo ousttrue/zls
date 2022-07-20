@@ -110,27 +110,28 @@ fn hoverSymbol(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, 
     };
 }
 
-pub fn process(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, handle: *Document, doc_position: DocumentPosition, client_capabilities: *ClientCapabilities,) !lsp.Response
+pub fn process(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, doc: *Document, doc_position: DocumentPosition, client_capabilities: *ClientCapabilities,) !lsp.Response
 {
+    // const pos_context = doc.getPositionContext(doc_position);
     const pos_context = position_context.documentPositionContext(arena, doc_position);
     switch (pos_context) {
         .builtin => {
             logger.debug("[hover][builtin]", .{});
-            return try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, handle);
+            return try hoverDefinitionBuiltin(arena, id, doc_position.absolute_index, doc);
         },
         .var_access => {
             logger.debug("[hover][var_access]", .{});
-            const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, handle);
+            const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
         },
         .field_access => |range| {
             logger.debug("[hover][field_access]", .{});
-            const decl = try offsets.getSymbolFieldAccess(arena, workspace, handle, doc_position, range);
+            const decl = try offsets.getSymbolFieldAccess(arena, workspace, doc, doc_position, range);
             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
         },
         .label => {
             logger.debug("[hover][label_access]", .{});
-            const decl = (try offsets.getLabelGlobal(doc_position.absolute_index, handle)) orelse return lsp.Response.createNull(id);
+            const decl = (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) orelse return lsp.Response.createNull(id);
             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
         },
         else => {
