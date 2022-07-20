@@ -20,7 +20,7 @@ fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayLis
     return tokens;
 }
 
-pub fn getChildren(children: []u32, tree: std.zig.Ast, idx: u32) []u32 {
+pub fn getChildren(children: []u32, tree: *const std.zig.Ast, idx: u32) []u32 {
     const tag = tree.nodes.items(.tag);
     const node_tag = tag[idx];
     const data = tree.nodes.items(.data);
@@ -94,12 +94,12 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
 pub const AstPath = struct {};
 
 allocator: std.mem.Allocator,
-tree: *std.zig.Ast,
+tree: *const std.zig.Ast,
 nodes_parent: []u32,
 tokens: std.ArrayList(std.zig.Token),
 tokens_node: []u32,
 
-pub fn new(allocator: std.mem.Allocator, tree: *std.zig.Ast) *Self {
+pub fn new(allocator: std.mem.Allocator, tree: *const std.zig.Ast) *Self {
     // const tree: std.zig.Ast = std.zig.parse(allocator, src) catch unreachable;
     var self = allocator.create(Self) catch unreachable;
     self.* = Self{
@@ -134,7 +134,6 @@ pub fn new(allocator: std.mem.Allocator, tree: *std.zig.Ast) *Self {
 pub fn delete(self: *Self) void {
     self.allocator.free(self.tokens_node);
     self.allocator.free(self.nodes_parent);
-    self.tree.deinit(self.allocator);
     self.allocator.destroy(self);
 }
 

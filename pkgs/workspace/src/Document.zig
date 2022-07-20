@@ -16,6 +16,7 @@ import_uris: []const []const u8,
 /// Items in this array list come from `import_uris`
 imports_used: std.ArrayListUnmanaged([]const u8),
 tree: Ast,
+ast_context: *AstContext,
 document_scope: analysis.DocumentScope,
 
 associated_build_file: ?*BuildFile,
@@ -38,10 +39,13 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .imports_used = .{},
         .utf8_buffer = Utf8Buffer.init(uri, text),
         .tree = tree,
+        .ast_context = undefined,
         .document_scope = document_scope,
         .associated_build_file = null,
         .is_build_file = null,
     };
+
+    self.ast_context = AstContext.new(allocator, &self.tree);
 
     return self;
 }
@@ -53,6 +57,7 @@ pub fn delete(self: *Self) void {
     self.allocator.free(self.import_uris);
     self.imports_used.deinit(self.allocator);
     self.document_scope.deinit(self.allocator);
+    self.ast_context.delete();
     self.tree.deinit(self.allocator);
     self.allocator.free(self.utf8_buffer.mem);
     self.allocator.destroy(self);
