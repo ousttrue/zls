@@ -41,8 +41,7 @@ fn hoverSymbol(
             } else if (ast.containerField(tree, node)) |field| {
                 break :def analysis.getContainerFieldSignature(tree, field);
             } else {
-                if(analysis.nodeToString(tree, node))|text|
-                {
+                if (analysis.nodeToString(tree, node)) |text| {
                     break :def text;
                 }
                 return null;
@@ -94,9 +93,9 @@ pub fn process(
     client_capabilities: *ClientCapabilities,
 ) !?[]const u8 {
     if (doc.ast_context.tokenFromBytePos(doc_position.absolute_index)) |token_with_index| {
+        const name = doc.ast_context.getTokenText(token_with_index.token);
         switch (token_with_index.token.tag) {
             .builtin => {
-                const name = doc.ast_context.getTokenText(token_with_index.token);
                 logger.debug("(hover)[builtin]: {s}", .{name});
                 if (builtin_completions.find(name)) |builtin| {
                     return try std.fmt.allocPrint(
@@ -110,8 +109,8 @@ pub fn process(
                 }
             },
             else => {
-                const idx = doc.ast_context.tokens_node[token_with_index.index];
                 const tag = doc.tree.nodes.items(.tag);
+                const idx = doc.ast_context.tokens_node[token_with_index.index];
                 const node_tag = tag[idx];
                 switch (node_tag) {
                     .simple_var_decl => {
@@ -119,35 +118,48 @@ pub fn process(
                         const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
                         return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
                     },
-                    else => {},
+                    .fn_proto_multi => {
+                        return analysis.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
+                    },
+                    // .call_one => {
+
+                    // },
+                    else => {
+                        return try std.fmt.allocPrint(arena.allocator(), "{s}: {} => {}", .{
+                            name,
+                            token_with_index.token.tag,
+                            node_tag,
+                        });
+                    },
                 }
             },
         }
     }
 
-    // const pos_context = position_context.documentPositionContext(arena, doc_position);
-    const pos_context = doc.getPositionContext(doc_position.absolute_index);
-    switch (pos_context) {
-        .var_access => {
-            logger.debug("[hover][var_access]", .{});
-            const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
-            return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-        },
-        .field_access => |range| {
-            logger.debug("[hover][field_access]", .{});
-            const decl = try offsets.getSymbolFieldAccess(arena, workspace, doc, doc_position, range);
-            return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-        },
-        .label => {
-            logger.debug("[hover][label_access]", .{});
-            if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
-                return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-            }
-        },
-        else => {
-            logger.debug("[hover][{s}]", .{@tagName(pos_context)});
-        },
-    }
+    // // const pos_context = position_context.documentPositionContext(arena, doc_position);
+    // const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    // switch (pos_context) {
+    //     .var_access => {
+    //         logger.debug("[hover][var_access]", .{});
+    //         const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
+    //         return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+    //     },
+    //     .field_access => |range| {
+    //         logger.debug("[hover][field_access]", .{});
+    //         const decl = try offsets.getSymbolFieldAccess(arena, workspace, doc, doc_position, range);
+    //         return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+    //     },
+    //     .label => {
+    //         logger.debug("[hover][label_access]", .{});
+    //         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
+    //             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+    //         }
+    //     },
+    //     else => {
+    //         logger.debug("[hover][{s}]", .{@tagName(pos_context)});
+    //     },
+    // }
 
+    // return try std.fmt.allocPrint(arena.allocator(), "{}", .{pos_context});
     return null;
 }
