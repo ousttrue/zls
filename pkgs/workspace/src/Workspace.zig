@@ -48,43 +48,6 @@ pub fn deinit(self: *Self) void {
     self.build_files.deinit(self.allocator);
 }
 
-fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: ZigEnv) !*BuildFile {
-    logger.debug("{s} => extracting packages...", .{uri});
-
-    // This is a build file.
-    var build_file = try allocator.create(BuildFile);
-    errdefer build_file.destroy(allocator);
-    build_file.* = .{
-        .refs = 1,
-        .uri = try allocator.dupe(u8, uri),
-        .packages = .{},
-    };
-
-    const build_file_path = try URI.parse(allocator, build_file.uri);
-    defer allocator.free(build_file_path);
-
-    if (build_file.loadBuildAssociatedConfiguration(allocator, build_file_path)) {
-        logger.info("{s} => loadBuildAssociatedConfiguration", .{build_file.uri});
-    } else |err| {
-        logger.debug("Failed to load config associated with build file {s} (error: {})", .{ build_file.uri, err });
-    }
-
-    if (build_file.builtin_uri == null) {
-        build_file.builtin_uri = try URI.fromPath(allocator, zigenv.builtin_path);
-        logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_uri});
-    }
-
-    // TODO: Do this in a separate thread?
-    // It can take quite long.
-    if (build_file.loadPackages(allocator, build_file_path, zigenv)) {
-        logger.info("{s} => loadPackages", .{build_file.uri});
-    } else |err| {
-        logger.debug("{s} => {}", .{ build_file.uri, err });
-    }
-
-    return build_file;
-}
-
 /// This function asserts the document is not open yet and takes ownership
 /// of the uri and text passed in.
 fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
@@ -95,7 +58,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     if (std.mem.indexOf(u8, uri, "/std/") != null) {
         // in std
     } else if (std.mem.endsWith(u8, uri, "/build.zig")) {
-        var build_file = try extractPackages(self.allocator, uri, self.zigenv);
+        var build_file = try BuildFile.extractPackages(self.allocator, uri, self.zigenv);
         try self.build_files.append(self.allocator, build_file);
         doc.is_build_file = build_file;
     } else {

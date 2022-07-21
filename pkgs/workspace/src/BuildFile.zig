@@ -2,7 +2,7 @@ const std = @import("std");
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
 const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
-const logger = std.log.scoped(.BuildFile);
+const logger = std.log.scoped(.Self);
 const Pkg = struct {
     name: []const u8,
     uri: []const u8,
@@ -20,17 +20,7 @@ pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
     allocator.destroy(self);
 }
 
-// const LoadPackagesContext = struct {
-//     allocator: std.mem.Allocator,
-//     build_file_path: ?[]const u8 = null,
-//     // build_runner_path: []const u8,
-//     // build_runner_cache_path: []const u8,
-//     // zig_exe_path: []const u8,
-//     // cache_root: []const u8,
-//     // global_cache_root: []const u8,
-// };
-
-pub fn loadBuildAssociatedConfiguration(build_file: *Self, allocator: std.mem.Allocator, build_file_path: []const u8) !void {
+fn loadBuildAssociatedConfiguration(build_file: *Self, allocator: std.mem.Allocator, build_file_path: []const u8) !void {
     const directory_path = build_file_path[0 .. build_file_path.len - "build.zig".len];
 
     const options = std.json.ParseOptions{ .allocator = allocator };
@@ -127,4 +117,41 @@ pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file
         },
         else => return error.RunFailed,
     }
+}
+
+pub fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: ZigEnv) !*Self {
+    logger.debug("{s} => extracting packages...", .{uri});
+
+    // This is a build file.
+    var build_file = try allocator.create(Self);
+    errdefer build_file.destroy(allocator);
+    build_file.* = .{
+        .refs = 1,
+        .uri = try allocator.dupe(u8, uri),
+        .packages = .{},
+    };
+
+    const build_file_path = try URI.parse(allocator, build_file.uri);
+    defer allocator.free(build_file_path);
+
+    if (build_file.loadBuildAssociatedConfiguration(allocator, build_file_path)) {
+        logger.info("{s} => loadBuildAssociatedConfiguration", .{build_file.uri});
+    } else |err| {
+        logger.debug("Failed to load config associated with build file {s} (error: {})", .{ build_file.uri, err });
+    }
+
+    if (build_file.builtin_uri == null) {
+        build_file.builtin_uri = try URI.fromPath(allocator, zigenv.builtin_path);
+        logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_uri});
+    }
+
+    // TODO: Do this in a separate thread?
+    // It can take quite long.
+    if (build_file.loadPackages(allocator, build_file_path, zigenv)) {
+        logger.info("{s} => loadPackages", .{build_file.uri});
+    } else |err| {
+        logger.debug("{s} => {}", .{ build_file.uri, err });
+    }
+
+    return build_file;
 }
