@@ -9,15 +9,44 @@ const Pkg = struct {
 };
 const Self = @This();
 
+allocator: std.mem.Allocator,
 refs: usize,
 uri: []const u8,
 packages: std.ArrayListUnmanaged(Pkg),
-
 builtin_uri: ?[]const u8 = null,
 
-pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
-    if (self.builtin_uri) |builtin_uri| allocator.free(builtin_uri);
-    allocator.destroy(self);
+pub fn new(allocator: std.mem.Allocator, uri: []const u8) !*Self {
+    var self = try allocator.create(Self);
+    self.* = Self{
+        .allocator = allocator,
+        .refs = 1,
+        .uri = try allocator.dupe(u8, uri),
+        .packages = .{},
+    };
+    return self;
+}
+
+pub fn delete(self: *Self) void {
+    if (self.builtin_uri) |builtin_uri| {
+        self.allocator.free(builtin_uri);
+    }
+
+    for (self.packages.items) |pkg| {
+        self.allocator.free(pkg.name);
+        self.allocator.free(pkg.uri);
+    }
+    self.packages.deinit(self.allocator);
+
+    self.allocator.free(self.uri);
+    self.allocator.destroy(self);
+}
+
+pub fn decrement(self: *Self) void {
+    self.refs -= 1;
+    if (self.refs == 0) {
+        logger.debug("Freeing build file {s}", .{self.uri});
+        self.delete();
+    }
 }
 
 fn loadBuildAssociatedConfiguration(build_file: *Self, allocator: std.mem.Allocator, build_file_path: []const u8) !void {
@@ -123,13 +152,8 @@ pub fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: Zi
     logger.debug("{s} => extracting packages...", .{uri});
 
     // This is a build file.
-    var build_file = try allocator.create(Self);
-    errdefer build_file.destroy(allocator);
-    build_file.* = .{
-        .refs = 1,
-        .uri = try allocator.dupe(u8, uri),
-        .packages = .{},
-    };
+    var build_file = try Self.new(allocator, uri);
+    errdefer build_file.delete();
 
     const build_file_path = try URI.parse(allocator, build_file.uri);
     defer allocator.free(build_file_path);

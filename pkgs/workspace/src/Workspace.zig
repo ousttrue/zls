@@ -37,13 +37,7 @@ pub fn deinit(self: *Self) void {
     self.handles.deinit();
 
     for (self.build_files.items) |build_file| {
-        for (build_file.packages.items) |pkg| {
-            self.allocator.free(pkg.name);
-            self.allocator.free(pkg.uri);
-        }
-        build_file.packages.deinit(self.allocator);
-        self.allocator.free(build_file.uri);
-        build_file.destroy(self.allocator);
+        build_file.delete();
     }
     self.build_files.deinit(self.allocator);
 }
@@ -174,64 +168,34 @@ pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
     return try self.newDocument(duped_uri, duped_text);
 }
 
-fn decrementBuildFileRefs(self: *Self, build_file: *BuildFile) void {
-    build_file.refs -= 1;
-    if (build_file.refs == 0) {
-        logger.debug("Freeing build file {s}", .{build_file.uri});
-        for (build_file.packages.items) |pkg| {
-            self.allocator.free(pkg.name);
-            self.allocator.free(pkg.uri);
-        }
-        build_file.packages.deinit(self.allocator);
-
-        // Decrement count of the document since one count comes
-        // from the build file existing.
-        self.decrementCount(build_file.uri);
-        self.allocator.free(build_file.uri);
-
-        // Remove the build file from the array list
-        _ = self.build_files.swapRemove(std.mem.indexOfScalar(*BuildFile, self.build_files.items, build_file).?);
-        build_file.destroy(self.allocator);
-    }
-}
-
 fn decrementCount(self: *Self, uri: []const u8) void {
     if (self.handles.getEntry(uri)) |entry| {
         const handle = entry.value_ptr.*;
-        if (handle.count == 0) return;
-        handle.count -= 1;
+        if (handle.count > 0) {
+            if (handle.associated_build_file) |build_file| {
+                self.decrementCount(build_file.uri);
+                // Remove the build file from the array list
+                _ = self.build_files.swapRemove(std.mem.indexOfScalar(*BuildFile, self.build_files.items, build_file).?);
+            }
 
-        if (handle.count > 0)
-            return;
+            if (handle.is_build_file) |build_file| {
+                self.decrementCount(build_file.uri);
+                // Remove the build file from the array list
+                _ = self.build_files.swapRemove(std.mem.indexOfScalar(*BuildFile, self.build_files.items, build_file).?);
+            }
 
-        logger.debug("Freeing document: {s}", .{uri});
+            for (handle.imports_used.items) |import_uri| {
+                self.decrementCount(import_uri);
+            }
 
-        if (handle.associated_build_file) |build_file| {
-            self.decrementBuildFileRefs(build_file);
+            if (handle.decrement() == 0) {
+                logger.debug("Freeing document: {s}", .{uri});
+            }
+
+            const uri_key = entry.key_ptr.*;
+            std.debug.assert(self.handles.remove(uri));
+            self.allocator.free(uri_key);
         }
-
-        if (handle.is_build_file) |build_file| {
-            self.decrementBuildFileRefs(build_file);
-        }
-
-        handle.tree.deinit(self.allocator);
-        self.allocator.free(handle.utf8_buffer.mem);
-
-        for (handle.imports_used.items) |import_uri| {
-            self.decrementCount(import_uri);
-        }
-
-        for (handle.import_uris) |import_uri| {
-            self.allocator.free(import_uri);
-        }
-
-        handle.document_scope.deinit(self.allocator);
-        handle.imports_used.deinit(self.allocator);
-        self.allocator.free(handle.import_uris);
-        self.allocator.destroy(handle);
-        const uri_key = entry.key_ptr.*;
-        std.debug.assert(self.handles.remove(uri));
-        self.allocator.free(uri_key);
     }
 }
 
