@@ -149,6 +149,13 @@ pub fn main() anyerror!void {
         config.builtin_path,
         config.build_runner_path,
         config.build_runner_cache_path,
+        // TODO make this configurable
+        // We can't figure it out ourselves since we don't know what arguments
+        // the user will use to run "zig build"
+        "zig-cache",
+        // Since we don't compile anything and no packages should put their
+        // files there this path can be ignored
+        "ZLS_DONT_CARE",
     );
     defer zigenv.deinit();
 

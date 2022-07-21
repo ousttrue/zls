@@ -86,17 +86,7 @@ pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self 
         .zigenv = zigenv,
     };
 
-    self.workspace.init(
-        allocator,
-        zigenv,
-        // TODO make this configurable
-        // We can't figure it out ourselves since we don't know what arguments
-        // the user will use to run "zig build"
-        "zig-cache",
-        // Since we don't compile anything and no packages should put their
-        // files there this path can be ignored
-        "ZLS_DONT_CARE",
-    ) catch @panic("Workspace.init");
+    self.workspace.init(allocator, zigenv) catch @panic("Workspace.init");
 
     return self;
 }

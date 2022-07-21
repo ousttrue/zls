@@ -1,6 +1,7 @@
 const std = @import("std");
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
 const URI = @import("./uri.zig");
+const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
 const Pkg = struct {
     name: []const u8,
@@ -19,15 +20,15 @@ pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
     allocator.destroy(self);
 }
 
-const LoadPackagesContext = struct {
-    allocator: std.mem.Allocator,
-    build_runner_path: []const u8,
-    build_runner_cache_path: []const u8,
-    zig_exe_path: []const u8,
-    build_file_path: ?[]const u8 = null,
-    cache_root: []const u8,
-    global_cache_root: []const u8,
-};
+// const LoadPackagesContext = struct {
+//     allocator: std.mem.Allocator,
+//     build_file_path: ?[]const u8 = null,
+//     // build_runner_path: []const u8,
+//     // build_runner_cache_path: []const u8,
+//     // zig_exe_path: []const u8,
+//     // cache_root: []const u8,
+//     // global_cache_root: []const u8,
+// };
 
 pub fn loadBuildAssociatedConfiguration(build_file: *Self, allocator: std.mem.Allocator, build_file_path: []const u8) !void {
     const directory_path = build_file_path[0 .. build_file_path.len - "build.zig".len];
@@ -57,33 +58,28 @@ pub fn loadBuildAssociatedConfiguration(build_file: *Self, allocator: std.mem.Al
     }
 }
 
-pub fn loadPackages(build_file: *Self, context: LoadPackagesContext) !void {
-    const allocator = context.allocator;
-    const build_runner_path = context.build_runner_path;
-    const build_runner_cache_path = context.build_runner_cache_path;
-    const zig_exe_path = context.zig_exe_path;
-
-    const build_file_path = context.build_file_path orelse try URI.parse(allocator, build_file.uri);
-    defer if (context.build_file_path == null) allocator.free(build_file_path);
+pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file_path: ?[]const u8, zigenv: ZigEnv) !void {
+    const build_file_path = _build_file_path orelse try URI.parse(allocator, build_file.uri);
+    defer if (_build_file_path == null) allocator.free(build_file_path);
     const directory_path = build_file_path[0 .. build_file_path.len - "build.zig".len];
 
     const zig_run_result = try std.ChildProcess.exec(.{
         .allocator = allocator,
         .argv = &[_][]const u8{
-            zig_exe_path,
+            zigenv.exe_path,
             "run",
-            build_runner_path,
+            zigenv.build_runner_path,
             "--cache-dir",
-            build_runner_cache_path,
+            zigenv.build_runner_cache_path,
             "--pkg-begin",
             "@build@",
             build_file_path,
             "--pkg-end",
             "--",
-            zig_exe_path,
+            zigenv.exe_path,
             directory_path,
-            context.cache_root,
-            context.global_cache_root,
+            zigenv.cache_root,
+            zigenv.global_cache_root,
         },
     });
 

@@ -13,12 +13,6 @@ const Self = @This();
 
 allocator: std.mem.Allocator,
 zigenv: ZigEnv,
-// zig_exe_path: ?[]const u8,
-// build_runner_path: []const u8,
-// build_runner_cache_path: []const u8,
-// builtin_path: ?[]const u8,
-zig_cache_root: []const u8,
-zig_global_cache_root: []const u8,
 handles: std.StringHashMap(*Document),
 build_files: std.ArrayListUnmanaged(*BuildFile),
 
@@ -26,24 +20,11 @@ pub fn init(
     self: *Self,
     allocator: std.mem.Allocator,
     zigenv: ZigEnv,
-    // zig_exe_path: ?[]const u8,
-    // build_runner_path: []const u8,
-    // build_runner_cache_path: []const u8,
-    // zig_lib_path: ?[]const u8,
-    // builtin_path: ?[]const u8,
-    zig_cache_root: []const u8,
-    zig_global_cache_root: []const u8,
 ) !void {
     self.allocator = allocator;
     self.zigenv = zigenv;
     self.handles = std.StringHashMap(*Document).init(allocator);
-    // self.zig_exe_path = zig_exe_path;
-    // self.build_runner_path = build_runner_path;
-    // self.build_runner_cache_path = build_runner_cache_path;
-    // self.builtin_path = builtin_path;
     self.build_files = .{};
-    self.zig_cache_root = zig_cache_root;
-    self.zig_global_cache_root = zig_global_cache_root;
 }
 
 /// This function asserts the document is not open yet and takes ownership
@@ -84,15 +65,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
 
         // TODO: Do this in a separate thread?
         // It can take quite long.
-        if (build_file.loadPackages(.{
-            .allocator = self.allocator,
-            .build_runner_path = self.zigenv.build_runner_path,
-            .build_runner_cache_path = self.zigenv.build_runner_cache_path,
-            .zig_exe_path = self.zigenv.exe_path,
-            .build_file_path = build_file_path,
-            .cache_root = self.zig_cache_root,
-            .global_cache_root = self.zig_global_cache_root,
-        })) {
+        if (build_file.loadPackages(self.allocator, build_file_path, self.zigenv)) {
             logger.info("{s} => loadPackages", .{build_file.uri});
         } else |err| {
             logger.debug("{s} => {}", .{ build_file.uri, err });
@@ -349,14 +322,7 @@ fn refreshDocument(self: *Self, handle: *Document) !void {
 
 pub fn applySave(self: *Self, handle: *Document) !void {
     if (handle.is_build_file) |build_file| {
-        build_file.loadPackages(.{
-            .allocator = self.allocator,
-            .build_runner_path = self.zigenv.build_runner_path,
-            .build_runner_cache_path = self.zigenv.build_runner_cache_path,
-            .zig_exe_path = self.zigenv.exe_path,
-            .cache_root = self.zig_cache_root,
-            .global_cache_root = self.zig_global_cache_root,
-        }) catch |err| {
+        build_file.loadPackages(self.allocator, null, self.zigenv) catch |err| {
             logger.debug("Failed to load packages of build file {s} (error: {})", .{ build_file.uri, err });
         };
     }
@@ -541,7 +507,7 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
     }
 }
 
-pub fn deinit(self: *Self) void {    
+pub fn deinit(self: *Self) void {
     var entry_iterator = self.handles.iterator();
     while (entry_iterator.next()) |entry| {
         self.allocator.free(entry.key_ptr.*);

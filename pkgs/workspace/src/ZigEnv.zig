@@ -14,6 +14,8 @@ builtin_path: []const u8,
 // config.build_runner_cache_path orelse @panic("build_runner_cache_path"),
 build_runner_path: []const u8,
 build_runner_cache_path: []const u8,
+cache_root: []const u8,
+global_cache_root: []const u8,
 
 fn stdUriFromLibPath(allocator: std.mem.Allocator, zpath: []const u8) ![]const u8 {
     const std_path = try std.fs.path.resolve(allocator, &[_][]const u8{
@@ -144,6 +146,8 @@ pub fn init(
     config_builtin_path: ?[]const u8,
     config_build_runner_path: ?[]const u8,
     config_build_runner_cache_path: ?[]const u8,
+    cache_root: []const u8,
+    global_cache_root: []const u8,
 ) !Self {
     const zig_exe_path = if (isAbsoluteExists(config_zig_exe_path)) |path|
         try allocator.dupe(u8, path)
@@ -190,10 +194,14 @@ pub fn init(
         .builtin_path = builtin_path,
         .build_runner_path = build_runner_path,
         .build_runner_cache_path = build_runner_cache_path,
+        .cache_root = try allocator.dupe(u8, cache_root),
+        .global_cache_root = try allocator.dupe(u8, global_cache_root),
     };
 }
 
 pub fn deinit(self: *Self) void {
+    self.allocator.free(self.cache_root);
+    self.allocator.free(self.global_cache_root);
     self.allocator.free(self.build_runner_cache_path);
     self.allocator.free(self.build_runner_path);
     self.allocator.free(self.builtin_path);
