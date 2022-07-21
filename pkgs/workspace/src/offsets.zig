@@ -9,6 +9,7 @@ const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
+const Location = @import("./Location.zig");
 const logger = std.log.scoped(.offset);
 
 pub const OffsetError = error{
@@ -289,11 +290,10 @@ pub fn getLabelGlobal(pos_index: usize, handle: *Document) !?analysis.DeclWithHa
 fn gotoDefinitionSymbol(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     decl_handle: analysis.DeclWithHandle,
     resolve_alias: bool,
     offset_encoding: Encoding,
-) !lsp.Response {
+) !?Location {
     var handle = decl_handle.handle;
 
     const location = switch (decl_handle.decl.*) {
@@ -306,30 +306,17 @@ fn gotoDefinitionSymbol(
             }
 
             const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
-                return lsp.Response.createNull(id);
+                return null;
             break :block try tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
         },
         else => try decl_handle.location(offset_encoding),
     };
 
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .Location = .{
-                .uri = handle.utf8_buffer.uri,
-                .range = .{
-                    .start = .{
-                        .line = @intCast(i64, location.line),
-                        .character = @intCast(i64, location.column),
-                    },
-                    .end = .{
-                        .line = @intCast(i64, location.line),
-                        .character = @intCast(i64, location.column),
-                    },
-                },
-            },
-        },
-    };
+    return Location.init(
+        arena.allocator(),
+        handle.utf8_buffer.uri,
+        .{ .row = @intCast(u32, location.line), .col = @intCast(u32, location.column) },
+    );
 }
 
 pub fn getSymbolFieldAccess(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, position: DocumentPosition, range: analysis.SourceRange) !analysis.DeclWithHandle {
@@ -472,69 +459,55 @@ fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
     return import_str[1 .. import_str.len - 1];
 }
 
-fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, pos_index: usize, handle: *Document) !lsp.Response {
+fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, workspace: *Workspace, pos_index: usize, handle: *Document) !?Location {
     var it = ImportStrIterator.init(handle.tree);
     while (it.next()) |node| {
         if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
             if (importStr(handle.tree, node)) |import_str| {
                 if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, workspace.zigenv)) |uri| {
                     logger.debug("gotoDefinitionString: {s}", .{uri});
-                    return lsp.Response{
-                        .id = id,
-                        .result = .{
-                            .Location = .{
-                                .uri = uri,
-                                .range = .{
-                                    .start = .{ .line = 0, .character = 0 },
-                                    .end = .{ .line = 0, .character = 0 },
-                                },
-                            },
-                        },
-                    };
+                    return Location.init(arena.allocator(), uri, .{});
                 }
             }
         }
     }
-
-    return lsp.Response.createNull(id);
+    return null;
 }
 
 fn gotoDefinitionLabel(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     pos_index: usize,
     handle: *Document,
     offset_encoding: offsets.Encoding,
-) !lsp.Response {
-    const decl = (try getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
-    return try gotoDefinitionSymbol(arena, workspace, id, decl, false, offset_encoding);
+) !?Location {
+    const decl = (try getLabelGlobal(pos_index, handle)) orelse return null;
+    return gotoDefinitionSymbol(arena, workspace, decl, false, offset_encoding);
 }
 
 pub fn gotoHandler(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     handle: *Document,
     doc_position: DocumentPosition,
     resolve_alias: bool,
     offset_encoding: offsets.Encoding,
-) !lsp.Response {
+) !?Location {
     const pos_context = position_context.documentPositionContext(arena, doc_position);
     switch (pos_context) {
         .var_access => {
             const decl = try getSymbolGlobal(arena, workspace, doc_position.absolute_index, handle);
-            return try gotoDefinitionSymbol(arena, workspace, id, decl, resolve_alias, offset_encoding);
+            return gotoDefinitionSymbol(arena, workspace, decl, resolve_alias, offset_encoding);
         },
         .field_access => |range| {
             const decl = try getSymbolFieldAccess(arena, workspace, handle, doc_position, range);
-            return try gotoDefinitionSymbol(arena, workspace, id, decl, resolve_alias, offset_encoding);
+            return gotoDefinitionSymbol(arena, workspace, decl, resolve_alias, offset_encoding);
         },
         .string_literal => {
-            return try gotoDefinitionString(arena, workspace, id, doc_position.absolute_index, handle);
+            return gotoDefinitionString(arena, workspace, doc_position.absolute_index, handle);
         },
         .label => {
-            return try gotoDefinitionLabel(arena, workspace, id, doc_position.absolute_index, handle, offset_encoding);
+            return gotoDefinitionLabel(arena, workspace, doc_position.absolute_index, handle, offset_encoding);
         },
         else => {
             logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});

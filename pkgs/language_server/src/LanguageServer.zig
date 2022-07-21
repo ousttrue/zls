@@ -263,7 +263,21 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
-    return try offsets.gotoHandler(arena, &self.workspace, id, doc, doc_position, true, self.offset_encoding);
+    return if (try offsets.gotoHandler(arena, &self.workspace, doc, doc_position, true, self.offset_encoding)) |location|
+        lsp.Response{
+            .id = id,
+            .result = .{
+                .Location = .{
+                    .uri = location.uri,
+                    .range = .{
+                        .start = .{ .line = location.row, .character = location.col },
+                        .end = .{ .line = location.row, .character = location.col },
+                    },
+                },
+            },
+        }
+    else
+        lsp.Response.createNull(id);
 }
 
 pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
