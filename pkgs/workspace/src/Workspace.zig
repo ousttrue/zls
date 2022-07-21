@@ -218,14 +218,6 @@ pub fn getDocument(self: *Self, uri: []const u8) !*Document {
     return error.NoDocument;
 }
 
-pub fn applySave(self: *Self, handle: *Document) !void {
-    if (handle.is_build_file) |build_file| {
-        build_file.loadPackages(self.allocator, null, self.zigenv) catch |err| {
-            logger.debug("Failed to load packages of build file {s} (error: {})", .{ build_file.uri, err });
-        };
-    }
-}
-
 pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*Document {
     const allocator = self.allocator;
     const final_uri = (try handle.uriFromImportStrAlloc(allocator, import_str, self.zigenv)) orelse return null;

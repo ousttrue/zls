@@ -338,3 +338,11 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, offset_encodin
 
     try self.refreshDocument(zigenv);
 }
+
+pub fn applySave(self: *Self, zigenv: ZigEnv) !void {
+    if (self.is_build_file) |build_file| {
+        build_file.loadPackages(self.allocator, null, zigenv) catch |err| {
+            logger.debug("Failed to load packages of build file {s} (error: {})", .{ build_file.uri, err });
+        };
+    }
+}
