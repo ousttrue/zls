@@ -4,6 +4,10 @@ const URI = @import("./uri.zig");
 const analysis = @import("./analysis.zig");
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
+const Location = @import("./Location.zig");
+const DocumentPosition = @import("./DocumentPosition.zig");
+const offsets = @import("./offsets.zig");
+const position_context = @import("./position_context.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.Workspace);
 
@@ -319,4 +323,125 @@ pub fn errorCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *
 
 pub fn enumCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document) ![]lsp.CompletionItem {
     return try self.tagStoreCompletionItems(arena, base, "enum_completions");
+}
+
+pub fn gotoHandler(
+    self: *Self,
+    arena: *std.heap.ArenaAllocator,
+    doc: *Document,
+    doc_position: DocumentPosition,
+    resolve_alias: bool,
+    offset_encoding: offsets.Encoding,
+) !?Location {
+    const pos_context = position_context.documentPositionContext(arena, doc_position);
+    switch (pos_context) {
+        .var_access => {
+            if (try self.getSymbolGlobal(arena, doc, doc_position.absolute_index)) |decl| {
+                return self.gotoDefinitionSymbol(arena, decl, resolve_alias, offset_encoding);
+            } else {
+                return null;
+            }
+        },
+        .field_access => |range| {
+            const decl = try offsets.getSymbolFieldAccess(arena, self, doc, doc_position, range);
+            return self.gotoDefinitionSymbol(arena, decl, resolve_alias, offset_encoding);
+        },
+        .string_literal => {
+            return doc.gotoDefinitionString(arena, doc_position.absolute_index, self.zigenv);
+        },
+        .label => {
+            return self.gotoDefinitionLabel(arena, doc, doc_position.absolute_index, offset_encoding);
+        },
+        else => {
+            logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
+            return null;
+        },
+    }
+}
+
+pub fn lookupSymbolGlobal(
+    workspace: *Self,
+    arena: *std.heap.ArenaAllocator,
+    handle: *Document,
+    symbol: []const u8,
+    source_index: usize,
+) error{OutOfMemory}!?analysis.DeclWithHandle {
+    const innermost_scope_idx = analysis.innermostBlockScopeIndex(handle.*, source_index);
+
+    var curr = innermost_scope_idx;
+    while (curr >= 0) : (curr -= 1) {
+        const scope = &handle.document_scope.scopes[curr];
+        if (source_index >= scope.range.start and source_index <= scope.range.end) blk: {
+            if (scope.decls.getEntry(symbol)) |candidate| {
+                switch (candidate.value_ptr.*) {
+                    .ast_node => |node| {
+                        if (handle.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
+                    },
+                    .label_decl => break :blk,
+                    else => {},
+                }
+                return analysis.DeclWithHandle{
+                    .decl = candidate.value_ptr,
+                    .handle = handle,
+                };
+            }
+            if (try analysis.resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
+        }
+        if (curr == 0) break;
+    }
+    return null;
+}
+
+pub fn getSymbolGlobal(self: *Self, arena: *std.heap.ArenaAllocator, handle: *Document, pos_index: usize) !?analysis.DeclWithHandle {
+    if (handle.identifierFromPosition(pos_index)) |name| {
+        return self.lookupSymbolGlobal(arena, handle, name, pos_index);
+    } else {
+        return null;
+    }
+}
+
+fn gotoDefinitionSymbol(
+    workspace: *Self,
+    arena: *std.heap.ArenaAllocator,
+    decl_handle: analysis.DeclWithHandle,
+    resolve_alias: bool,
+    offset_encoding: offsets.Encoding,
+) !?Location {
+    var handle = decl_handle.handle;
+
+    const location = switch (decl_handle.decl.*) {
+        .ast_node => |node| block: {
+            if (resolve_alias) {
+                if (try analysis.resolveVarDeclAlias(arena, workspace, .{ .node = node, .handle = handle })) |result| {
+                    handle = result.handle;
+                    break :block try result.location(offset_encoding);
+                }
+            }
+
+            const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
+                return null;
+            break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
+        },
+        else => try decl_handle.location(offset_encoding),
+    };
+
+    return Location.init(
+        arena.allocator(),
+        handle.utf8_buffer.uri,
+        .{ .row = @intCast(u32, location.line), .col = @intCast(u32, location.column) },
+    );
+}
+
+fn gotoDefinitionLabel(
+    self: *Self,
+    arena: *std.heap.ArenaAllocator,
+    handle: *Document,
+    pos_index: usize,
+    offset_encoding: offsets.Encoding,
+) !?Location {
+    if (try handle.getLabelGlobal(pos_index)) |decl| {
+        return self.gotoDefinitionSymbol(arena, decl, false, offset_encoding);
+    } else {
+        return null;
+    }
 }

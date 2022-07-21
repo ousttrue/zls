@@ -115,8 +115,11 @@ pub fn process(
                 switch (node_tag) {
                     .simple_var_decl => {
                         logger.debug("(hover)[var_access]", .{});
-                        const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
-                        return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                        if (try workspace.getSymbolGlobal(arena, doc, doc_position.absolute_index)) |decl| {
+                            return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                        } else {
+                            return error.HoverError;
+                        }
                     },
                     .fn_proto_multi => {
                         return analysis.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));

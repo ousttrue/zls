@@ -397,9 +397,8 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                 return try builder.writeToken(main_token, .type);
             }
 
-            if (try analysis.lookupSymbolGlobal(
+            if (try workspace.lookupSymbolGlobal(
                 arena,
-                workspace,
                 handle,
                 tree.getNodeSource(node),
                 tree.tokens.items(.start)[main_token],

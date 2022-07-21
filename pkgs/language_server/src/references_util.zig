@@ -20,22 +20,25 @@ fn referencesDefinitionGlobal(
     skip_std_references: bool,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {
-    const decl = try offsets.getSymbolGlobal(arena, workspace, pos_index, handle);
-    var locs = std.ArrayList(lsp.Location).init(arena.allocator());
-    try references.symbolReferences(
-        arena,
-        workspace,
-        decl,
-        offset_encoding,
-        include_decl,
-        &locs,
-        std.ArrayList(lsp.Location).append,
-        skip_std_references,
-    );
-    return lsp.Response{
-        .id = id,
-        .result = .{ .Locations = locs.items },
-    };
+    if (try workspace.getSymbolGlobal(arena, handle, pos_index)) |decl| {
+        var locs = std.ArrayList(lsp.Location).init(arena.allocator());
+        try references.symbolReferences(
+            arena,
+            workspace,
+            decl,
+            offset_encoding,
+            include_decl,
+            &locs,
+            std.ArrayList(lsp.Location).append,
+            skip_std_references,
+        );
+        return lsp.Response{
+            .id = id,
+            .result = .{ .Locations = locs.items },
+        };
+    } else {
+        return lsp.Response.createNull(id);
+    }
 }
 
 fn referencesDefinitionFieldAccess(
@@ -66,7 +69,7 @@ fn referencesDefinitionLabel(
     include_decl: bool,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {
-    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try handle.getLabelGlobal(pos_index)) orelse return lsp.Response.createNull(id);
     var locs = std.ArrayList(lsp.Location).init(arena.allocator());
     try references.labelReferences(decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append);
     return lsp.Response{

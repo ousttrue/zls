@@ -18,16 +18,18 @@ fn renameDefinitionGlobal(
     new_name: []const u8,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {
-    const decl = try offsets.getSymbolGlobal(arena, workspace, pos_index, handle);
-
-    var workspace_edit = lsp.WorkspaceEdit{
-        .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
-    };
-    try rename.renameSymbol(arena, workspace, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .WorkspaceEdit = workspace_edit },
-    };
+    if (try workspace.getSymbolGlobal(arena, handle, pos_index)) |decl| {
+        var workspace_edit = lsp.WorkspaceEdit{
+            .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
+        };
+        try rename.renameSymbol(arena, workspace, decl, new_name, &workspace_edit.changes.?, offset_encoding);
+        return lsp.Response{
+            .id = id,
+            .result = .{ .WorkspaceEdit = workspace_edit },
+        };
+    } else {
+        return lsp.Response.createNull(id);
+    }
 }
 
 fn renameDefinitionFieldAccess(
@@ -60,7 +62,7 @@ fn renameDefinitionLabel(
     new_name: []const u8,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {
-    const decl = (try offsets.getLabelGlobal(pos_index, handle)) orelse return lsp.Response.createNull(id);
+    const decl = (try handle.getLabelGlobal(pos_index)) orelse return lsp.Response.createNull(id);
 
     var workspace_edit = lsp.WorkspaceEdit{
         .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),

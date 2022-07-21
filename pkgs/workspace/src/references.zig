@@ -141,7 +141,7 @@ fn symbolReferencesInternal(
             }
         },
         .identifier => {
-            if (try analysis.lookupSymbolGlobal(arena, workspace, handle, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
+            if (try workspace.lookupSymbolGlobal(arena, handle, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
                 if (std.meta.eql(decl, child)) {
                     try tokenReference(handle, main_tokens[node], encoding, context, handler);
                 }

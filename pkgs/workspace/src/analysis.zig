@@ -286,9 +286,8 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, workspace: *Work
 
     if (node_tags[node_handle.node] == .identifier) {
         const token = main_tokens[node_handle.node];
-        return try lookupSymbolGlobal(
+        return try workspace.lookupSymbolGlobal(
             arena,
-            workspace,
             handle,
             tree.tokenSlice(token),
             tree.tokens.items(.start)[token],
@@ -663,9 +662,8 @@ pub fn resolveTypeOfNodeInternal(
                 };
             }
 
-            if (try lookupSymbolGlobal(
+            if (try workspace.lookupSymbolGlobal(
                 arena,
-                workspace,
                 handle,
                 tree.getNodeSource(node),
                 starts[main_tokens[node]],
@@ -1009,9 +1007,8 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace
                 .unwrapped = try resolveDerefType(arena, workspace, current_type, &bound_type_params),
             },
             .identifier => {
-                if (try lookupSymbolGlobal(
+                if (try workspace.lookupSymbolGlobal(
                     arena,
-                    workspace,
                     current_type.handle,
                     tokenizer.buffer[tok.loc.start..tok.loc.end],
                     source_index,
@@ -1602,7 +1599,7 @@ pub fn innermostContainer(handle: *Document, source_index: usize) TypeWithHandle
     return TypeWithHandle.typeVal(.{ .node = current, .handle = handle });
 }
 
-fn resolveUse(arena: *std.heap.ArenaAllocator, workspace: *Workspace, uses: []const *const Ast.Node.Index, symbol: []const u8, handle: *Document) error{OutOfMemory}!?DeclWithHandle {
+pub fn resolveUse(arena: *std.heap.ArenaAllocator, workspace: *Workspace, uses: []const *const Ast.Node.Index, symbol: []const u8, handle: *Document) error{OutOfMemory}!?DeclWithHandle {
     // If we were asked to resolve this symbol before,
     // it is self-referential and we cannot resolve it.
     if (std.mem.indexOfScalar([*]const u8, using_trail.items, symbol.ptr) != null)
@@ -1651,33 +1648,6 @@ pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) e
             }
         }
         if (scope.range.start > source_index) return null;
-    }
-    return null;
-}
-
-pub fn lookupSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
-    const innermost_scope_idx = innermostBlockScopeIndex(handle.*, source_index);
-
-    var curr = innermost_scope_idx;
-    while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.document_scope.scopes[curr];
-        if (source_index >= scope.range.start and source_index <= scope.range.end) blk: {
-            if (scope.decls.getEntry(symbol)) |candidate| {
-                switch (candidate.value_ptr.*) {
-                    .ast_node => |node| {
-                        if (handle.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
-                    },
-                    .label_decl => break :blk,
-                    else => {},
-                }
-                return DeclWithHandle{
-                    .decl = candidate.value_ptr,
-                    .handle = handle,
-                };
-            }
-            if (try resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
-        }
-        if (curr == 0) break;
     }
     return null;
 }

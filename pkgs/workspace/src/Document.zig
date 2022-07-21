@@ -4,12 +4,14 @@ const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
 const analysis = @import("./analysis.zig");
+const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
 const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
 const offsets = @import("./offsets.zig");
+const Location = @import("./Location.zig");
 const Self = @This();
 const logger = std.log.scoped(.Document);
 
@@ -344,5 +346,184 @@ pub fn applySave(self: *Self, zigenv: ZigEnv) !void {
         build_file.loadPackages(self.allocator, null, zigenv) catch |err| {
             logger.debug("Failed to load packages of build file {s} (error: {})", .{ build_file.uri, err });
         };
+    }
+}
+
+const ImportStrIterator = struct {
+    const Payload = union(enum) {
+        decl: Ast.Node.Index,
+        decls: []const Ast.Node.Index,
+    };
+    const Item = struct {
+        payload: Payload,
+        pos: usize = 0,
+
+        fn node(self: Item) Ast.Node.Index {
+            return switch (self.payload) {
+                .decls => |decls| return decls[self.pos],
+                .decl => |decl| return decl,
+            };
+        }
+
+        fn next(self: Item) ?Item {
+            switch (self.payload) {
+                .decls => |decls| {
+                    if (self.pos + 1 < decls.len) {
+                        return Item{ .payload = .{ .decls = decls }, .pos = self.pos + 1 };
+                    }
+                    return null;
+                },
+                .decl => return null,
+            }
+        }
+    };
+
+    tree: Ast,
+    stack: [256]Item = undefined,
+    depth: usize,
+
+    pub fn init(tree: Ast) @This() {
+        var self = @This(){
+            .tree = tree,
+            .depth = 0,
+        };
+        self.push(.{ .payload = .{ .decl = 0 } });
+        return self;
+    }
+
+    fn push(self: *@This(), item: Item) void {
+        self.stack[self.depth] = item;
+        self.depth += 1;
+    }
+
+    fn pop(self: *@This()) Item {
+        const node = self.stack[self.depth - 1];
+        self.depth -= 1;
+        return node;
+    }
+
+    pub fn next(self: *@This()) ?u32 {
+        const node_tags = self.tree.nodes.items(.tag);
+        var buf: [2]Ast.Node.Index = undefined;
+        while (self.depth > 0) {
+            const item = self.pop();
+            if (item.next()) |next_item| {
+                self.push(next_item);
+            }
+
+            const node = item.node();
+
+            if (ast.isContainer(self.tree, node)) {
+                const decls = ast.declMembers(self.tree, node, &buf);
+                if (decls.len > 0) {
+                    self.push(.{ .payload = .{ .decls = decls } });
+                }
+            } else if (ast.varDecl(self.tree, node)) |var_decl| {
+                self.push(.{ .payload = .{ .decl = var_decl.ast.init_node } });
+            } else if (node_tags[node] == .@"usingnamespace") {
+                self.push(.{ .payload = .{ .decl = self.tree.nodes.items(.data)[node].lhs } });
+            }
+
+            if (ast.isBuiltinCall(self.tree, node)) {
+                const builtin_token = self.tree.nodes.items(.main_token)[node];
+                const call_name = self.tree.tokenSlice(builtin_token);
+                if (std.mem.eql(u8, call_name, "@import")) {
+                    return node;
+                }
+            }
+        }
+
+        return null;
+    }
+};
+
+fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, source_index: usize) bool {
+    const first_token = offsets.tokenLocation(tree, tree.firstToken(node)).start;
+    const last_token = offsets.tokenLocation(tree, ast.lastToken(tree, node)).end;
+    return source_index >= first_token and source_index <= last_token;
+}
+
+fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
+    const node_tags = tree.nodes.items(.tag);
+    const data = tree.nodes.items(.data)[node];
+    const params = switch (node_tags[node]) {
+        .builtin_call, .builtin_call_comma => tree.extra_data[data.lhs..data.rhs],
+        .builtin_call_two, .builtin_call_two_comma => if (data.lhs == 0)
+            &[_]Ast.Node.Index{}
+        else if (data.rhs == 0)
+            &[_]Ast.Node.Index{data.lhs}
+        else
+            &[_]Ast.Node.Index{ data.lhs, data.rhs },
+        else => unreachable,
+    };
+
+    if (params.len != 1) return null;
+
+    const import_str = tree.tokenSlice(tree.nodes.items(.main_token)[params[0]]);
+    return import_str[1 .. import_str.len - 1];
+}
+
+pub fn gotoDefinitionString(
+    handle: *Self,
+    arena: *std.heap.ArenaAllocator,
+    pos_index: usize,
+    zigenv: ZigEnv,
+) !?Location {
+    var it = ImportStrIterator.init(handle.tree);
+    while (it.next()) |node| {
+        if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
+            if (importStr(handle.tree, node)) |import_str| {
+                if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
+                    logger.debug("gotoDefinitionString: {s}", .{uri});
+                    return Location.init(arena.allocator(), uri, .{});
+                }
+            }
+        }
+    }
+    return null;
+}
+
+fn isSymbolChar(char: u8) bool {
+    return std.ascii.isAlNum(char) or char == '_';
+}
+
+pub fn identifierFromPosition(self: Self, pos_index: usize) ?[]const u8 {
+    const text: []const u8 = self.utf8_buffer.text;
+    if (pos_index + 1 >= text.len) {
+        return null;
+    }
+    if (!isSymbolChar(text[pos_index])) {
+        return null;
+    }
+
+    var start_idx = pos_index;
+    while (start_idx >= 0) : (start_idx -= 1) {
+        if (!isSymbolChar(text[start_idx])) {
+            start_idx += 1;
+            break;
+        }
+    }
+
+    var end_idx = pos_index;
+    while (end_idx < text.len and isSymbolChar(text[end_idx])) {
+        end_idx += 1;
+    }
+
+    const id = text[start_idx..end_idx];
+    // std.debug.print("{}, {}:{s}", .{start_idx, end_idx, id});
+    return id;
+}
+
+test "identifierFromPosition" {
+    try std.testing.expectEqualStrings("abc", try identifierFromPosition(1, " abc cde"));
+    try std.testing.expectEqualStrings("abc", try identifierFromPosition(2, " abc cde"));
+    // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
+}
+
+pub fn getLabelGlobal(self: *Self, pos_index: usize) !?analysis.DeclWithHandle {
+    if (self.identifierFromPosition(pos_index)) |name| {
+        return try analysis.lookupLabel(self, name, pos_index);
+    } else {
+        return null;
     }
 }
