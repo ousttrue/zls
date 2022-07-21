@@ -17,14 +17,35 @@ handles: std.StringHashMap(*Document),
 build_files: std.ArrayListUnmanaged(*BuildFile),
 
 pub fn init(
-    self: *Self,
     allocator: std.mem.Allocator,
     zigenv: ZigEnv,
-) !void {
-    self.allocator = allocator;
-    self.zigenv = zigenv;
-    self.handles = std.StringHashMap(*Document).init(allocator);
-    self.build_files = .{};
+) Self {
+    return Self{
+        .allocator = allocator,
+        .zigenv = zigenv,
+        .handles = std.StringHashMap(*Document).init(allocator),
+        .build_files = .{},
+    };
+}
+
+pub fn deinit(self: *Self) void {
+    var entry_iterator = self.handles.iterator();
+    while (entry_iterator.next()) |entry| {
+        self.allocator.free(entry.key_ptr.*);
+        entry.value_ptr.*.delete();
+    }
+    self.handles.deinit();
+
+    for (self.build_files.items) |build_file| {
+        for (build_file.packages.items) |pkg| {
+            self.allocator.free(pkg.name);
+            self.allocator.free(pkg.uri);
+        }
+        build_file.packages.deinit(self.allocator);
+        self.allocator.free(build_file.uri);
+        build_file.destroy(self.allocator);
+    }
+    self.build_files.deinit(self.allocator);
 }
 
 /// This function asserts the document is not open yet and takes ownership
@@ -505,26 +526,6 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
         errdefer allocator.free(duped_final_uri);
         return try self.newDocument(duped_final_uri, file_contents);
     }
-}
-
-pub fn deinit(self: *Self) void {
-    var entry_iterator = self.handles.iterator();
-    while (entry_iterator.next()) |entry| {
-        self.allocator.free(entry.key_ptr.*);
-        entry.value_ptr.*.delete();
-    }
-    self.handles.deinit();
-
-    for (self.build_files.items) |build_file| {
-        for (build_file.packages.items) |pkg| {
-            self.allocator.free(pkg.name);
-            self.allocator.free(pkg.uri);
-        }
-        build_file.packages.deinit(self.allocator);
-        self.allocator.free(build_file.uri);
-        build_file.destroy(self.allocator);
-    }
-    self.build_files.deinit(self.allocator);
 }
 
 fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document, comptime name: []const u8) ![]lsp.CompletionItem {

@@ -81,14 +81,11 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
 },
 
 pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self {
-    var self = Self{
+    return Self{
         .config = config,
         .zigenv = zigenv,
+        .workspace = Workspace.init(allocator, zigenv),
     };
-
-    self.workspace.init(allocator, zigenv) catch @panic("Workspace.init");
-
-    return self;
 }
 
 pub fn deinit(self: *Self) void {
