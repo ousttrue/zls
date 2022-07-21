@@ -89,13 +89,18 @@ pub fn main() anyerror!void {
     if (!args_it.skip()) @panic("Could not find self argument");
 
     var config = Config{};
-    var config_path: ?[]const u8 = null;
+    var config_dir: ?[]const u8 = null;
     var next_arg_config_path = false;
     while (args_it.next()) |arg| {
         if (next_arg_config_path) {
             if (Config.load(allocator, arg)) |c| {
+                logger.info("arg: {s}", .{arg});
                 config = c;
-                config_path = allocator.dupe(u8, arg) catch unreachable;
+                if (std.fs.path.dirname(arg)) |dir| {
+                    config_dir = allocator.dupe(u8, dir) catch unreachable;
+                } else {
+                    unreachable;
+                }
             }
             next_arg_config_path = false;
             continue;
@@ -121,29 +126,33 @@ pub fn main() anyerror!void {
         return;
     }
 
-    if (config_path == null) {
-        if (known_folders.getPath(allocator, .local_configuration) catch unreachable) |path| {
-            if (Config.loadInFolder(allocator, path)) |c| {
+    if (config_dir == null) {
+        if (known_folders.getPath(allocator, .local_configuration) catch unreachable) |dir| {
+            if (Config.loadInFolder(allocator, dir)) |c| {
+                logger.info("local_configuration: {s}", .{dir});
                 config = c;
-                config_path = path;
+                config_dir = dir;
+            } else {
+                allocator.free(dir);
             }
-            defer allocator.free(path);
         }
     }
 
-    if (config_path == null) {
-        if (known_folders.getPath(allocator, .global_configuration) catch unreachable) |path| {
-            if (Config.loadInFolder(allocator, path)) |c| {
+    if (config_dir == null) {
+        if (known_folders.getPath(allocator, .global_configuration) catch unreachable) |dir| {
+            if (Config.loadInFolder(allocator, dir)) |c| {
+                logger.info("global_configuration: {s}", .{dir});
                 config = c;
-                config_path = path;
+                config_dir = dir;
+            } else {
+                allocator.free(dir);
             }
-            defer allocator.free(path);
         }
     }
 
     var zigenv = try ZigEnv.init(
         allocator,
-        config_path.?,
+        config_dir,
         config.zig_exe_path,
         config.zig_lib_path,
         config.builtin_path,

@@ -477,11 +477,7 @@ fn gotoDefinitionString(arena: *std.heap.ArenaAllocator, workspace: *Workspace, 
     while (it.next()) |node| {
         if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
             if (importStr(handle.tree, node)) |import_str| {
-                if (try workspace.uriFromImportStr(
-                    arena.allocator(),
-                    handle.*,
-                    import_str,
-                )) |uri| {
+                if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, workspace.zigenv)) |uri| {
                     logger.debug("gotoDefinitionString: {s}", .{uri});
                     return lsp.Response{
                         .id = id,

@@ -157,7 +157,7 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    try self.workspace.applyChanges(doc, params.contentChanges.Array, self.offset_encoding);
+    try doc.applyChanges(params.contentChanges.Array, self.offset_encoding, self.zigenv);
     // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}
@@ -171,7 +171,8 @@ pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 
 pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.CloseDocument, jsonParams.?);
-    self.workspace.closeDocument(params.textDocument.uri);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    _ = doc.decrement();
 }
 
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
