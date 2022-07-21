@@ -191,7 +191,30 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     logger.debug("[hover]{s} {}", .{ params.textDocument.uri, params.position });
     const doc_position = try offsets.documentPosition(doc.utf8_buffer, params.position, self.offset_encoding);
-    return try hover_util.process(arena, &self.workspace, id, doc, doc_position, &self.client_capabilities);
+    if (hover_util.process(arena, &self.workspace, id, doc, doc_position, &self.client_capabilities)) |hover_or_null| {
+        if (hover_or_null) |hover_contents| {
+            return lsp.Response{
+                .id = id,
+                .result = .{
+                    .Hover = .{
+                        .contents = .{ .value = hover_contents },
+                    },
+                },
+            };
+        } else {
+            return lsp.Response.createNull(id);
+        }
+    } else |err| {
+        const hover_contents = try std.fmt.allocPrint(arena.allocator(), "{}", .{err});
+        return lsp.Response{
+            .id = id,
+            .result = .{
+                .Hover = .{
+                    .contents = .{ .value = hover_contents },
+                },
+            },
+        };
+    }
 }
 
 pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
@@ -217,7 +240,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
 
     const stdout_bytes = self.zigenv.spawnZigFmt(arena.allocator(), doc.utf8_buffer.text) catch |err|
-    {
+        {
         logger.err("zig fmt: {}", .{err});
         return lsp.Response.createNull(id);
     };

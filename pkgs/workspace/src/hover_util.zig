@@ -18,7 +18,7 @@ fn hoverSymbol(
     id: i64,
     decl_handle: analysis.DeclWithHandle,
     client_capabilities: *ClientCapabilities,
-) (std.os.WriteError || error{OutOfMemory})!lsp.Response {
+) (std.os.WriteError || error{OutOfMemory})!?[]const u8 {
     const handle = decl_handle.handle;
     const tree = handle.tree;
 
@@ -41,8 +41,11 @@ fn hoverSymbol(
             } else if (ast.containerField(tree, node)) |field| {
                 break :def analysis.getContainerFieldSignature(tree, field);
             } else {
-                break :def analysis.nodeToString(tree, node) orelse
-                    return lsp.Response.createNull(id);
+                if(analysis.nodeToString(tree, node))|text|
+                {
+                    break :def text;
+                }
+                return null;
             }
         },
         .param_decl => |param| def: {
@@ -69,27 +72,17 @@ fn hoverSymbol(
 
     var hover_text: []const u8 = undefined;
     if (hover_kind == .Markdown) {
-        hover_text =
-            if (doc_str) |doc|
+        hover_text = if (doc_str) |doc|
             try std.fmt.allocPrint(arena.allocator(), "```zig\n{s}\n```\n{s}", .{ def_str, doc })
         else
             try std.fmt.allocPrint(arena.allocator(), "```zig\n{s}\n```", .{def_str});
     } else {
-        hover_text =
-            if (doc_str) |doc|
+        hover_text = if (doc_str) |doc|
             try std.fmt.allocPrint(arena.allocator(), "{s}\n{s}", .{ def_str, doc })
         else
             def_str;
     }
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .Hover = .{
-                .contents = .{ .value = hover_text },
-            },
-        },
-    };
+    return hover_text;
 }
 
 pub fn process(
@@ -99,44 +92,36 @@ pub fn process(
     doc: *Document,
     doc_position: DocumentPosition,
     client_capabilities: *ClientCapabilities,
-) !lsp.Response {
+) !?[]const u8 {
     if (doc.ast_context.tokenFromBytePos(doc_position.absolute_index)) |token_with_index| {
         switch (token_with_index.token.tag) {
             .builtin => {
                 const name = doc.ast_context.getTokenText(token_with_index.token);
                 logger.debug("(hover)[builtin]: {s}", .{name});
                 if (builtin_completions.find(name)) |builtin| {
-                    const hover_contents = try std.fmt.allocPrint(
+                    return try std.fmt.allocPrint(
                         arena.allocator(),
                         "```zig\n{s}\n```\n{s}",
                         .{ builtin.signature, builtin.documentation },
                     );
-                    return lsp.Response{
-                        .id = id,
-                        .result = .{
-                            .Hover = .{
-                                .contents = .{ .value = hover_contents },
-                            },
-                        },
-                    };
                 } else {
                     logger.debug("builtin {s} not found", .{name});
-                    return lsp.Response.createNull(id);
+                    return error.HoverError;
                 }
             },
-            else => {},
-        }
-
-        const idx = doc.ast_context.tokens_node[token_with_index.index];
-        const tag = doc.tree.nodes.items(.tag);
-        const node_tag = tag[idx];
-        switch (node_tag) {
-            .simple_var_decl => {
-                logger.debug("(hover)[var_access]", .{});
-                const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
-                return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+            else => {
+                const idx = doc.ast_context.tokens_node[token_with_index.index];
+                const tag = doc.tree.nodes.items(.tag);
+                const node_tag = tag[idx];
+                switch (node_tag) {
+                    .simple_var_decl => {
+                        logger.debug("(hover)[var_access]", .{});
+                        const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
+                        return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                    },
+                    else => {},
+                }
             },
-            else => {},
         }
     }
 
@@ -155,12 +140,14 @@ pub fn process(
         },
         .label => {
             logger.debug("[hover][label_access]", .{});
-            const decl = (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) orelse return lsp.Response.createNull(id);
-            return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+            if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
+                return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+            }
         },
         else => {
             logger.debug("[hover][{s}]", .{@tagName(pos_context)});
-            return lsp.Response.createNull(id);
         },
     }
+
+    return null;
 }
