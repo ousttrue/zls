@@ -65,7 +65,10 @@ pub fn getChildren(children: *std.ArrayList(u32), tree: *const std.zig.Ast, idx:
             children.append(node_data.lhs) catch unreachable;
             children.append(node_data.rhs) catch unreachable;
         },
-        // .for_simple,
+        .for_simple => {
+            children.append(node_data.lhs) catch unreachable;
+            children.append(node_data.rhs) catch unreachable;
+        },
         .@"switch",
         .switch_comma,
         => {
@@ -88,6 +91,13 @@ pub fn getChildren(children: *std.ArrayList(u32), tree: *const std.zig.Ast, idx:
                 children.append(child) catch unreachable;
             }
             children.append(switch_case.ast.target_expr) catch unreachable;
+        },
+        .@"try" => {
+            children.append(node_data.lhs) catch unreachable;
+        },
+        .@"catch" => {
+            children.append(node_data.lhs) catch unreachable;
+            children.append(node_data.rhs) catch unreachable;
         },
         .struct_init_dot_comma => {
             const struct_init = tree.structInitDot(idx);
