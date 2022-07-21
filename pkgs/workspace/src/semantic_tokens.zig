@@ -3,6 +3,7 @@ const offsets = @import("./offsets.zig");
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
+const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
 const log = std.log.scoped(.semantic_tokens);
 const ast = @import("./ast.zig");
@@ -195,7 +196,7 @@ fn fieldTokenType(container_decl: Ast.Node.Index, handle: *Document) ?lsp.Semant
     });
 }
 
-fn colorIdentifierBasedOnType(builder: *Builder, type_node: analysis.TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: lsp.SemanticTokenModifiers) !void {
+fn colorIdentifierBasedOnType(builder: *Builder, type_node: TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: lsp.SemanticTokenModifiers) !void {
     if (type_node.type.is_type_val) {
         var new_tok_mod = tok_mod;
         if (type_node.isNamespace()){
@@ -430,12 +431,12 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             try builder.writeToken(fn_proto.lib_name, .string);
             try builder.writeToken(fn_proto.ast.fn_token, .keyword);
 
-            const func_name_tok_type: lsp.SemanticTokenType = if (analysis.isTypeFunction(tree, fn_proto))
+            const func_name_tok_type: lsp.SemanticTokenType = if (TypeWithHandle.isTypeFunction(tree, fn_proto))
                 .type
             else
                 .function;
 
-            const tok_mod = if (analysis.isGenericFunction(tree, fn_proto))
+            const tok_mod = if (TypeWithHandle.isGenericFunction(tree, fn_proto))
                 lsp.SemanticTokenModifiers{
                     // .generic = true
                 }

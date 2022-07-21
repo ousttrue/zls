@@ -6,6 +6,7 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const analysis = @import("./analysis.zig");
+const TypeWithHandle = @import("./TypeWithHandle.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
 const offsets = @import("./offsets.zig");
@@ -91,8 +92,8 @@ fn nodeToCompletion(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     list: *std.ArrayList(lsp.CompletionItem),
-    node_handle: analysis.NodeWithHandle,
-    unwrapped: ?analysis.TypeWithHandle,
+    node_handle: TypeWithHandle.NodeWithHandle,
+    unwrapped: ?TypeWithHandle,
     orig_handle: *Document,
     is_type_val: bool,
     parent_is_type_val: ?bool,
@@ -163,7 +164,7 @@ fn nodeToCompletion(
                     break :blk try analysis.getFunctionSnippet(arena.allocator(), tree, func, skip_self_param);
                 } else tree.tokenSlice(func.name_token.?);
 
-                const is_type_function = analysis.isTypeFunction(handle.tree, func);
+                const is_type_function = TypeWithHandle.isTypeFunction(handle.tree, func);
 
                 try list.append(.{
                     .label = handle.tree.tokenSlice(name_token),

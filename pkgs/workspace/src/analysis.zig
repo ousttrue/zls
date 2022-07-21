@@ -4,11 +4,12 @@ const Document = @import("./Document.zig");
 const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const Ast = std.zig.Ast;
+const TypeWithHandle = @import("./TypeWithHandle.zig");
+const NodeWithHandle = TypeWithHandle.NodeWithHandle;
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.analysis);
 const ast = @import("./ast.zig");
-const Session = struct {};
 
 var using_trail: std.ArrayList([*]const u8) = undefined;
 var resolve_trail: std.ArrayList(NodeWithHandle) = undefined;
@@ -205,28 +206,6 @@ pub fn getContainerFieldSignature(tree: Ast, field: Ast.full.ContainerField) []c
     const end_node = if (field.ast.value_expr != 0) field.ast.value_expr else field.ast.type_expr;
     const end = offsets.tokenLocation(tree, ast.lastToken(tree, end_node)).end;
     return tree.source[start..end];
-}
-
-/// The node is the meta-type `type`
-fn isMetaType(tree: Ast, node: Ast.Node.Index) bool {
-    if (tree.nodes.items(.tag)[node] == .identifier) {
-        return std.mem.eql(u8, tree.tokenSlice(tree.nodes.items(.main_token)[node]), "type");
-    }
-    return false;
-}
-
-pub fn isTypeFunction(tree: Ast, func: Ast.full.FnProto) bool {
-    return isMetaType(tree, func.ast.return_type);
-}
-
-pub fn isGenericFunction(tree: Ast, func: Ast.full.FnProto) bool {
-    var it = func.iterate(&tree);
-    while (it.next()) |param| {
-        if (param.anytype_ellipsis3 != null or param.comptime_noalias != null) {
-            return true;
-        }
-    }
-    return false;
 }
 
 // STYLE
@@ -440,7 +419,7 @@ pub fn findReturnStatement(tree: Ast, fn_decl: Ast.full.FnProto, body: Ast.Node.
 
 pub fn resolveReturnType(arena: *std.heap.ArenaAllocator, workspace: *Workspace, fn_decl: Ast.full.FnProto, handle: *Document, bound_type_params: *BoundTypeParams, fn_body: ?Ast.Node.Index) !?TypeWithHandle {
     const tree = handle.tree;
-    if (isTypeFunction(tree, fn_decl) and fn_body != null) {
+    if (TypeWithHandle.isTypeFunction(tree, fn_decl) and fn_body != null) {
         // If this is a type function and it only contains a single return statement that returns
         // a container declaration, we will return that declaration.
         const ret = findReturnStatement(tree, fn_decl, fn_body.?) orelse return null;
@@ -746,7 +725,7 @@ pub fn resolveTypeOfNodeInternal(
                 var i: usize = 0;
                 while (it.next()) |decl_param| : (i += 1) {
                     if (i >= param_len) break;
-                    if (!isMetaType(decl.handle.tree, decl_param.type_expr))
+                    if (!TypeWithHandle.isMetaType(decl.handle.tree, decl_param.type_expr))
                         continue;
 
                     const argument = .{ .node = call.ast.params[i], .handle = handle };
@@ -978,130 +957,6 @@ pub fn resolveTypeOfNodeInternal(
     return null;
 }
 
-// TODO Reorganize this file, perhaps split into a couple as well
-// TODO Make this better, nested levels of type vals
-pub const Type = struct {
-    data: union(enum) {
-        pointer: Ast.Node.Index,
-        slice: Ast.Node.Index,
-        error_union: Ast.Node.Index,
-        other: Ast.Node.Index,
-        primitive,
-    },
-    /// If true, the type `type`, the attached data is the value of the type value.
-    is_type_val: bool,
-};
-
-pub const TypeWithHandle = struct {
-    type: Type,
-    handle: *Document,
-
-    pub fn typeVal(node_handle: NodeWithHandle) TypeWithHandle {
-        return .{
-            .type = .{
-                .data = .{ .other = node_handle.node },
-                .is_type_val = true,
-            },
-            .handle = node_handle.handle,
-        };
-    }
-
-    fn instanceTypeVal(self: TypeWithHandle) ?TypeWithHandle {
-        if (!self.type.is_type_val) return null;
-        return TypeWithHandle{
-            .type = .{ .data = self.type.data, .is_type_val = false },
-            .handle = self.handle,
-        };
-    }
-
-    fn isRoot(self: TypeWithHandle) bool {
-        switch (self.type.data) {
-            // root is always index 0
-            .other => |n| return n == 0,
-            else => return false,
-        }
-    }
-
-    fn isContainerKind(self: TypeWithHandle, container_kind_tok: std.zig.Token.Tag) bool {
-        const tree = self.handle.tree;
-        const main_tokens = tree.nodes.items(.main_token);
-        const tags = tree.tokens.items(.tag);
-        switch (self.type.data) {
-            .other => |n| return tags[main_tokens[n]] == container_kind_tok,
-            else => return false,
-        }
-    }
-
-    pub fn isStructType(self: TypeWithHandle) bool {
-        return self.isContainerKind(.keyword_struct) or self.isRoot();
-    }
-
-    pub fn isNamespace(self: TypeWithHandle) bool {
-        if (!self.isStructType()) return false;
-        const tree = self.handle.tree;
-        const node = self.type.data.other;
-        const tags = tree.nodes.items(.tag);
-        if (ast.isContainer(tree, node)) {
-            var buf: [2]Ast.Node.Index = undefined;
-            for (ast.declMembers(tree, node, &buf)) |child| {
-                if (tags[child].isContainerField()) return false;
-            }
-        }
-        return true;
-    }
-
-    pub fn isEnumType(self: TypeWithHandle) bool {
-        return self.isContainerKind(.keyword_enum);
-    }
-
-    pub fn isUnionType(self: TypeWithHandle) bool {
-        return self.isContainerKind(.keyword_union);
-    }
-
-    pub fn isOpaqueType(self: TypeWithHandle) bool {
-        return self.isContainerKind(.keyword_opaque);
-    }
-
-    pub fn isTypeFunc(self: TypeWithHandle) bool {
-        var buf: [1]Ast.Node.Index = undefined;
-        const tree = self.handle.tree;
-        return switch (self.type.data) {
-            .other => |n| if (ast.fnProto(tree, n, &buf)) |fn_proto| blk: {
-                break :blk isTypeFunction(tree, fn_proto);
-            } else false,
-            else => false,
-        };
-    }
-
-    pub fn isGenericFunc(self: TypeWithHandle) bool {
-        var buf: [1]Ast.Node.Index = undefined;
-        const tree = self.handle.tree;
-        return switch (self.type.data) {
-            .other => |n| if (ast.fnProto(tree, n, &buf)) |fn_proto| blk: {
-                break :blk isGenericFunction(tree, fn_proto);
-            } else false,
-            else => false,
-        };
-    }
-
-    pub fn isFunc(self: TypeWithHandle) bool {
-        const tree = self.handle.tree;
-        const tags = tree.nodes.items(.tag);
-        return switch (self.type.data) {
-            .other => |n| switch (tags[n]) {
-                .fn_proto,
-                .fn_proto_multi,
-                .fn_proto_one,
-                .fn_proto_simple,
-                .fn_decl,
-                => true,
-                else => false,
-            },
-            else => false,
-        };
-    }
-};
-
 pub fn resolveTypeOfNode(arena: *std.heap.ArenaAllocator, workspace: *Workspace, node_handle: NodeWithHandle) error{OutOfMemory}!?TypeWithHandle {
     var bound_type_params = BoundTypeParams.init(arena.allocator());
     return resolveTypeOfNodeInternal(arena, workspace, node_handle, &bound_type_params);
@@ -1132,11 +987,6 @@ pub fn collectImports(import_arr: *std.ArrayList([]const u8), tree: Ast) !void {
         }
     }
 }
-
-pub const NodeWithHandle = struct {
-    node: Ast.Node.Index,
-    handle: *Document,
-};
 
 pub const FieldAccessReturn = struct {
     original: TypeWithHandle,
@@ -1421,7 +1271,7 @@ pub const DeclWithHandle = struct {
                 bound_type_params,
             ),
             .param_decl => |param_decl| {
-                if (isMetaType(self.handle.tree, param_decl.type_expr)) {
+                if (TypeWithHandle.isMetaType(self.handle.tree, param_decl.type_expr)) {
                     var bound_param_it = bound_type_params.iterator();
                     while (bound_param_it.next()) |entry| {
                         if (std.meta.eql(entry.key_ptr.*, param_decl)) return entry.value_ptr.*;

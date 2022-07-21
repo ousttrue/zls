@@ -3,6 +3,7 @@ const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const analysis = @import("./analysis.zig");
+const TypeWithHandle = @import("./TypeWithHandle.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.references);
@@ -58,7 +59,7 @@ pub fn labelReferences(decl: analysis.DeclWithHandle, encoding: offsets.Encoding
 fn symbolReferencesInternal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    node_handle: analysis.NodeWithHandle,
+    node_handle: TypeWithHandle.NodeWithHandle,
     decl: analysis.DeclWithHandle,
     encoding: offsets.Encoding,
     context: anytype,

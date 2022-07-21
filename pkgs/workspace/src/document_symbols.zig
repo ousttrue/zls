@@ -3,6 +3,7 @@ const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const analysis = @import("./analysis.zig");
+const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
 
 const GetDocumentSymbolsContext = struct {
@@ -238,7 +239,7 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
                 const fn_decl = tree.nodes.items(.data)[node];
                 var params: [1]Ast.Node.Index = undefined;
                 const fn_proto = ast.fnProto(tree, fn_decl.lhs, &params) orelse break :fn_ch;
-                if (!analysis.isTypeFunction(tree, fn_proto)) break :fn_ch;
+                if (!TypeWithHandle.isTypeFunction(tree, fn_proto)) break :fn_ch;
                 const ret_stmt = analysis.findReturnStatement(tree, fn_proto, fn_decl.rhs) orelse break :fn_ch;
                 const type_decl = tree.nodes.items(.data)[ret_stmt].lhs;
                 if (type_decl != 0)
