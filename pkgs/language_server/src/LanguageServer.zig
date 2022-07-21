@@ -213,45 +213,26 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
 }
 
 pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    const zig_exe_path = self.config.zig_exe_path orelse {
-        logger.warn("no zig_exe_path", .{});
-        return lsp.Response.createNull(id);
-    };
-
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    var process = std.ChildProcess.init(&[_][]const u8{ zig_exe_path, "fmt", "--stdin" }, arena.allocator());
-    process.stdin_behavior = .Pipe;
-    process.stdout_behavior = .Pipe;
-    process.spawn() catch |err| {
-        logger.warn("Failed to spawn zig fmt process, error: {}", .{err});
+
+    const stdout_bytes = self.zigenv.spawnZigFmt(arena.allocator(), doc.utf8_buffer.text) catch |err|
+    {
+        logger.err("zig fmt: {}", .{err});
         return lsp.Response.createNull(id);
     };
-    try process.stdin.?.writeAll(doc.utf8_buffer.text);
-    process.stdin.?.close();
-    process.stdin = null;
-
-    const stdout_bytes = try process.stdout.?.reader().readAllAlloc(arena.allocator(), std.math.maxInt(usize));
 
     var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
         .range = try offsets.documentRange(doc.utf8_buffer, self.offset_encoding),
         .newText = stdout_bytes,
     };
-
-    switch (try process.wait()) {
-        .Exited => |code| if (code == 0) {
-            return lsp.Response{
-                .id = id,
-                .result = .{
-                    .TextEdits = edits,
-                },
-            };
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .TextEdits = edits,
         },
-        else => {},
-    }
-
-    return lsp.Response.createNull(id);
+    };
 }
 
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {

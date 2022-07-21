@@ -216,3 +216,25 @@ pub fn deinit(self: *Self) void {
     self.allocator.free(self.std_uri);
     self.allocator.free(self.exe_path);
 }
+
+pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![]const u8
+{
+    var process = std.ChildProcess.init(&[_][]const u8{ self.exe_path, "fmt", "--stdin" }, allocator);
+    process.stdin_behavior = .Pipe;
+    process.stdout_behavior = .Pipe;
+    try process.spawn();
+    try process.stdin.?.writeAll(src);
+    process.stdin.?.close();
+    process.stdin = null;
+    const bytes = try process.stdout.?.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+    switch (try process.wait()) {
+        .Exited => |code| if (code == 0) {
+            return bytes;
+        }else{
+            return error.ExitedNonZero;
+        },
+        else => {
+            return error.ProcessError;
+        },
+    }
+}

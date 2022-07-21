@@ -50,12 +50,11 @@ pub fn getChildren(children: *std.ArrayList(u32), tree: *const std.zig.Ast, idx:
                 children.append(node_data.rhs) catch unreachable;
             }
         },
-        .if_simple,
-        => {
+        .if_simple => {
             children.append(node_data.lhs) catch unreachable;
             children.append(node_data.rhs) catch unreachable;
         },
-        .@"if" =>{
+        .@"if" => {
             // const extra = tree.extraData(node_data.rhs, Node.If);
             const if_full = tree.ifFull(idx);
             children.append(if_full.ast.cond_expr) catch unreachable;
@@ -72,32 +71,27 @@ pub fn getChildren(children: *std.ArrayList(u32), tree: *const std.zig.Ast, idx:
         => {
             children.append(node_data.lhs) catch unreachable;
             const extra = tree.extraData(node_data.rhs, std.zig.Ast.Node.SubRange);
-            for(tree.extra_data[extra.start..extra.end])|child|{
+            for (tree.extra_data[extra.start..extra.end]) |child| {
                 children.append(child) catch unreachable;
             }
         },
-        .switch_case
-        => {
+        .switch_case => {
             const switch_case = tree.switchCase(idx);
-            for(switch_case.ast.values)|child|
-            {
+            for (switch_case.ast.values) |child| {
                 children.append(child) catch unreachable;
             }
             children.append(switch_case.ast.target_expr) catch unreachable;
         },
-        .switch_case_one
-        =>{
+        .switch_case_one => {
             const switch_case = tree.switchCaseOne(idx);
-            for(switch_case.ast.values)|child|
-            {
+            for (switch_case.ast.values) |child| {
                 children.append(child) catch unreachable;
             }
             children.append(switch_case.ast.target_expr) catch unreachable;
         },
-        .struct_init_dot_comma =>{
-            const struct_init = tree.structInitDot(idx);            
-            for(struct_init.ast.fields)|child|
-            {
+        .struct_init_dot_comma => {
+            const struct_init = tree.structInitDot(idx);
+            for (struct_init.ast.fields) |child| {
                 children.append(child) catch unreachable;
             }
         },
