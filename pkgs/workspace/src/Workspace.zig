@@ -21,7 +21,6 @@ zig_cache_root: []const u8,
 zig_global_cache_root: []const u8,
 handles: std.StringHashMap(*Document),
 build_files: std.ArrayListUnmanaged(*BuildFile),
-std_uri: ?[]const u8,
 
 pub fn init(
     self: *Self,
@@ -43,7 +42,6 @@ pub fn init(
     // self.build_runner_cache_path = build_runner_cache_path;
     // self.builtin_path = builtin_path;
     self.build_files = .{};
-    self.std_uri = try stdUriFromLibPath(allocator, zigenv.lib_path);
     self.zig_cache_root = zig_cache_root;
     self.zig_global_cache_root = zig_global_cache_root;
 }
@@ -433,10 +431,7 @@ pub fn applyChanges(self: *Self, handle: *Document, content_changes: std.json.Ar
 
 pub fn uriFromImportStr(self: *Self, allocator: std.mem.Allocator, handle: Document, import_str: []const u8) !?[]const u8 {
     if (std.mem.eql(u8, import_str, "std")) {
-        if (self.std_uri) |uri| return try allocator.dupe(u8, uri) else {
-            logger.debug("Cannot resolve std library import, path is null.", .{});
-            return null;
-        }
+        return try allocator.dupe(u8, self.zigenv.std_uri);
     } else if (std.mem.eql(u8, import_str, "builtin")) {
         if (handle.associated_build_file) |build_file| {
             if (build_file.builtin_uri) |builtin_uri| {
@@ -546,24 +541,7 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
     }
 }
 
-fn stdUriFromLibPath(allocator: std.mem.Allocator, zig_lib_path: ?[]const u8) !?[]const u8 {
-    if (zig_lib_path) |zpath| {
-        const std_path = std.fs.path.resolve(allocator, &[_][]const u8{
-            zpath, "./std/std.zig",
-        }) catch |err| {
-            logger.debug("Failed to resolve zig std library path, error: {}", .{err});
-            return null;
-        };
-
-        defer allocator.free(std_path);
-        // Get the std_path as a URI, so we can just append to it!
-        return try URI.fromPath(allocator, std_path);
-    }
-
-    return null;
-}
-
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Self) void {    
     var entry_iterator = self.handles.iterator();
     while (entry_iterator.next()) |entry| {
         self.allocator.free(entry.key_ptr.*);
@@ -579,9 +557,6 @@ pub fn deinit(self: *Self) void {
         build_file.packages.deinit(self.allocator);
         self.allocator.free(build_file.uri);
         build_file.destroy(self.allocator);
-    }
-    if (self.std_uri) |std_uri| {
-        self.allocator.free(std_uri);
     }
     self.build_files.deinit(self.allocator);
 }
