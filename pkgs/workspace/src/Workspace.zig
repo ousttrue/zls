@@ -48,6 +48,87 @@ pub fn deinit(self: *Self) void {
     self.build_files.deinit(self.allocator);
 }
 
+fn findBuildFile(self: *Self, uri: []const u8) !?*BuildFile {
+    // Look into build files and keep the one that lives closest to the document in the directory structure
+    var candidate: ?*BuildFile = null;
+    {
+        var uri_chars_matched: usize = 0;
+        for (self.build_files.items) |build_file| {
+            const build_file_base_uri = build_file.uri[0 .. std.mem.lastIndexOfScalar(u8, build_file.uri, '/').? + 1];
+
+            if (build_file_base_uri.len > uri_chars_matched and std.mem.startsWith(u8, uri, build_file_base_uri)) {
+                uri_chars_matched = build_file_base_uri.len;
+                candidate = build_file;
+            }
+        }
+        // if (candidate) |build_file| {
+        //     logger.debug("Found a candidate associated build file: `{s}`", .{build_file.uri});
+        // }
+    }
+
+    // Then, try to find the closest build file.
+    var curr_path = try URI.parse(self.allocator, uri);
+    defer self.allocator.free(curr_path);
+    while (true) {
+        if (curr_path.len == 0) break;
+
+        if (std.mem.lastIndexOfScalar(u8, curr_path[0 .. curr_path.len - 1], std.fs.path.sep)) |idx| {
+            // This includes the last separator
+            curr_path = curr_path[0 .. idx + 1];
+
+            // Try to open the folder, then the file.
+            var folder = std.fs.cwd().openDir(curr_path, .{}) catch |err| switch (err) {
+                error.FileNotFound => continue,
+                else => return err,
+            };
+            defer folder.close();
+
+            var build_file = folder.openFile("build.zig", .{}) catch |err| switch (err) {
+                error.FileNotFound, error.AccessDenied => continue,
+                else => return err,
+            };
+            defer build_file.close();
+
+            // Calculate build file's URI
+            var candidate_path = try std.mem.concat(self.allocator, u8, &.{ curr_path, "build.zig" });
+            defer self.allocator.free(candidate_path);
+            const build_file_uri = try URI.fromPath(self.allocator, candidate_path);
+            errdefer self.allocator.free(build_file_uri);
+
+            if (candidate) |candidate_build_file| {
+                // Check if it is the same as the current candidate we got from the existing build files.
+                // If it isn't, we need to read the file and make a new build file.
+                if (std.mem.eql(u8, candidate_build_file.uri, build_file_uri)) {
+                    self.allocator.free(build_file_uri);
+                    break;
+                }
+            }
+
+            // Check if the build file already exists
+            if (self.handles.get(build_file_uri)) |build_file_handle| {
+                candidate = build_file_handle.is_build_file.?;
+                break;
+            }
+
+            // Read the build file, create a new document, set the candidate to the new build file.
+            const build_file_text = try build_file.readToEndAllocOptions(
+                self.allocator,
+                std.math.maxInt(usize),
+                null,
+                @alignOf(u8),
+                0,
+            );
+            errdefer self.allocator.free(build_file_text);
+
+            const build_file_handle = try self.newDocument(build_file_uri, build_file_text);
+            candidate = build_file_handle.is_build_file.?;
+            break;
+        } else break;
+    }
+
+    return candidate;
+}
+
 /// This function asserts the document is not open yet and takes ownership
 /// of the uri and text passed in.
 fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
@@ -62,84 +143,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
         try self.build_files.append(self.allocator, build_file);
         doc.is_build_file = build_file;
     } else {
-        // Look into build files and keep the one that lives closest to the document in the directory structure
-        var candidate: ?*BuildFile = null;
-        {
-            var uri_chars_matched: usize = 0;
-            for (self.build_files.items) |build_file| {
-                const build_file_base_uri = build_file.uri[0 .. std.mem.lastIndexOfScalar(u8, build_file.uri, '/').? + 1];
-
-                if (build_file_base_uri.len > uri_chars_matched and std.mem.startsWith(u8, uri, build_file_base_uri)) {
-                    uri_chars_matched = build_file_base_uri.len;
-                    candidate = build_file;
-                }
-            }
-            // if (candidate) |build_file| {
-            //     logger.debug("Found a candidate associated build file: `{s}`", .{build_file.uri});
-            // }
-        }
-
-        // Then, try to find the closest build file.
-        var curr_path = try URI.parse(self.allocator, uri);
-        defer self.allocator.free(curr_path);
-        while (true) {
-            if (curr_path.len == 0) break;
-
-            if (std.mem.lastIndexOfScalar(u8, curr_path[0 .. curr_path.len - 1], std.fs.path.sep)) |idx| {
-                // This includes the last separator
-                curr_path = curr_path[0 .. idx + 1];
-
-                // Try to open the folder, then the file.
-                var folder = std.fs.cwd().openDir(curr_path, .{}) catch |err| switch (err) {
-                    error.FileNotFound => continue,
-                    else => return err,
-                };
-                defer folder.close();
-
-                var build_file = folder.openFile("build.zig", .{}) catch |err| switch (err) {
-                    error.FileNotFound, error.AccessDenied => continue,
-                    else => return err,
-                };
-                defer build_file.close();
-
-                // Calculate build file's URI
-                var candidate_path = try std.mem.concat(self.allocator, u8, &.{ curr_path, "build.zig" });
-                defer self.allocator.free(candidate_path);
-                const build_file_uri = try URI.fromPath(self.allocator, candidate_path);
-                errdefer self.allocator.free(build_file_uri);
-
-                if (candidate) |candidate_build_file| {
-                    // Check if it is the same as the current candidate we got from the existing build files.
-                    // If it isn't, we need to read the file and make a new build file.
-                    if (std.mem.eql(u8, candidate_build_file.uri, build_file_uri)) {
-                        self.allocator.free(build_file_uri);
-                        break;
-                    }
-                }
-
-                // Check if the build file already exists
-                if (self.handles.get(build_file_uri)) |build_file_handle| {
-                    candidate = build_file_handle.is_build_file.?;
-                    break;
-                }
-
-                // Read the build file, create a new document, set the candidate to the new build file.
-                const build_file_text = try build_file.readToEndAllocOptions(
-                    self.allocator,
-                    std.math.maxInt(usize),
-                    null,
-                    @alignOf(u8),
-                    0,
-                );
-                errdefer self.allocator.free(build_file_text);
-
-                const build_file_handle = try self.newDocument(build_file_uri, build_file_text);
-                candidate = build_file_handle.is_build_file.?;
-                break;
-            } else break;
-        }
-        // Finally, associate the candidate build file, if any, to the new document.
-        if (candidate) |build_file| {
+        if (try self.findBuildFile(uri)) |build_file| {
             build_file.refs += 1;
             doc.associated_build_file = build_file;
             // logger.debug("Associated build file `{s}` to document `{s}`", .{ build_file.uri, handle.uri() });
@@ -147,7 +151,6 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     }
 
     doc.import_uris = try self.collectImportUris(doc);
-
     try self.handles.putNoClobber(uri, doc);
     return doc;
 }
