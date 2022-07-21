@@ -2,16 +2,16 @@ const std = @import("std");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
 const known_folders = @import("known-folders");
-const workspace = @import("workspace");
-const language_server = @import("language_server");
+const ws = @import("workspace");
+const LanguageServer = @import("language_server").LanguageServer;
 const lsp = @import("lsp");
 const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
-const Config = workspace.Config;
-const Stdio = workspace.Stdio;
-const ZigEnv = workspace.ZigEnv;
+const Config = ws.Config;
+const Stdio = ws.Stdio;
+const ZigEnv = ws.ZigEnv;
 
 const logger = std.log.scoped(.main);
 
@@ -44,7 +44,7 @@ pub fn log(
         return;
     }
     // After shutdown, pipe output to stderr
-    if (!language_server.LanguageServer.keep_running) {
+    if (!LanguageServer.keep_running) {
         std.debug.print("[{s}-{s}] " ++ format ++ "\n", .{ @tagName(message_level), @tagName(scope) } ++ args);
         return;
     }
@@ -159,30 +159,30 @@ pub fn main() anyerror!void {
     );
     defer zigenv.deinit();
 
-    workspace.init(allocator, &data.builtins, &config);
-    defer workspace.deinit();
+    ws.init(allocator, &data.builtins, &config);
+    defer ws.deinit();
 
     var dispatcher = Dispatcher.init(allocator);
     defer dispatcher.deinit();
 
-    var ls = language_server.LanguageServer.init(allocator, &config, zigenv);
-    defer ls.deinit();
+    var language_server = LanguageServer.init(allocator, &config, zigenv);
+    defer language_server.deinit();
 
-    dispatcher.registerRequest(&ls, "initialize");
-    dispatcher.registerRequest(&ls, "shutdown");
-    dispatcher.registerNotify(&ls, "textDocument/didOpen");
-    dispatcher.registerNotify(&ls, "textDocument/didChange");
-    dispatcher.registerNotify(&ls, "textDocument/didSave");
-    dispatcher.registerNotify(&ls, "textDocument/didClose");
-    dispatcher.registerRequest(&ls, "textDocument/semanticTokens/full");
-    dispatcher.registerRequest(&ls, "textDocument/documentSymbol");
-    dispatcher.registerRequest(&ls, "textDocument/hover");
-    dispatcher.registerRequest(&ls, "textDocument/formatting");
-    dispatcher.registerRequest(&ls, "textDocument/definition");
-    dispatcher.registerNotify(&ls, "$/cancelRequest");
-    dispatcher.registerRequest(&ls, "textDocument/completion");
-    dispatcher.registerRequest(&ls, "textDocument/rename");
-    dispatcher.registerRequest(&ls, "textDocument/references");
+    dispatcher.registerRequest(&language_server, "initialize");
+    dispatcher.registerRequest(&language_server, "shutdown");
+    dispatcher.registerNotify(&language_server, "textDocument/didOpen");
+    dispatcher.registerNotify(&language_server, "textDocument/didChange");
+    dispatcher.registerNotify(&language_server, "textDocument/didSave");
+    dispatcher.registerNotify(&language_server, "textDocument/didClose");
+    dispatcher.registerRequest(&language_server, "textDocument/semanticTokens/full");
+    dispatcher.registerRequest(&language_server, "textDocument/documentSymbol");
+    dispatcher.registerRequest(&language_server, "textDocument/hover");
+    dispatcher.registerRequest(&language_server, "textDocument/formatting");
+    dispatcher.registerRequest(&language_server, "textDocument/definition");
+    dispatcher.registerNotify(&language_server, "$/cancelRequest");
+    dispatcher.registerRequest(&language_server, "textDocument/completion");
+    dispatcher.registerRequest(&language_server, "textDocument/rename");
+    dispatcher.registerRequest(&language_server, "textDocument/references");
     // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
     // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
