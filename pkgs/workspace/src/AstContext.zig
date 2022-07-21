@@ -1,7 +1,7 @@
 const std = @import("std");
 const Self = @This();
 const PositionContext = @import("./position_context.zig").PositionContext;
-const getChildren = @import("./ast_get_children.zig").getChildren;
+const AstGetChildren = @import("./AstGetChildren.zig");
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
     var tokens = std.ArrayList(std.zig.Token).init(allocator);
@@ -33,10 +33,9 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
         context.tokens_node[token_idx] = idx;
     }
 
-    var children = std.ArrayList(u32).init(context.allocator);
+    var children = AstGetChildren.init(context.allocator);
     defer children.deinit();
-    getChildren(&children, context.tree, idx);
-    for (children.items) |child| {
+    for (children.getChildren(context.tree, idx)) |child| {
         stack.append(child) catch unreachable;
         traverse(context, stack);
         _ = stack.pop();
