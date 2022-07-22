@@ -7,6 +7,7 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
 const offsets = @import("./offsets.zig");
 const analysis = @import("./analysis.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const builtin_completions = @import("./builtin_completions.zig");
 const Ast = std.zig.Ast;
@@ -17,7 +18,7 @@ fn hoverSymbol(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     id: i64,
-    decl_handle: analysis.DeclWithHandle,
+    decl_handle: DeclWithHandle,
     client_capabilities: *ClientCapabilities,
 ) (std.os.WriteError || error{OutOfMemory})!?[]const u8 {
     const handle = decl_handle.handle;

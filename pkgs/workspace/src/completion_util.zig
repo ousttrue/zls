@@ -7,6 +7,7 @@ const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
 const offsets = @import("./offsets.zig");
@@ -373,7 +374,7 @@ fn declToCompletion(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     context: DeclToCompletionContext,
-    decl_handle: analysis.DeclWithHandle,
+    decl_handle: DeclWithHandle,
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) !void {

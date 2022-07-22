@@ -2,6 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const URI = @import("./uri.zig");
 const analysis = @import("./analysis.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
 const Location = @import("./Location.zig");
@@ -9,6 +10,7 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const offsets = @import("./offsets.zig");
 const position_context = @import("./position_context.zig");
 const ZigEnv = @import("./ZigEnv.zig");
+const ast = @import("./ast.zig");
 const logger = std.log.scoped(.Workspace);
 
 const Self = @This();
@@ -366,7 +368,7 @@ pub fn lookupSymbolGlobal(
     handle: *Document,
     symbol: []const u8,
     source_index: usize,
-) error{OutOfMemory}!?analysis.DeclWithHandle {
+) error{OutOfMemory}!?DeclWithHandle {
     const innermost_scope_idx = analysis.innermostBlockScopeIndex(handle.*, source_index);
 
     var curr = innermost_scope_idx;
@@ -381,7 +383,7 @@ pub fn lookupSymbolGlobal(
                     .label_decl => break :blk,
                     else => {},
                 }
-                return analysis.DeclWithHandle{
+                return DeclWithHandle{
                     .decl = candidate.value_ptr,
                     .handle = handle,
                 };
@@ -393,7 +395,7 @@ pub fn lookupSymbolGlobal(
     return null;
 }
 
-pub fn getSymbolGlobal(self: *Self, arena: *std.heap.ArenaAllocator, handle: *Document, pos_index: usize) !?analysis.DeclWithHandle {
+pub fn getSymbolGlobal(self: *Self, arena: *std.heap.ArenaAllocator, handle: *Document, pos_index: usize) !?DeclWithHandle {
     if (handle.identifierFromPosition(pos_index)) |name| {
         return self.lookupSymbolGlobal(arena, handle, name, pos_index);
     } else {
@@ -404,7 +406,7 @@ pub fn getSymbolGlobal(self: *Self, arena: *std.heap.ArenaAllocator, handle: *Do
 fn gotoDefinitionSymbol(
     workspace: *Self,
     arena: *std.heap.ArenaAllocator,
-    decl_handle: analysis.DeclWithHandle,
+    decl_handle: DeclWithHandle,
     resolve_alias: bool,
     offset_encoding: offsets.Encoding,
 ) !?Location {
@@ -419,7 +421,7 @@ fn gotoDefinitionSymbol(
                 }
             }
 
-            const name_token = analysis.getDeclNameToken(handle.tree, node) orelse
+            const name_token = ast.getDeclNameToken(handle.tree, node) orelse
                 return null;
             break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
         },

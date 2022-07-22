@@ -1029,3 +1029,40 @@ pub fn callFull(tree: Ast, node: Ast.Node.Index, buf: *[1]Ast.Node.Index) ?Ast.f
         else => null,
     };
 }
+
+pub fn getDeclNameToken(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
+    const tags = tree.nodes.items(.tag);
+    const main_token = tree.nodes.items(.main_token)[node];
+    return switch (tags[node]) {
+        // regular declaration names. + 1 to mut token because name comes after 'const'/'var'
+        .local_var_decl => tree.localVarDecl(node).ast.mut_token + 1,
+        .global_var_decl => tree.globalVarDecl(node).ast.mut_token + 1,
+        .simple_var_decl => tree.simpleVarDecl(node).ast.mut_token + 1,
+        .aligned_var_decl => tree.alignedVarDecl(node).ast.mut_token + 1,
+        // function declaration names
+        .fn_proto,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto_simple,
+        .fn_decl,
+        => blk: {
+            var params: [1]Ast.Node.Index = undefined;
+            break :blk fnProto(tree, node, &params).?.name_token;
+        },
+
+        // containers
+        .container_field => tree.containerField(node).ast.name_token,
+        .container_field_init => tree.containerFieldInit(node).ast.name_token,
+        .container_field_align => tree.containerFieldAlign(node).ast.name_token,
+
+        .identifier => main_token,
+        .error_value => main_token + 2, // 'error'.<main_token +2>
+
+        // lhs of main token is name token, so use `node` - 1
+        .test_decl => if (tree.tokens.items(.tag)[main_token + 1] == .string_literal)
+            return main_token + 1
+        else
+            null,
+        else => null,
+    };
+}

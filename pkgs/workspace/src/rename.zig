@@ -1,6 +1,7 @@
 const std = @import("std");
 const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const references = @import("./references.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
@@ -29,7 +30,7 @@ fn refHandler(context: RefHandlerContext, loc: lsp.Location) !void {
 pub fn renameSymbol(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    decl_handle: analysis.DeclWithHandle,
+    decl_handle: DeclWithHandle,
     new_name: []const u8,
     edits: *std.StringHashMap([]lsp.TextEdit),
     encoding: offsets.Encoding,
@@ -42,7 +43,7 @@ pub fn renameSymbol(
     }, refHandler, true);
 }
 
-pub fn renameLabel(arena: *std.heap.ArenaAllocator, decl_handle: analysis.DeclWithHandle, new_name: []const u8, edits: *std.StringHashMap([]lsp.TextEdit), encoding: offsets.Encoding) !void {
+pub fn renameLabel(arena: *std.heap.ArenaAllocator, decl_handle: DeclWithHandle, new_name: []const u8, edits: *std.StringHashMap([]lsp.TextEdit), encoding: offsets.Encoding) !void {
     std.debug.assert(decl_handle.decl.* == .label_decl);
     try references.labelReferences(decl_handle, encoding, true, RefHandlerContext{
         .edits = edits,

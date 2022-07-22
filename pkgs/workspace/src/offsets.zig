@@ -5,6 +5,7 @@ const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const analysis = @import("./analysis.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
@@ -247,7 +248,7 @@ pub fn getSymbolFieldAccess(
     handle: *Document,
     position: DocumentPosition,
     range: analysis.SourceRange,
-) !analysis.DeclWithHandle {
+) !DeclWithHandle {
     const name = handle.identifierFromPosition(position.absolute_index) orelse return error.NoIdentifier;
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
     var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);

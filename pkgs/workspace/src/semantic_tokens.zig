@@ -403,7 +403,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                     return try builder.writeToken(main_token, .parameter);
                 }
                 var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
-                if (try child.resolveType(arena, workspace, &bound_type_params)) |decl_type| {
+                if (try analysis.resolveType(child, arena, workspace, &bound_type_params)) |decl_type| {
                     try colorIdentifierBasedOnType(builder, decl_type, main_token, .{});
                 } else {
                     try builder.writeTokenMod(main_token, .variable, .{});
@@ -893,7 +893,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                     else => {},
                 }
 
-                if (try decl_type.resolveType(arena, workspace, &bound_type_params)) |resolved_type| {
+                if (try analysis.resolveType(decl_type, arena, workspace, &bound_type_params)) |resolved_type| {
                     try colorIdentifierBasedOnType(builder, resolved_type, data.rhs, .{});
                 }
             }

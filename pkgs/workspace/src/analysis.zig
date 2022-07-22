@@ -12,6 +12,7 @@ const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.analysis);
 const ast = @import("./ast.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 
 var using_trail: std.ArrayList([*]const u8) = undefined;
 var resolve_trail: std.ArrayList(NodeWithHandle) = undefined;
@@ -148,46 +149,8 @@ pub fn getContainerFieldSignature(tree: Ast, field: Ast.full.ContainerField) []c
 }
 
 // ANALYSIS ENGINE
-
-pub fn getDeclNameToken(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
-    const tags = tree.nodes.items(.tag);
-    const main_token = tree.nodes.items(.main_token)[node];
-    return switch (tags[node]) {
-        // regular declaration names. + 1 to mut token because name comes after 'const'/'var'
-        .local_var_decl => tree.localVarDecl(node).ast.mut_token + 1,
-        .global_var_decl => tree.globalVarDecl(node).ast.mut_token + 1,
-        .simple_var_decl => tree.simpleVarDecl(node).ast.mut_token + 1,
-        .aligned_var_decl => tree.alignedVarDecl(node).ast.mut_token + 1,
-        // function declaration names
-        .fn_proto,
-        .fn_proto_multi,
-        .fn_proto_one,
-        .fn_proto_simple,
-        .fn_decl,
-        => blk: {
-            var params: [1]Ast.Node.Index = undefined;
-            break :blk ast.fnProto(tree, node, &params).?.name_token;
-        },
-
-        // containers
-        .container_field => tree.containerField(node).ast.name_token,
-        .container_field_init => tree.containerFieldInit(node).ast.name_token,
-        .container_field_align => tree.containerFieldAlign(node).ast.name_token,
-
-        .identifier => main_token,
-        .error_value => main_token + 2, // 'error'.<main_token +2>
-
-        // lhs of main token is name token, so use `node` - 1
-        .test_decl => if (tree.tokens.items(.tag)[main_token + 1] == .string_literal)
-            return main_token + 1
-        else
-            null,
-        else => null,
-    };
-}
-
 pub fn getDeclName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
-    const name = tree.tokenSlice(getDeclNameToken(tree, node) orelse return null);
+    const name = tree.tokenSlice(ast.getDeclNameToken(tree, node) orelse return null);
     return switch (tree.nodes.items(.tag)[node]) {
         .test_decl => name[1 .. name.len - 1],
         else => name,
@@ -638,7 +601,7 @@ pub fn resolveTypeOfNodeInternal(
                     },
                     else => {},
                 }
-                return try child.resolveType(arena, workspace, bound_type_params);
+                return try resolveType(child, arena, workspace, bound_type_params);
             }
             return null;
         },
@@ -786,7 +749,7 @@ pub fn resolveTypeOfNodeInternal(
                 rhs_str,
                 !left_type.type.is_type_val,
             )) |child| {
-                return try child.resolveType(arena, workspace, bound_type_params);
+                return try resolveType(child, arena, workspace, bound_type_params);
             } else return null;
         },
         .array_type,
@@ -934,7 +897,7 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace
                     tokenizer.buffer[tok.loc.start..tok.loc.end],
                     source_index,
                 )) |child| {
-                    if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {
+                    if (try resolveType(child, arena, workspace, &bound_type_params)) |child_type| {
                         current_type = child_type;
                     } else {
                         log.warn("fail to child.resolveType: {}", .{child.decl});
@@ -978,7 +941,7 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace
                             tokenizer.buffer[after_period.loc.start..after_period.loc.end],
                             !current_type.type.is_type_val,
                         )) |child| {
-                            current_type = (try child.resolveType(
+                            current_type = (try resolveType(child,
                                 arena,
                                 workspace,
                                 &bound_type_params,
@@ -1071,24 +1034,6 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace
     };
 }
 
-pub fn isNodePublic(tree: Ast, node: Ast.Node.Index) bool {
-    var buf: [1]Ast.Node.Index = undefined;
-    return switch (tree.nodes.items(.tag)[node]) {
-        .global_var_decl,
-        .local_var_decl,
-        .simple_var_decl,
-        .aligned_var_decl,
-        => ast.varDecl(tree, node).?.visib_token != null,
-        .fn_proto,
-        .fn_proto_multi,
-        .fn_proto_one,
-        .fn_proto_simple,
-        .fn_decl,
-        => ast.fnProto(tree, node, &buf).?.visib_token != null,
-        else => true,
-    };
-}
-
 pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     const data = tree.nodes.items(.data);
     const main_token = tree.nodes.items(.main_token)[node];
@@ -1126,133 +1071,6 @@ pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
 }
 
 pub const SourceRange = std.zig.Token.Loc;
-
-pub const DeclWithHandle = struct {
-    decl: *Declaration,
-    handle: *Document,
-
-    pub fn nameToken(self: DeclWithHandle) Ast.TokenIndex {
-        const tree = self.handle.tree;
-        return switch (self.decl.*) {
-            .ast_node => |n| getDeclNameToken(tree, n).?,
-            .param_decl => |p| p.name_token.?,
-            .pointer_payload => |pp| pp.name,
-            .array_payload => |ap| ap.identifier,
-            .array_index => |ai| ai,
-            .switch_payload => |sp| sp.node,
-            .label_decl => |ld| ld,
-        };
-    }
-
-    pub fn location(self: DeclWithHandle, encoding: offsets.Encoding) !offsets.TokenLocation {
-        const tree = self.handle.tree;
-        return try offsets.tokenRelativeLocation(tree, 0, tree.tokens.items(.start)[self.nameToken()], encoding);
-    }
-
-    fn isPublic(self: DeclWithHandle) bool {
-        return switch (self.decl.*) {
-            .ast_node => |node| isNodePublic(self.handle.tree, node),
-            else => true,
-        };
-    }
-
-    pub fn resolveType(self: DeclWithHandle, arena: *std.heap.ArenaAllocator, workspace: *Workspace, bound_type_params: *BoundTypeParams) !?TypeWithHandle {
-        const tree = self.handle.tree;
-        const node_tags = tree.nodes.items(.tag);
-        const main_tokens = tree.nodes.items(.main_token);
-        return switch (self.decl.*) {
-            .ast_node => |node| try resolveTypeOfNodeInternal(
-                arena,
-                workspace,
-                self.handle,
-                node,
-                bound_type_params,
-            ),
-            .param_decl => |param_decl| {
-                if (TypeWithHandle.isMetaType(self.handle.tree, param_decl.type_expr)) {
-                    var bound_param_it = bound_type_params.iterator();
-                    while (bound_param_it.next()) |entry| {
-                        if (std.meta.eql(entry.key_ptr.*, param_decl)) return entry.value_ptr.*;
-                    }
-                    return null;
-                } else if (node_tags[param_decl.type_expr] == .identifier) {
-                    if (param_decl.name_token) |name_tok| {
-                        if (std.mem.eql(u8, tree.tokenSlice(main_tokens[param_decl.type_expr]), tree.tokenSlice(name_tok)))
-                            return null;
-                    }
-                }
-                return ((try resolveTypeOfNodeInternal(
-                    arena,
-                    workspace,
-                    self.handle,
-                    param_decl.type_expr,
-                    bound_type_params,
-                )) orelse return null).instanceTypeVal();
-            },
-            .pointer_payload => |pay| try resolveUnwrapOptionalType(
-                arena,
-                workspace,
-                (try resolveTypeOfNodeInternal(
-                    arena,
-                    workspace,
-                    self.handle,
-                    pay.condition,
-                    bound_type_params,
-                )) orelse return null,
-                bound_type_params,
-            ),
-            .array_payload => |pay| try resolveBracketAccessType(
-                arena,
-                workspace,
-                (try resolveTypeOfNodeInternal(
-                    arena,
-                    workspace,
-                    self.handle,
-                    pay.array_expr,
-                    bound_type_params,
-                )) orelse return null,
-                .Single,
-                bound_type_params,
-            ),
-            .array_index => TypeWithHandle{
-                .type = .{ .data = .primitive, .is_type_val = false },
-                .handle = self.handle,
-            },
-            .label_decl => return null,
-            .switch_payload => |pay| {
-                if (pay.items.len == 0) return null;
-                // TODO Peer type resolution, we just use the first item for now.
-                const switch_expr_type = (try resolveTypeOfNodeInternal(arena, workspace, self.handle, pay.switch_expr, bound_type_params)) orelse return null;
-                if (!switch_expr_type.isUnionType())
-                    return null;
-
-                if (node_tags[pay.items[0]] == .enum_literal) {
-                    const scope = Scope.findContainerScope(switch_expr_type.handle, switch_expr_type.type.data.other) orelse return null;
-                    if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
-                        switch (candidate.value_ptr.*) {
-                            .ast_node => |node| {
-                                if (ast.containerField(switch_expr_type.handle.tree, node)) |container_field| {
-                                    if (container_field.ast.type_expr != 0) {
-                                        return ((try resolveTypeOfNodeInternal(
-                                            arena,
-                                            workspace,
-                                            switch_expr_type.handle,
-                                            container_field.ast.type_expr,
-                                            bound_type_params,
-                                        )) orelse return null).instanceTypeVal();
-                                    }
-                                }
-                            },
-                            else => {},
-                        }
-                        return null;
-                    }
-                }
-                return null;
-            },
-        };
-    }
-};
 
 fn iterateSymbolsContainerInternal(
     arena: *std.heap.ArenaAllocator,
@@ -2448,4 +2266,101 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             try makeScopeInternal(allocator, context, data[node_idx].rhs);
         },
     }
+}
+
+pub fn resolveType(self: DeclWithHandle, arena: *std.heap.ArenaAllocator, workspace: *Workspace, bound_type_params: *BoundTypeParams) !?TypeWithHandle {
+    const tree = self.handle.tree;
+    const node_tags = tree.nodes.items(.tag);
+    const main_tokens = tree.nodes.items(.main_token);
+    return switch (self.decl.*) {
+        .ast_node => |node| try resolveTypeOfNodeInternal(
+            arena,
+            workspace,
+            self.handle,
+            node,
+            bound_type_params,
+        ),
+        .param_decl => |param_decl| {
+            if (TypeWithHandle.isMetaType(self.handle.tree, param_decl.type_expr)) {
+                var bound_param_it = bound_type_params.iterator();
+                while (bound_param_it.next()) |entry| {
+                    if (std.meta.eql(entry.key_ptr.*, param_decl)) return entry.value_ptr.*;
+                }
+                return null;
+            } else if (node_tags[param_decl.type_expr] == .identifier) {
+                if (param_decl.name_token) |name_tok| {
+                    if (std.mem.eql(u8, tree.tokenSlice(main_tokens[param_decl.type_expr]), tree.tokenSlice(name_tok)))
+                        return null;
+                }
+            }
+            return ((try resolveTypeOfNodeInternal(
+                arena,
+                workspace,
+                self.handle,
+                param_decl.type_expr,
+                bound_type_params,
+            )) orelse return null).instanceTypeVal();
+        },
+        .pointer_payload => |pay| try resolveUnwrapOptionalType(
+            arena,
+            workspace,
+            (try resolveTypeOfNodeInternal(
+                arena,
+                workspace,
+                self.handle,
+                pay.condition,
+                bound_type_params,
+            )) orelse return null,
+            bound_type_params,
+        ),
+        .array_payload => |pay| try resolveBracketAccessType(
+            arena,
+            workspace,
+            (try resolveTypeOfNodeInternal(
+                arena,
+                workspace,
+                self.handle,
+                pay.array_expr,
+                bound_type_params,
+            )) orelse return null,
+            .Single,
+            bound_type_params,
+        ),
+        .array_index => TypeWithHandle{
+            .type = .{ .data = .primitive, .is_type_val = false },
+            .handle = self.handle,
+        },
+        .label_decl => return null,
+        .switch_payload => |pay| {
+            if (pay.items.len == 0) return null;
+            // TODO Peer type resolution, we just use the first item for now.
+            const switch_expr_type = (try resolveTypeOfNodeInternal(arena, workspace, self.handle, pay.switch_expr, bound_type_params)) orelse return null;
+            if (!switch_expr_type.isUnionType())
+                return null;
+
+            if (node_tags[pay.items[0]] == .enum_literal) {
+                const scope = Scope.findContainerScope(switch_expr_type.handle, switch_expr_type.type.data.other) orelse return null;
+                if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
+                    switch (candidate.value_ptr.*) {
+                        .ast_node => |node| {
+                            if (ast.containerField(switch_expr_type.handle.tree, node)) |container_field| {
+                                if (container_field.ast.type_expr != 0) {
+                                    return ((try resolveTypeOfNodeInternal(
+                                        arena,
+                                        workspace,
+                                        switch_expr_type.handle,
+                                        container_field.ast.type_expr,
+                                        bound_type_params,
+                                    )) orelse return null).instanceTypeVal();
+                                }
+                            }
+                        },
+                        else => {},
+                    }
+                    return null;
+                }
+            }
+            return null;
+        },
+    };
 }

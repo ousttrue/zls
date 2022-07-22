@@ -3,6 +3,7 @@ const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const analysis = @import("./analysis.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
@@ -27,7 +28,7 @@ fn tokenReference(document: *Document, tok: Ast.TokenIndex, encoding: offsets.En
     });
 }
 
-pub fn labelReferences(decl: analysis.DeclWithHandle, encoding: offsets.Encoding, include_decl: bool, context: anytype, comptime handler: anytype) !void {
+pub fn labelReferences(decl: DeclWithHandle, encoding: offsets.Encoding, include_decl: bool, context: anytype, comptime handler: anytype) !void {
     std.debug.assert(decl.decl.* == .label_decl);
     const handle = decl.handle;
     const tree = handle.tree;
@@ -61,7 +62,7 @@ fn symbolReferencesInternal(
     workspace: *Workspace,
     handle: *Document,
     node: Ast.Node.Index,
-    decl: analysis.DeclWithHandle,
+    decl: DeclWithHandle,
     encoding: offsets.Encoding,
     context: anytype,
     comptime handler: anytype,
@@ -558,7 +559,7 @@ fn symbolReferencesInternal(
 pub fn symbolReferences(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    decl_handle: analysis.DeclWithHandle,
+    decl_handle: DeclWithHandle,
     encoding: offsets.Encoding,
     include_decl: bool,
     context: anytype,

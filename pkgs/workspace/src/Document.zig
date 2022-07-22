@@ -4,6 +4,7 @@ const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
 const analysis = @import("./analysis.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
@@ -546,7 +547,7 @@ test "identifierFromPosition" {
     // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }
 
-pub fn getLabelGlobal(self: *Self, pos_index: usize) !?analysis.DeclWithHandle {
+pub fn getLabelGlobal(self: *Self, pos_index: usize) !?DeclWithHandle {
     if (self.identifierFromPosition(pos_index)) |name| {
         return try analysis.lookupLabel(self, name, pos_index);
     } else {
