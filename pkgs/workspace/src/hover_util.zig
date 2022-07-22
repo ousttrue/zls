@@ -10,6 +10,7 @@ const analysis = @import("./analysis.zig");
 const ast = @import("./ast.zig");
 const builtin_completions = @import("./builtin_completions.zig");
 const Ast = std.zig.Ast;
+const AstGetChildren = @import("./AstGetChildren.zig");
 const logger = std.log.scoped(.hover);
 
 fn hoverSymbol(
@@ -84,35 +85,6 @@ fn hoverSymbol(
     return hover_text;
 }
 
-// pub fn getSymbolFieldAccess(
-//     arena: *std.heap.ArenaAllocator,
-//     workspace: *Workspace,
-//     handle: *Document,
-//     position: DocumentPosition,
-//     range: analysis.SourceRange,
-//     name: [] const u8,
-// ) !analysis.DeclWithHandle {
-//     // const name = handle.identifierFromPosition(position.absolute_index) orelse return error.NoIdentifier;
-//     // const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
-//     // var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
-//     // var tokenizer = std.zig.Tokenizer.init(held_range.data());
-//     // errdefer held_range.release();
-//     const result = (try analysis.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
-//     held_range.release();
-//     const container_handle = result.unwrapped orelse result.original;
-//     const container_handle_node = switch (container_handle.type.data) {
-//         .other => |n| n,
-//         else => return OffsetError.NodeNotFound,
-//     };
-//     return (try analysis.lookupSymbolContainer(
-//         arena,
-//         workspace,
-//         .{ .node = container_handle_node, .handle = container_handle.handle },
-//         name,
-//         true,
-//     )) orelse return OffsetError.ContainerSymbolNotFound;
-// }
-
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -154,11 +126,15 @@ pub fn process(
                         return analysis.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
                     },
                     .field_access => {
+                        const lhs = AstGetChildren.getChild(arena.allocator(), &doc.tree, idx);
+                        const lhs_tag = tag[lhs];
+
                         // const decl = try getSymbolFieldAccess(arena, workspace, doc, doc_position, token_with_index.token.loc. name);
                         // return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
                         var buffer = std.ArrayList(u8).init(arena.allocator());
                         const w = buffer.writer();
-                        try w.print("[field_access] {s}: {} =>\n* [0]{}\n", .{
+                        try w.print("[field_access] ({}).{s}: {} =>\n* [0]{}\n", .{
+                            lhs_tag,
                             name,
                             token_with_index.token.tag,
                             node_tag,

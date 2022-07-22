@@ -14,7 +14,9 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn append(self: *Self, node: u32) void {
-    self.children.append(node) catch unreachable;
+    if (node != 0) {
+        self.children.append(node) catch unreachable;
+    }
 }
 
 pub fn nodeData(self: *Self, data: std.zig.Ast.Node.Data) void {
@@ -114,4 +116,13 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
     }
 
     return self.children.items;
+}
+
+pub fn getChild(allocator: std.mem.Allocator, tree: *const std.zig.Ast, idx: u32) u32 {
+    var children = Self.init(allocator);
+    defer children.deinit();
+    for (children.getChildren(tree, idx)) |child| {
+        return child;
+    }
+    unreachable;
 }
