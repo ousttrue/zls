@@ -310,19 +310,17 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, offset_encodin
 
             // TODO: add tests and validate the JSON
             const start_obj = range.Object.get("start").?.Object;
-            const start_pos = lsp.Position{
-                .line = start_obj.get("line").?.Integer,
-                .character = start_obj.get("character").?.Integer,
-            };
             const end_obj = range.Object.get("end").?.Object;
-            const end_pos = lsp.Position{
-                .line = end_obj.get("line").?.Integer,
-                .character = end_obj.get("character").?.Integer,
-            };
 
             const change_text = change.Object.get("text").?.String;
-            const start_index = (try offsets.documentPosition(document.*, start_pos, offset_encoding)).absolute_index;
-            const end_index = (try offsets.documentPosition(document.*, end_pos, offset_encoding)).absolute_index;
+            const start_index = (try offsets.documentPosition(document.text, .{
+                .line = @intCast(u32, start_obj.get("line").?.Integer),
+                .x = @intCast(u32, start_obj.get("character").?.Integer),
+            }, offset_encoding)).absolute_index;
+            const end_index = (try offsets.documentPosition(document.text, .{
+                .line = @intCast(u32, end_obj.get("line").?.Integer),
+                .x = @intCast(u32, end_obj.get("character").?.Integer),
+            }, offset_encoding)).absolute_index;
 
             const old_len = document.text.len;
             const new_len = old_len - (end_index - start_index) + change_text.len;

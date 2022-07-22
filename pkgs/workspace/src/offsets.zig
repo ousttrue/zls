@@ -1,5 +1,4 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
@@ -15,7 +14,6 @@ const logger = std.log.scoped(.offset);
 
 pub const OffsetError = error{
     LineNotFound,
-    PositionNegativeCharacter,
     NoIdentifier,
     NoFieldAccessType,
     GlobalSymbolNotFound,
@@ -59,20 +57,16 @@ fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
     return utf8_idx;
 }
 
-pub fn documentPosition(doc: Utf8Buffer, position: lsp.Position, encoding: Encoding) OffsetError!DocumentPosition {
-    if (position.character < 0) {
-        return OffsetError.PositionNegativeCharacter;
-    }
-
-    const line = DocumentPosition.getLine(doc.text, @intCast(usize, position.line)) orelse {
+pub fn documentPosition(text: []const u8, pos: struct { line: u32, x: u32 = 0 }, encoding: Encoding) OffsetError!DocumentPosition {
+    const line = DocumentPosition.getLine(text, pos.line) orelse {
         return OffsetError.LineNotFound;
     };
 
     if (encoding == .utf8) {
-        return line.advance(@intCast(usize, position.character));
+        return line.advance(pos.x);
     } else {
-        const utf8 = doc.text[line.absolute_index..];
-        const utf8_idx = getUtf8Length(utf8, position.character);
+        const utf8 = text[line.absolute_index..];
+        const utf8_idx = getUtf8Length(utf8, pos.x);
         return line.advance(utf8_idx);
     }
 }
@@ -196,51 +190,6 @@ pub fn tokenLocation(tree: Ast, token_index: Ast.TokenIndex) Loc {
     return .{ .start = token.loc.start, .end = token.loc.end };
 }
 
-pub fn documentRange(doc: Utf8Buffer, encoding: Encoding) !lsp.Range {
-    var line_idx: i64 = 0;
-    var curr_line: []const u8 = doc.text;
-
-    var split_iterator = std.mem.split(u8, doc.text, "\n");
-    while (split_iterator.next()) |line| : (line_idx += 1) {
-        curr_line = line;
-    }
-
-    if (encoding == .utf8) {
-        return lsp.Range{
-            .start = .{
-                .line = 0,
-                .character = 0,
-            },
-            .end = .{
-                .line = line_idx,
-                .character = @intCast(i64, curr_line.len),
-            },
-        };
-    } else {
-        var utf16_len: usize = 0;
-        var line_utf8_idx: usize = 0;
-        while (line_utf8_idx < curr_line.len) {
-            const n = try std.unicode.utf8ByteSequenceLength(curr_line[line_utf8_idx]);
-            const codepoint = try std.unicode.utf8Decode(curr_line[line_utf8_idx .. line_utf8_idx + n]);
-            if (codepoint < 0x10000) {
-                utf16_len += 1;
-            } else {
-                utf16_len += 2;
-            }
-            line_utf8_idx += n;
-        }
-        return lsp.Range{
-            .start = .{
-                .line = 0,
-                .character = 0,
-            },
-            .end = .{
-                .line = line_idx,
-                .character = @intCast(i64, utf16_len),
-            },
-        };
-    }
-}
 
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
