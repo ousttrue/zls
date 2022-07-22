@@ -10,7 +10,21 @@ const getSignatureInfo = @import("signature_help.zig").getSignatureInfo;
 const builtin_completions = @import("./builtin_completions.zig");
 const Session = struct {};
 
-const logger = std.log.scoped(.main);
+const logger = std.log.scoped(.server);
+
+// STYLE
+
+pub fn isCamelCase(name: []const u8) bool {
+    return !std.ascii.isUpper(name[0]) and !isSnakeCase(name);
+}
+
+pub fn isPascalCase(name: []const u8) bool {
+    return std.ascii.isUpper(name[0]) and !isSnakeCase(name);
+}
+
+pub fn isSnakeCase(name: []const u8) bool {
+    return std.mem.indexOf(u8, name, "_") != null;
+}
 
 const no_signatures_response = lsp.ResponseParams{
     .SignatureHelp = .{

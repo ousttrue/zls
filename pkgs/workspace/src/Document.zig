@@ -206,6 +206,32 @@ pub fn uriFromImportStrAlloc(self: *Self, allocator: std.mem.Allocator, import_s
     }
 }
 
+/// Collects all imports we can find into a slice of import paths (without quotes).
+pub fn collectImports(import_arr: *std.ArrayList([]const u8), tree: Ast) !void {
+    const tags = tree.tokens.items(.tag);
+
+    var i: usize = 0;
+    while (i < tags.len) : (i += 1) {
+        if (tags[i] != .builtin)
+            continue;
+        const text = tree.tokenSlice(@intCast(u32, i));
+
+        if (std.mem.eql(u8, text, "@import")) {
+            if (i + 3 >= tags.len)
+                break;
+            if (tags[i + 1] != .l_paren)
+                continue;
+            if (tags[i + 2] != .string_literal)
+                continue;
+            if (tags[i + 3] != .r_paren)
+                continue;
+
+            const str = tree.tokenSlice(@intCast(u32, i + 2));
+            try import_arr.append(str[1 .. str.len - 1]);
+        }
+    }
+}
+
 pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
     var new_imports = std.ArrayList([]const u8).init(self.allocator);
     errdefer {
@@ -214,7 +240,7 @@ pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
         }
         new_imports.deinit();
     }
-    try analysis.collectImports(&new_imports, self.tree);
+    try collectImports(&new_imports, self.tree);
 
     // Convert to URIs
     var i: usize = 0;

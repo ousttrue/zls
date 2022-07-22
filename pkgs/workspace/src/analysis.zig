@@ -99,67 +99,6 @@ pub fn getFunctionSignature(tree: Ast, func: Ast.full.FnProto) []const u8 {
     return tree.source[start.start..end.end];
 }
 
-/// Creates snippet insert text for a function. Caller owns returned memory.
-pub fn getFunctionSnippet(allocator: std.mem.Allocator, tree: Ast, func: Ast.full.FnProto, skip_self_param: bool) ![]const u8 {
-    const name_index = func.name_token.?;
-
-    var buffer = std.ArrayList(u8).init(allocator);
-    try buffer.ensureTotalCapacity(128);
-
-    try buffer.appendSlice(tree.tokenSlice(name_index));
-    try buffer.append('(');
-
-    var buf_stream = buffer.writer();
-
-    const token_tags = tree.tokens.items(.tag);
-
-    var it = func.iterate(&tree);
-    var i: usize = 0;
-    while (it.next()) |param| : (i += 1) {
-        if (skip_self_param and i == 0) continue;
-        if (i != @boolToInt(skip_self_param))
-            try buffer.appendSlice(", ${")
-        else
-            try buffer.appendSlice("${");
-
-        try buf_stream.print("{d}:", .{i + 1});
-
-        if (param.comptime_noalias) |token_index| {
-            if (token_tags[token_index] == .keyword_comptime)
-                try buffer.appendSlice("comptime ")
-            else
-                try buffer.appendSlice("noalias ");
-        }
-
-        if (param.name_token) |name_token| {
-            try buffer.appendSlice(tree.tokenSlice(name_token));
-            try buffer.appendSlice(": ");
-        }
-
-        if (param.anytype_ellipsis3) |token_index| {
-            if (token_tags[token_index] == .keyword_anytype)
-                try buffer.appendSlice("anytype")
-            else
-                try buffer.appendSlice("...");
-        } else if (param.type_expr != 0) {
-            var curr_token = tree.firstToken(param.type_expr);
-            var end_token = ast.lastToken(tree, param.type_expr);
-            while (curr_token <= end_token) : (curr_token += 1) {
-                const tag = token_tags[curr_token];
-                const is_comma = tag == .comma;
-
-                if (curr_token == end_token and is_comma) continue;
-                try buffer.appendSlice(tree.tokenSlice(curr_token));
-                if (is_comma or tag == .keyword_const) try buffer.append(' ');
-            }
-        } else unreachable;
-
-        try buffer.append('}');
-    }
-    try buffer.append(')');
-
-    return buffer.toOwnedSlice();
-}
 
 pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, func: Ast.full.FnProto) !bool {
     // Non-decl prototypes cannot have a self parameter.
@@ -206,20 +145,6 @@ pub fn getContainerFieldSignature(tree: Ast, field: Ast.full.ContainerField) []c
     const end_node = if (field.ast.value_expr != 0) field.ast.value_expr else field.ast.type_expr;
     const end = offsets.tokenLocation(tree, ast.lastToken(tree, end_node)).end;
     return tree.source[start..end];
-}
-
-// STYLE
-
-pub fn isCamelCase(name: []const u8) bool {
-    return !std.ascii.isUpper(name[0]) and !isSnakeCase(name);
-}
-
-pub fn isPascalCase(name: []const u8) bool {
-    return std.ascii.isUpper(name[0]) and !isSnakeCase(name);
-}
-
-pub fn isSnakeCase(name: []const u8) bool {
-    return std.mem.indexOf(u8, name, "_") != null;
 }
 
 // ANALYSIS ENGINE
@@ -958,32 +883,6 @@ pub fn resolveTypeOfNodeInternal(
 pub fn resolveTypeOfNode(arena: *std.heap.ArenaAllocator, workspace: *Workspace, node_handle: NodeWithHandle) error{OutOfMemory}!?TypeWithHandle {
     var bound_type_params = BoundTypeParams.init(arena.allocator());
     return resolveTypeOfNodeInternal(arena, workspace, node_handle, &bound_type_params);
-}
-
-/// Collects all imports we can find into a slice of import paths (without quotes).
-pub fn collectImports(import_arr: *std.ArrayList([]const u8), tree: Ast) !void {
-    const tags = tree.tokens.items(.tag);
-
-    var i: usize = 0;
-    while (i < tags.len) : (i += 1) {
-        if (tags[i] != .builtin)
-            continue;
-        const text = tree.tokenSlice(@intCast(u32, i));
-
-        if (std.mem.eql(u8, text, "@import")) {
-            if (i + 3 >= tags.len)
-                break;
-            if (tags[i + 1] != .l_paren)
-                continue;
-            if (tags[i + 2] != .string_literal)
-                continue;
-            if (tags[i + 3] != .r_paren)
-                continue;
-
-            const str = tree.tokenSlice(@intCast(u32, i + 2));
-            try import_arr.append(str[1 .. str.len - 1]);
-        }
-    }
 }
 
 pub const FieldAccessReturn = struct {

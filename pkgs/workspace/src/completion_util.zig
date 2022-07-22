@@ -89,6 +89,68 @@ const DeclToCompletionContext = struct {
     parent_is_type_val: ?bool = null,
 };
 
+/// Creates snippet insert text for a function. Caller owns returned memory.
+pub fn getFunctionSnippet(allocator: std.mem.Allocator, tree: Ast, func: Ast.full.FnProto, skip_self_param: bool) ![]const u8 {
+    const name_index = func.name_token.?;
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    try buffer.ensureTotalCapacity(128);
+
+    try buffer.appendSlice(tree.tokenSlice(name_index));
+    try buffer.append('(');
+
+    var buf_stream = buffer.writer();
+
+    const token_tags = tree.tokens.items(.tag);
+
+    var it = func.iterate(&tree);
+    var i: usize = 0;
+    while (it.next()) |param| : (i += 1) {
+        if (skip_self_param and i == 0) continue;
+        if (i != @boolToInt(skip_self_param))
+            try buffer.appendSlice(", ${")
+        else
+            try buffer.appendSlice("${");
+
+        try buf_stream.print("{d}:", .{i + 1});
+
+        if (param.comptime_noalias) |token_index| {
+            if (token_tags[token_index] == .keyword_comptime)
+                try buffer.appendSlice("comptime ")
+            else
+                try buffer.appendSlice("noalias ");
+        }
+
+        if (param.name_token) |name_token| {
+            try buffer.appendSlice(tree.tokenSlice(name_token));
+            try buffer.appendSlice(": ");
+        }
+
+        if (param.anytype_ellipsis3) |token_index| {
+            if (token_tags[token_index] == .keyword_anytype)
+                try buffer.appendSlice("anytype")
+            else
+                try buffer.appendSlice("...");
+        } else if (param.type_expr != 0) {
+            var curr_token = tree.firstToken(param.type_expr);
+            var end_token = ast.lastToken(tree, param.type_expr);
+            while (curr_token <= end_token) : (curr_token += 1) {
+                const tag = token_tags[curr_token];
+                const is_comma = tag == .comma;
+
+                if (curr_token == end_token and is_comma) continue;
+                try buffer.appendSlice(tree.tokenSlice(curr_token));
+                if (is_comma or tag == .keyword_const) try buffer.append(' ');
+            }
+        } else unreachable;
+
+        try buffer.append('}');
+    }
+    try buffer.append(')');
+
+    return buffer.toOwnedSlice();
+}
+
 fn nodeToCompletion(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -162,7 +224,7 @@ fn nodeToCompletion(
                 const insert_text = if (use_snippets) blk: {
                     const skip_self_param = !(parent_is_type_val orelse true) and
                         try analysis.hasSelfParam(arena, workspace, handle, func);
-                    break :blk try analysis.getFunctionSnippet(arena.allocator(), tree, func, skip_self_param);
+                    break :blk try getFunctionSnippet(arena.allocator(), tree, func, skip_self_param);
                 } else tree.tokenSlice(func.name_token.?);
 
                 const is_type_function = TypeWithHandle.isTypeFunction(handle.tree, func);
