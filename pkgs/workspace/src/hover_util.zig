@@ -128,11 +128,23 @@ pub fn process(
 
                     // },
                     else => {
-                        return try std.fmt.allocPrint(arena.allocator(), "{s}: {} => {}", .{
+                        var buffer = std.ArrayList(u8).init(arena.allocator());
+                        const w = buffer.writer();
+                        try w.print("{s}: {} =>\n* [0]{}\n", .{
                             name,
                             token_with_index.token.tag,
                             node_tag,
                         });
+                        var current = doc.ast_context.nodes_parent[idx];
+                        var i: u32 = 1;
+                        while (current != 0) : ({
+                            current = doc.ast_context.nodes_parent[current];
+                            i += 1;
+                        }) {
+                            const current_tag = tag[current];
+                            try w.print("* [{}]{}\n", .{ i, current_tag });
+                        }
+                        return buffer.items;
                     },
                 }
             },

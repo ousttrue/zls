@@ -44,17 +44,20 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .fn_decl,
         .builtin_call_two,
         .block_two,
+        .block_two_semicolon,
         .@"catch",
         .if_simple,
         .while_simple,
         .for_simple,
+        .call_one,
+        .call_one_comma,
         => {
             self.nodeData(node_data);
         },
         .@"try",
         .@"return",
         .field_access,
-        =>{
+        => {
             self.append(node_data.lhs);
         },
         .block, .block_semicolon => {
