@@ -17,7 +17,6 @@ const logger = std.log.scoped(.hover);
 fn hoverSymbol(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     decl_handle: DeclWithHandle,
     client_capabilities: *ClientCapabilities,
 ) (std.os.WriteError || error{OutOfMemory})!?[]const u8 {
@@ -30,7 +29,7 @@ fn hoverSymbol(
     const def_str = switch (decl_handle.decl.*) {
         .ast_node => |node| def: {
             if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
-                return try hoverSymbol(arena, workspace, id, result, client_capabilities);
+                return try hoverSymbol(arena, workspace, result, client_capabilities);
             }
             doc_str = try analysis.getDocComments(arena.allocator(), tree, node, hover_kind);
 
@@ -89,12 +88,11 @@ fn hoverSymbol(
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     doc: *Document,
-    doc_position: DocumentPosition,
+    byte_position: u32,
     client_capabilities: *ClientCapabilities,
 ) !?[]const u8 {
-    if (doc.ast_context.tokenFromBytePos(doc_position.absolute_index)) |token_with_index| {
+    if (doc.ast_context.tokenFromBytePos(byte_position)) |token_with_index| {
         const name = doc.ast_context.getTokenText(token_with_index.token);
         switch (token_with_index.token.tag) {
             .builtin => {
@@ -117,8 +115,8 @@ pub fn process(
                 switch (node_tag) {
                     .simple_var_decl => {
                         logger.debug("(hover)[var_access]", .{});
-                        if (try workspace.getSymbolGlobal(arena, doc, doc_position.absolute_index)) |decl| {
-                            return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                        if (try workspace.getSymbolGlobal(arena, doc, byte_position)) |decl| {
+                            return try hoverSymbol(arena, workspace, decl, client_capabilities);
                         } else {
                             return error.HoverError;
                         }

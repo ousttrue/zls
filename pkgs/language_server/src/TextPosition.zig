@@ -12,7 +12,7 @@ pub fn getUtf8BytePosition(
     text: []const u8,
     pos: struct { line: u32, x: u32 = 0 },
     encoding: Encoding,
-) !usize {
+) !u32 {
     const doc_position = try offsets.documentPosition(text, .{ .line = pos.line, .x = pos.x }, encoding);
-    return doc_position.absolute_index;
+    return @intCast(u32, doc_position.absolute_index);
 }

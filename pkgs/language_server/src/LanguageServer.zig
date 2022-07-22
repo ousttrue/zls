@@ -237,14 +237,12 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const bytePosition = TextPosition.getUtf8BytePosition(
+    const bytePosition = try TextPosition.getUtf8BytePosition(
         doc.utf8_buffer.text,
         .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) },
         self.offset_encoding,
     );
-    logger.debug("[hover]{s} {} {}=> {}", .{ params.textDocument.uri, position, self.offset_encoding, bytePosition });
-    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
-    if (hover_util.process(arena, &self.workspace, id, doc, doc_position, &self.client_capabilities)) |hover_or_null| {
+    if (hover_util.process(arena, &self.workspace, doc, bytePosition, &self.client_capabilities)) |hover_or_null| {
         if (hover_or_null) |hover_contents| {
             return lsp.Response{
                 .id = id,
