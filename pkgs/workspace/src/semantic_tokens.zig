@@ -319,7 +319,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             try builder.writeToken(var_decl.comptime_token, .keyword);
             try builder.writeToken(var_decl.ast.mut_token, .keyword);
 
-            if (try analysis.resolveTypeOfNode(arena, workspace, .{ .node = node, .handle = handle })) |decl_type| {
+            if (try analysis.resolveTypeOfNode(arena, workspace, handle, node)) |decl_type| {
                 try colorIdentifierBasedOnType(builder, decl_type, var_decl.ast.mut_token + 1, .{ .declaration = true });
             } else {
                 try builder.writeTokenMod(var_decl.ast.mut_token + 1, .variable, .{ .declaration = true });
@@ -613,10 +613,12 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             if (struct_init.ast.type_expr != 0) {
                 try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, struct_init.ast.type_expr });
 
-                field_token_type = if (try analysis.resolveTypeOfNode(arena, workspace, .{
-                    .node = struct_init.ast.type_expr,
-                    .handle = handle,
-                })) |struct_type| switch (struct_type.type.data) {
+                field_token_type = if (try analysis.resolveTypeOfNode(
+                    arena,
+                    workspace,
+                    handle,
+                    struct_init.ast.type_expr,
+                )) |struct_type| switch (struct_type.type.data) {
                     .other => |type_node| if (ast.isContainer(struct_type.handle.tree, type_node))
                         fieldTokenType(type_node, struct_type.handle)
                     else
@@ -857,10 +859,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             const lhs_type = try analysis.resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try analysis.resolveTypeOfNodeInternal(arena, workspace, .{
-                    .node = data.lhs,
-                    .handle = handle,
-                }, &bound_type_params)) orelse return,
+                (try analysis.resolveTypeOfNodeInternal(arena, workspace, handle, data.lhs, &bound_type_params)) orelse return,
                 &bound_type_params,
             );
             const left_type_node = switch (lhs_type.type.data) {

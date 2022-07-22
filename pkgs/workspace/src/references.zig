@@ -4,7 +4,6 @@ const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
-const NodeWithHandle = @import("./NodeWithHandle.zig");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.references);
@@ -60,14 +59,13 @@ pub fn labelReferences(decl: analysis.DeclWithHandle, encoding: offsets.Encoding
 fn symbolReferencesInternal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    node_handle: NodeWithHandle,
+    handle: *Document,
+    node: Ast.Node.Index,
     decl: analysis.DeclWithHandle,
     encoding: offsets.Encoding,
     context: anytype,
     comptime handler: anytype,
 ) error{OutOfMemory}!void {
-    const node = node_handle.node;
-    const handle = node_handle.handle;
     const tree = handle.tree;
     if (node > tree.nodes.len) return;
     const node_tags = tree.nodes.items(.tag);
@@ -92,7 +90,16 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             for (statements) |stmt|
-                try symbolReferencesInternal(arena, workspace, .{ .node = stmt, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(
+                    arena,
+                    workspace,
+                    handle,
+                    stmt,
+                    decl,
+                    encoding,
+                    context,
+                    handler,
+                );
         },
         .container_decl,
         .container_decl_trailing,
@@ -111,7 +118,16 @@ fn symbolReferencesInternal(
         => {
             var buf: [2]Ast.Node.Index = undefined;
             for (ast.declMembers(tree, node, &buf)) |member|
-                try symbolReferencesInternal(arena, workspace, .{ .node = member, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(
+                    arena,
+                    workspace,
+                    handle,
+                    member,
+                    decl,
+                    encoding,
+                    context,
+                    handler,
+                );
         },
         .global_var_decl,
         .local_var_decl,
@@ -120,14 +136,41 @@ fn symbolReferencesInternal(
         => {
             const var_decl = ast.varDecl(tree, node).?;
             if (var_decl.ast.type_node != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = var_decl.ast.type_node, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(
+                    arena,
+                    workspace,
+                    handle,
+                    var_decl.ast.type_node,
+                    decl,
+                    encoding,
+                    context,
+                    handler,
+                );
             }
             if (var_decl.ast.init_node != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = var_decl.ast.init_node, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(
+                    arena,
+                    workspace,
+                    handle,
+                    var_decl.ast.init_node,
+                    decl,
+                    encoding,
+                    context,
+                    handler,
+                );
             }
         },
         .@"usingnamespace" => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(
+                arena,
+                workspace,
+                handle,
+                datas[node].lhs,
+                decl,
+                encoding,
+                context,
+                handler,
+            );
         },
         .container_field,
         .container_field_align,
@@ -135,10 +178,28 @@ fn symbolReferencesInternal(
         => {
             const field = ast.containerField(tree, node).?;
             if (field.ast.type_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = field.ast.type_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(
+                    arena,
+                    workspace,
+                    handle,
+                    field.ast.type_expr,
+                    decl,
+                    encoding,
+                    context,
+                    handler,
+                );
             }
             if (field.ast.value_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = field.ast.value_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(
+                    arena,
+                    workspace,
+                    handle,
+                    field.ast.value_expr,
+                    decl,
+                    encoding,
+                    context,
+                    handler,
+                );
             }
         },
         .identifier => {
@@ -159,61 +220,61 @@ fn symbolReferencesInternal(
             var it = fn_proto.iterate(&tree);
             while (it.next()) |param| {
                 if (param.type_expr != 0)
-                    try symbolReferencesInternal(arena, workspace, .{ .node = param.type_expr, .handle = handle }, decl, encoding, context, handler);
+                    try symbolReferencesInternal(arena, workspace, handle, param.type_expr, decl, encoding, context, handler);
             }
 
             if (fn_proto.ast.return_type != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = fn_proto.ast.return_type, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.return_type, decl, encoding, context, handler);
             }
             if (fn_proto.ast.align_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = fn_proto.ast.align_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.align_expr, decl, encoding, context, handler);
             }
             if (fn_proto.ast.section_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = fn_proto.ast.section_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.section_expr, decl, encoding, context, handler);
             }
             if (fn_proto.ast.callconv_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = fn_proto.ast.callconv_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.callconv_expr, decl, encoding, context, handler);
             }
             if (node_tags[node] == .fn_decl) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
             }
         },
         .anyframe_type => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
         },
         .@"defer" => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
         },
         .@"comptime" => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
         },
         .@"nosuspend" => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
         },
         .@"switch",
         .switch_comma,
         => {
             // TODO When renaming a union(enum) field, also rename switch items that refer to it.
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
             const extra = tree.extraData(datas[node].rhs, Ast.Node.SubRange);
             const cases = tree.extra_data[extra.start..extra.end];
             for (cases) |case| {
-                try symbolReferencesInternal(arena, workspace, .{ .node = case, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, case, decl, encoding, context, handler);
             }
         },
         .switch_case_one => {
             const case_one = tree.switchCaseOne(node);
             if (case_one.ast.target_expr != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = case_one.ast.target_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, case_one.ast.target_expr, decl, encoding, context, handler);
             for (case_one.ast.values) |val|
-                try symbolReferencesInternal(arena, workspace, .{ .node = val, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, val, decl, encoding, context, handler);
         },
         .switch_case => {
             const case = tree.switchCase(node);
             if (case.ast.target_expr != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = case.ast.target_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, case.ast.target_expr, decl, encoding, context, handler);
             for (case.ast.values) |val|
-                try symbolReferencesInternal(arena, workspace, .{ .node = val, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, val, decl, encoding, context, handler);
         },
         .@"while",
         .while_simple,
@@ -222,13 +283,13 @@ fn symbolReferencesInternal(
         .@"for",
         => {
             const loop = ast.whileAst(tree, node).?;
-            try symbolReferencesInternal(arena, workspace, .{ .node = loop.ast.cond_expr, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, loop.ast.cond_expr, decl, encoding, context, handler);
             if (loop.ast.cont_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = loop.ast.cont_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, loop.ast.cont_expr, decl, encoding, context, handler);
             }
-            try symbolReferencesInternal(arena, workspace, .{ .node = loop.ast.then_expr, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, loop.ast.then_expr, decl, encoding, context, handler);
             if (loop.ast.else_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = loop.ast.else_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, loop.ast.else_expr, decl, encoding, context, handler);
             }
         },
         .@"if",
@@ -236,17 +297,17 @@ fn symbolReferencesInternal(
         => {
             const if_node = ast.ifFull(tree, node);
 
-            try symbolReferencesInternal(arena, workspace, .{ .node = if_node.ast.cond_expr, .handle = handle }, decl, encoding, context, handler);
-            try symbolReferencesInternal(arena, workspace, .{ .node = if_node.ast.then_expr, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, if_node.ast.cond_expr, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, if_node.ast.then_expr, decl, encoding, context, handler);
             if (if_node.ast.else_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = if_node.ast.else_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, if_node.ast.else_expr, decl, encoding, context, handler);
             }
         },
         .array_type,
         .array_type_sentinel,
         => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
         },
         .ptr_type,
         .ptr_type_aligned,
@@ -256,26 +317,20 @@ fn symbolReferencesInternal(
             const ptr_type = ast.ptrType(tree, node).?;
 
             if (ptr_type.ast.align_node != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = ptr_type.ast.align_node, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.align_node, decl, encoding, context, handler);
                 if (node_tags[node] == .ptr_type_bit_range) {
-                    try symbolReferencesInternal(arena, workspace, .{
-                        .node = ptr_type.ast.bit_range_start,
-                        .handle = handle,
-                    }, decl, encoding, context, handler);
-                    try symbolReferencesInternal(arena, workspace, .{
-                        .node = ptr_type.ast.bit_range_end,
-                        .handle = handle,
-                    }, decl, encoding, context, handler);
+                    try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.bit_range_start, decl, encoding, context, handler);
+                    try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.bit_range_end, decl, encoding, context, handler);
                 }
             }
             if (ptr_type.ast.sentinel != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = ptr_type.ast.sentinel, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.sentinel, decl, encoding, context, handler);
             }
 
-            try symbolReferencesInternal(arena, workspace, .{ .node = ptr_type.ast.child_type, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.child_type, decl, encoding, context, handler);
         },
         .address_of, .@"await", .bit_not, .bool_not, .optional_type, .negation, .negation_wrap, .@"resume", .@"try" => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
         },
         .array_init,
         .array_init_comma,
@@ -295,9 +350,9 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             if (array_init.ast.type_expr != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = array_init.ast.type_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, array_init.ast.type_expr, decl, encoding, context, handler);
             for (array_init.ast.elements) |e|
-                try symbolReferencesInternal(arena, workspace, .{ .node = e, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, e, decl, encoding, context, handler);
         },
         .struct_init,
         .struct_init_comma,
@@ -317,9 +372,9 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             if (struct_init.ast.type_expr != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = struct_init.ast.type_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, struct_init.ast.type_expr, decl, encoding, context, handler);
             for (struct_init.ast.fields) |field|
-                try symbolReferencesInternal(arena, workspace, .{ .node = field, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, field, decl, encoding, context, handler);
         },
         .call,
         .call_comma,
@@ -337,10 +392,10 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             if (call.ast.fn_expr != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = call.ast.fn_expr, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, call.ast.fn_expr, decl, encoding, context, handler);
 
             for (call.ast.params) |param| {
-                try symbolReferencesInternal(arena, workspace, .{ .node = param, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, param, decl, encoding, context, handler);
             }
         },
         .slice,
@@ -354,36 +409,36 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
 
-            try symbolReferencesInternal(arena, workspace, .{ .node = slice.ast.sliced, .handle = handle }, decl, encoding, context, handler);
-            try symbolReferencesInternal(arena, workspace, .{ .node = slice.ast.start, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, slice.ast.sliced, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, slice.ast.start, decl, encoding, context, handler);
             if (slice.ast.end != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = slice.ast.end, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, slice.ast.end, decl, encoding, context, handler);
             if (slice.ast.sentinel != 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = slice.ast.sentinel, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, slice.ast.sentinel, decl, encoding, context, handler);
         },
         .array_access => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
         },
         .deref,
         .unwrap_optional,
         => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
         },
         .grouped_expression => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
         },
         .@"return",
         .@"break",
         .@"continue",
         => {
             if (datas[node].lhs != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
             }
         },
         .@"suspend" => {
             if (datas[node].lhs != 0) {
-                try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
             }
         },
         .builtin_call,
@@ -404,36 +459,33 @@ fn symbolReferencesInternal(
             };
 
             for (params) |param|
-                try symbolReferencesInternal(arena, workspace, .{ .node = param, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, param, decl, encoding, context, handler);
         },
         .@"asm",
         .asm_simple,
         => |a| {
             const _asm: Ast.full.Asm = if (a == .@"asm") tree.asmFull(node) else tree.asmSimple(node);
             if (_asm.ast.items.len == 0)
-                try symbolReferencesInternal(arena, workspace, .{ .node = _asm.ast.template, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, _asm.ast.template, decl, encoding, context, handler);
 
             for (_asm.inputs) |input|
-                try symbolReferencesInternal(arena, workspace, .{ .node = input, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, input, decl, encoding, context, handler);
 
             for (_asm.outputs) |output|
-                try symbolReferencesInternal(arena, workspace, .{ .node = output, .handle = handle }, decl, encoding, context, handler);
+                try symbolReferencesInternal(arena, workspace, handle, output, decl, encoding, context, handler);
         },
         .test_decl => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
         },
         .field_access => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
 
             const rhs_str = tree.tokenSlice(datas[node].rhs);
             var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
             const left_type = try analysis.resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try analysis.resolveTypeOfNodeInternal(arena, workspace, .{
-                    .node = datas[node].lhs,
-                    .handle = handle,
-                }, &bound_type_params)) orelse return,
+                (try analysis.resolveTypeOfNodeInternal(arena, workspace, handle, datas[node].lhs, &bound_type_params)) orelse return,
                 &bound_type_params,
             );
 
@@ -496,8 +548,8 @@ fn symbolReferencesInternal(
         .sub_wrap,
         .@"orelse",
         => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].lhs, .handle = handle }, decl, encoding, context, handler);
-            try symbolReferencesInternal(arena, workspace, .{ .node = datas[node].rhs, .handle = handle }, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, encoding, context, handler);
         },
         else => {},
     }
@@ -521,7 +573,16 @@ pub fn symbolReferences(
 
     switch (decl_handle.decl.*) {
         .ast_node => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = 0, .handle = curr_handle }, decl_handle, encoding, context, handler);
+            try symbolReferencesInternal(
+                arena,
+                workspace,
+                curr_handle,
+                0,
+                decl_handle,
+                encoding,
+                context,
+                handler,
+            );
 
             var imports = std.ArrayList(*Document).init(arena.allocator());
 
@@ -542,7 +603,16 @@ pub fn symbolReferences(
 
                         if (h == curr_handle) {
                             // entry does import curr_handle
-                            try symbolReferencesInternal(arena, workspace, .{ .node = 0, .handle = entry.value_ptr.* }, decl_handle, encoding, context, handler);
+                            try symbolReferencesInternal(
+                                arena,
+                                workspace,
+                                entry.value_ptr.*,
+                                0,
+                                decl_handle,
+                                encoding,
+                                context,
+                                handler,
+                            );
                             break :blk;
                         }
 
@@ -574,7 +644,8 @@ pub fn symbolReferences(
                                     try symbolReferencesInternal(
                                         arena,
                                         workspace,
-                                        .{ .node = curr_handle.tree.nodes.items(.data)[proto].rhs, .handle = curr_handle },
+                                        curr_handle,
+                                        curr_handle.tree.nodes.items(.data)[proto].rhs,
                                         decl_handle,
                                         encoding,
                                         context,
@@ -594,7 +665,7 @@ pub fn symbolReferences(
             _ = fn_node;
         },
         .pointer_payload, .switch_payload, .array_payload, .array_index => {
-            try symbolReferencesInternal(arena, workspace, .{ .node = 0, .handle = curr_handle }, decl_handle, encoding, context, handler);
+            try symbolReferencesInternal(arena, workspace, curr_handle, 0, decl_handle, encoding, context, handler);
         },
         .label_decl => unreachable,
     }

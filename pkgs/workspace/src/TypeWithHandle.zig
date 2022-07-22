@@ -1,7 +1,6 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
-const NodeWithHandle = @import("./NodeWithHandle.zig");
 const ast = @import("./ast.zig");
 
 pub const Type = struct {
@@ -21,13 +20,13 @@ const Self = @This();
 type: Type,
 handle: *Document,
 
-pub fn typeVal(node_handle: NodeWithHandle) Self {
+pub fn typeVal(handle: *Document, node: Ast.Node.Index) Self {
     return .{
         .type = .{
-            .data = .{ .other = node_handle.node },
+            .data = .{ .other = node },
             .is_type_val = true,
         },
-        .handle = node_handle.handle,
+        .handle = handle,
     };
 }
 
