@@ -199,19 +199,15 @@ fn fieldTokenType(container_decl: Ast.Node.Index, handle: *Document) ?lsp.Semant
 fn colorIdentifierBasedOnType(builder: *Builder, type_node: TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: lsp.SemanticTokenModifiers) !void {
     if (type_node.type.is_type_val) {
         var new_tok_mod = tok_mod;
-        if (type_node.isNamespace()){
+        if (type_node.isNamespace()) {
             // new_tok_mod.set("namespace")
-        }
-        else if (type_node.isStructType()){
+        } else if (type_node.isStructType()) {
             // new_tok_mod.set("struct")
-        }
-        else if (type_node.isEnumType()){
+        } else if (type_node.isEnumType()) {
             // new_tok_mod.set("enum")
-        }
-        else if (type_node.isUnionType()){
+        } else if (type_node.isUnionType()) {
             // new_tok_mod.set("union")
-        }
-        else if (type_node.isOpaqueType()){
+        } else if (type_node.isOpaqueType()) {
             // new_tok_mod.set("opaque");
         }
 
@@ -871,10 +867,14 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                 .other => |n| n,
                 else => return,
             };
-            if (try analysis.lookupSymbolContainer(arena, workspace, .{
-                .node = left_type_node,
-                .handle = lhs_type.handle,
-            }, rhs_str, !lhs_type.type.is_type_val)) |decl_type| {
+            if (try analysis.lookupSymbolContainer(
+                arena,
+                workspace,
+                lhs_type.handle,
+                left_type_node,
+                rhs_str,
+                !lhs_type.type.is_type_val,
+            )) |decl_type| {
                 switch (decl_type.decl.*) {
                     .ast_node => |decl_node| {
                         if (decl_type.handle.tree.nodes.items(.tag)[decl_node].isContainerField()) {

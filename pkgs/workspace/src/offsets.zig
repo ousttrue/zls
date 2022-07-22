@@ -264,7 +264,8 @@ pub fn getSymbolFieldAccess(
     return (try analysis.lookupSymbolContainer(
         arena,
         workspace,
-        .{ .node = container_handle_node, .handle = container_handle.handle },
+        container_handle.handle,
+        container_handle_node,
         name,
         true,
     )) orelse return OffsetError.ContainerSymbolNotFound;

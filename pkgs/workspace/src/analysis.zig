@@ -101,7 +101,6 @@ pub fn getFunctionSignature(tree: Ast, func: Ast.full.FnProto) []const u8 {
     return tree.source[start.start..end.end];
 }
 
-
 pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, func: Ast.full.FnProto) !bool {
     // Non-decl prototypes cannot have a self parameter.
     if (func.name_token == null) return false;
@@ -243,7 +242,14 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, workspace: *Work
             break :block NodeWithHandle{ .node = resolved_node, .handle = resolved.handle };
         } else return null;
 
-        return try lookupSymbolContainer(arena, workspace, container_node, tree.tokenSlice(datas[node_handle.node].rhs), false);
+        return try lookupSymbolContainer(
+            arena,
+            workspace,
+            container_node.handle,
+            container_node.node,
+            tree.tokenSlice(datas[node_handle.node].rhs),
+            false,
+        );
     }
     return null;
 }
@@ -753,7 +759,8 @@ pub fn resolveTypeOfNodeInternal(
             if (try lookupSymbolContainer(
                 arena,
                 workspace,
-                .{ .node = left_type_node, .handle = left_type.handle },
+                left_type.handle,
+                left_type_node,
                 rhs_str,
                 !left_type.type.is_type_val,
             )) |child| {
@@ -953,7 +960,8 @@ pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace
                         if (try lookupSymbolContainer(
                             arena,
                             workspace,
-                            .{ .node = current_type_node, .handle = current_type.handle },
+                            current_type.handle,
+                            current_type_node,
                             tokenizer.buffer[after_period.loc.start..after_period.loc.end],
                             !current_type.type.is_type_val,
                         )) |child| {
@@ -1478,15 +1486,19 @@ pub fn resolveUse(arena: *std.heap.ArenaAllocator, workspace: *Workspace, uses: 
         const expr_type_node = (try resolveTypeOfNode(arena, workspace, expr)) orelse
             continue;
 
-        const expr_type = .{
-            .node = switch (expr_type_node.type.data) {
-                .other => |n| n,
-                else => continue,
-            },
-            .handle = expr_type_node.handle,
+        const node = switch (expr_type_node.type.data) {
+            .other => |n| n,
+            else => continue,
         };
 
-        if (try lookupSymbolContainer(arena, workspace, expr_type, symbol, false)) |candidate| {
+        if (try lookupSymbolContainer(
+            arena,
+            workspace,
+            expr_type_node.handle,
+            node,
+            symbol,
+            false,
+        )) |candidate| {
             if (candidate.handle == handle or candidate.isPublic()) {
                 return candidate;
             }
@@ -1517,14 +1529,13 @@ pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) e
 pub fn lookupSymbolContainer(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    container_handle: NodeWithHandle,
+    handle: *Document,
+    container: Ast.Node.Index,
     symbol: []const u8,
     /// If true, we are looking up the symbol like we are accessing through a field access
     /// of an instance of the type, otherwise as a field access of the type value itself.
     instance_access: bool,
 ) error{OutOfMemory}!?DeclWithHandle {
-    const container = container_handle.node;
-    const handle = container_handle.handle;
     const tree = handle.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
