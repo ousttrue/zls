@@ -60,6 +60,13 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         => {
             self.append(node_data.lhs);
         },
+        .call => {
+            self.append(node_data.lhs);
+            const call_full = tree.callFull(idx);
+            for (call_full.ast.params) |child| {
+                self.append(child);
+            }
+        },
         .block, .block_semicolon => {
             for (tree.extra_data[node_data.lhs..node_data.rhs]) |child| {
                 self.append(child);

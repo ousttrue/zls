@@ -84,6 +84,35 @@ fn hoverSymbol(
     return hover_text;
 }
 
+// pub fn getSymbolFieldAccess(
+//     arena: *std.heap.ArenaAllocator,
+//     workspace: *Workspace,
+//     handle: *Document,
+//     position: DocumentPosition,
+//     range: analysis.SourceRange,
+//     name: [] const u8,
+// ) !analysis.DeclWithHandle {
+//     // const name = handle.identifierFromPosition(position.absolute_index) orelse return error.NoIdentifier;
+//     // const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
+//     // var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
+//     // var tokenizer = std.zig.Tokenizer.init(held_range.data());
+//     // errdefer held_range.release();
+//     const result = (try analysis.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
+//     held_range.release();
+//     const container_handle = result.unwrapped orelse result.original;
+//     const container_handle_node = switch (container_handle.type.data) {
+//         .other => |n| n,
+//         else => return OffsetError.NodeNotFound,
+//     };
+//     return (try analysis.lookupSymbolContainer(
+//         arena,
+//         workspace,
+//         .{ .node = container_handle_node, .handle = container_handle.handle },
+//         name,
+//         true,
+//     )) orelse return OffsetError.ContainerSymbolNotFound;
+// }
+
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -124,9 +153,27 @@ pub fn process(
                     .fn_proto_multi => {
                         return analysis.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
                     },
-                    // .call_one => {
-
-                    // },
+                    .field_access => {
+                        // const decl = try getSymbolFieldAccess(arena, workspace, doc, doc_position, token_with_index.token.loc. name);
+                        // return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                        var buffer = std.ArrayList(u8).init(arena.allocator());
+                        const w = buffer.writer();
+                        try w.print("[field_access] {s}: {} =>\n* [0]{}\n", .{
+                            name,
+                            token_with_index.token.tag,
+                            node_tag,
+                        });
+                        var current = doc.ast_context.nodes_parent[idx];
+                        var i: u32 = 1;
+                        while (current != 0) : ({
+                            current = doc.ast_context.nodes_parent[current];
+                            i += 1;
+                        }) {
+                            const current_tag = tag[current];
+                            try w.print("* [{}]{}\n", .{ i, current_tag });
+                        }
+                        return buffer.items;
+                    },
                     else => {
                         var buffer = std.ArrayList(u8).init(arena.allocator());
                         const w = buffer.writer();
