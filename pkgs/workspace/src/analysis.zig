@@ -1,4 +1,6 @@
 const std = @import("std");
+const Scope = @import("./Scope.zig");
+const Declaration = Scope.Declaration;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const Config = @import("./Config.zig");
@@ -1104,28 +1106,6 @@ pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
 
 pub const SourceRange = std.zig.Token.Loc;
 
-pub const Declaration = union(enum) {
-    /// Index of the ast node
-    ast_node: Ast.Node.Index,
-    /// Function parameter
-    param_decl: Ast.full.FnProto.Param,
-    pointer_payload: struct {
-        name: Ast.TokenIndex,
-        condition: Ast.Node.Index,
-    },
-    array_payload: struct {
-        identifier: Ast.TokenIndex,
-        array_expr: Ast.Node.Index,
-    },
-    array_index: Ast.TokenIndex,
-    switch_payload: struct {
-        node: Ast.TokenIndex,
-        switch_expr: Ast.Node.Index,
-        items: []const Ast.Node.Index,
-    },
-    label_decl: Ast.TokenIndex,
-};
-
 pub const DeclWithHandle = struct {
     decl: *Declaration,
     handle: *Document,
@@ -1221,7 +1201,7 @@ pub const DeclWithHandle = struct {
                     return null;
 
                 if (node_tags[pay.items[0]] == .enum_literal) {
-                    const scope = findContainerScope(.{ .node = switch_expr_type.type.data.other, .handle = switch_expr_type.handle }) orelse return null;
+                    const scope = Scope.findContainerScope(.{ .node = switch_expr_type.type.data.other, .handle = switch_expr_type.handle }) orelse return null;
                     if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
                         switch (candidate.value_ptr.*) {
                             .ast_node => |node| {
@@ -1247,23 +1227,6 @@ pub const DeclWithHandle = struct {
     }
 };
 
-fn findContainerScope(container_handle: NodeWithHandle) ?*Scope {
-    const container = container_handle.node;
-    const handle = container_handle.handle;
-
-    if (!ast.isContainer(handle.tree, container)) return null;
-
-    // Find the container scope.
-    return for (handle.document_scope.scopes) |*scope| {
-        switch (scope.data) {
-            .container => |node| if (node == container) {
-                break scope;
-            },
-            else => {},
-        }
-    } else null;
-}
-
 fn iterateSymbolsContainerInternal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -1286,7 +1249,7 @@ fn iterateSymbolsContainerInternal(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    const container_scope = findContainerScope(container_handle) orelse return;
+    const container_scope = Scope.findContainerScope(container_handle) orelse return;
 
     var decl_it = container_scope.decls.iterator();
     while (decl_it.next()) |entry| {
@@ -1569,7 +1532,7 @@ pub fn lookupSymbolContainer(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    if (findContainerScope(container_handle)) |container_scope| {
+    if (Scope.findContainerScope(container_handle)) |container_scope| {
         if (container_scope.decls.getEntry(symbol)) |candidate| {
             switch (candidate.value_ptr.*) {
                 .ast_node => |node| {
@@ -1658,29 +1621,6 @@ pub const DocumentScope = struct {
             if (item.documentation) |doc| allocator.free(doc.value);
         }
         self.enum_completions.deinit(allocator);
-    }
-};
-
-pub const Scope = struct {
-    pub const Data = union(enum) {
-        container: Ast.Node.Index, // .tag is ContainerDecl or Root or ErrorSetDecl
-        function: Ast.Node.Index, // .tag is FnProto
-        block: Ast.Node.Index, // .tag is Block
-        other,
-    };
-
-    range: SourceRange,
-    decls: std.StringHashMap(Declaration),
-    tests: []const Ast.Node.Index = &.{},
-    uses: []const *const Ast.Node.Index = &.{},
-
-    data: Data,
-
-    pub fn toNodeIndex(self: Scope) ?Ast.Node.Index {
-        return switch (self.data) {
-            .container, .function, .block => |idx| idx,
-            else => null,
-        };
     }
 };
 
