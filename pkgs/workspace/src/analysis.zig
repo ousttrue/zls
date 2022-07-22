@@ -1201,7 +1201,7 @@ pub const DeclWithHandle = struct {
                     return null;
 
                 if (node_tags[pay.items[0]] == .enum_literal) {
-                    const scope = Scope.findContainerScope(.{ .node = switch_expr_type.type.data.other, .handle = switch_expr_type.handle }) orelse return null;
+                    const scope = Scope.findContainerScope(switch_expr_type.handle, switch_expr_type.type.data.other) orelse return null;
                     if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
                         switch (candidate.value_ptr.*) {
                             .ast_node => |node| {
@@ -1249,7 +1249,7 @@ fn iterateSymbolsContainerInternal(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    const container_scope = Scope.findContainerScope(container_handle) orelse return;
+    const container_scope = Scope.findContainerScope(handle, container) orelse return;
 
     var decl_it = container_scope.decls.iterator();
     while (decl_it.next()) |entry| {
@@ -1532,7 +1532,7 @@ pub fn lookupSymbolContainer(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    if (Scope.findContainerScope(container_handle)) |container_scope| {
+    if (Scope.findContainerScope(handle, container)) |container_scope| {
         if (container_scope.decls.getEntry(symbol)) |candidate| {
             switch (candidate.value_ptr.*) {
                 .ast_node => |node| {

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
-const NodeWithHandle = @import("./NodeWithHandle.zig");
+const Document = @import("./Document.zig");
 const ast = @import("./ast.zig");
 
 pub const Declaration = union(enum) {
@@ -41,10 +41,7 @@ uses: []const *const Ast.Node.Index = &.{},
 
 data: Data,
 
-pub fn findContainerScope(container_handle: NodeWithHandle) ?*Self {
-    const container = container_handle.node;
-    const handle = container_handle.handle;
-
+pub fn findContainerScope(handle: *Document, container: Ast.Node.Index) ?*Self {
     if (!ast.isContainer(handle.tree, container)) return null;
 
     // Find the container scope.
