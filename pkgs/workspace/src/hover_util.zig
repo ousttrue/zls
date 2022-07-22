@@ -149,6 +149,12 @@ pub fn process(
                         }
                         return buffer.items;
                     },
+                    //     .label => {
+                    //         logger.debug("[hover][label_access]", .{});
+                    //         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
+                    //             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                    //         }
+                    //     },
                     else => {
                         var buffer = std.ArrayList(u8).init(arena.allocator());
                         const w = buffer.writer();
@@ -172,31 +178,4 @@ pub fn process(
             },
         }
     }
-
-    // // const pos_context = position_context.documentPositionContext(arena, doc_position);
-    // const pos_context = doc.getPositionContext(doc_position.absolute_index);
-    // switch (pos_context) {
-    //     .var_access => {
-    //         logger.debug("[hover][var_access]", .{});
-    //         const decl = try offsets.getSymbolGlobal(arena, workspace, doc_position.absolute_index, doc);
-    //         return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-    //     },
-    //     .field_access => |range| {
-    //         logger.debug("[hover][field_access]", .{});
-    //         const decl = try offsets.getSymbolFieldAccess(arena, workspace, doc, doc_position, range);
-    //         return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-    //     },
-    //     .label => {
-    //         logger.debug("[hover][label_access]", .{});
-    //         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
-    //             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-    //         }
-    //     },
-    //     else => {
-    //         logger.debug("[hover][{s}]", .{@tagName(pos_context)});
-    //     },
-    // }
-
-    // return try std.fmt.allocPrint(arena.allocator(), "{}", .{pos_context});
-    return null;
 }
