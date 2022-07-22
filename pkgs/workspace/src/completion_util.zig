@@ -7,6 +7,7 @@ const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
+const NodeWithHandle = @import("./NodeWithHandle.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
 const offsets = @import("./offsets.zig");
@@ -92,7 +93,7 @@ fn nodeToCompletion(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     list: *std.ArrayList(lsp.CompletionItem),
-    node_handle: TypeWithHandle.NodeWithHandle,
+    node_handle: NodeWithHandle,
     unwrapped: ?TypeWithHandle,
     orig_handle: *Document,
     is_type_val: bool,

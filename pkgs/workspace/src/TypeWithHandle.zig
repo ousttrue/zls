@@ -1,6 +1,7 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
+const NodeWithHandle = @import("./NodeWithHandle.zig");
 const ast = @import("./ast.zig");
 
 pub const Type = struct {
@@ -13,11 +14,6 @@ pub const Type = struct {
     },
     /// If true, the type `type`, the attached data is the value of the type value.
     is_type_val: bool,
-};
-
-pub const NodeWithHandle = struct {
-    node: Ast.Node.Index,
-    handle: *Document,
 };
 
 const Self = @This();
