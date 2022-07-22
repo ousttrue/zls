@@ -260,9 +260,12 @@ fn resolveVarDeclAliasInternal(arena: *std.heap.ArenaAllocator, workspace: *Work
 /// const decl = @import("decl-file.zig").decl;
 /// const other = decl.middle.other;
 ///```
-pub fn resolveVarDeclAlias(arena: *std.heap.ArenaAllocator, workspace: *Workspace, decl_handle: NodeWithHandle) !?DeclWithHandle {
-    const decl = decl_handle.node;
-    const handle = decl_handle.handle;
+pub fn resolveVarDeclAlias(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    decl: Ast.Node.Index,
+) !?DeclWithHandle {
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);
     const node_tags = tree.nodes.items(.tag);
@@ -1238,7 +1241,8 @@ pub const DeclWithHandle = struct {
 fn iterateSymbolsContainerInternal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    container_handle: NodeWithHandle,
+    handle: *Document,
+    container: Ast.Node.Index,
     orig_handle: *Document,
     comptime callback: anytype,
     context: anytype,
@@ -1247,9 +1251,6 @@ fn iterateSymbolsContainerInternal(
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) error{OutOfMemory}!void {
-    const container = container_handle.node;
-    const handle = container_handle.handle;
-
     const tree = handle.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
@@ -1303,7 +1304,8 @@ fn iterateSymbolsContainerInternal(
         try iterateSymbolsContainerInternal(
             arena,
             workspace,
-            .{ .node = use_expr_node, .handle = use_expr.handle },
+            use_expr.handle,
+            use_expr_node,
             orig_handle,
             callback,
             context,
@@ -1318,7 +1320,8 @@ fn iterateSymbolsContainerInternal(
 pub fn iterateSymbolsContainer(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    container_handle: NodeWithHandle,
+    handle: *Document,
+    container: Ast.Node.Index,
     orig_handle: *Document,
     comptime callback: anytype,
     context: anytype,
@@ -1330,7 +1333,8 @@ pub fn iterateSymbolsContainer(
     return try iterateSymbolsContainerInternal(
         arena,
         workspace,
-        container_handle,
+        handle,
+        container,
         orig_handle,
         callback,
         context,
@@ -1403,7 +1407,8 @@ fn iterateSymbolsGlobalInternal(
                 try iterateSymbolsContainerInternal(
                     arena,
                     workspace,
-                    .{ .node = use_expr_node, .handle = use_expr.handle },
+                    use_expr.handle,
+                    use_expr_node,
                     handle,
                     callback,
                     context,

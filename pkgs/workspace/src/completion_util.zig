@@ -7,7 +7,6 @@ const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
-const NodeWithHandle = @import("./NodeWithHandle.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
 const offsets = @import("./offsets.zig");
@@ -55,8 +54,9 @@ fn typeToCompletion(
             try nodeToCompletion(
                 arena,
                 workspace,
+                type_handle.handle,
+                n,
                 list,
-                .{ .node = n, .handle = type_handle.handle },
                 null,
                 orig_handle,
                 type_handle.type.is_type_val,
@@ -68,8 +68,9 @@ fn typeToCompletion(
         .other => |n| try nodeToCompletion(
             arena,
             workspace,
+            type_handle.handle,
+            n,
             list,
-            .{ .node = n, .handle = type_handle.handle },
             field_access.unwrapped,
             orig_handle,
             type_handle.type.is_type_val,
@@ -154,8 +155,9 @@ pub fn getFunctionSnippet(allocator: std.mem.Allocator, tree: Ast, func: Ast.ful
 fn nodeToCompletion(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
+    handle: *Document,
+    node: Ast.Node.Index,
     list: *std.ArrayList(lsp.CompletionItem),
-    node_handle: NodeWithHandle,
     unwrapped: ?TypeWithHandle,
     orig_handle: *Document,
     is_type_val: bool,
@@ -163,8 +165,6 @@ fn nodeToCompletion(
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) error{OutOfMemory}!void {
-    const node = node_handle.node;
-    const handle = node_handle.handle;
     const tree = handle.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
@@ -198,7 +198,8 @@ fn nodeToCompletion(
         try analysis.iterateSymbolsContainer(
             arena,
             workspace,
-            node_handle,
+            handle,
+            node,
             orig_handle,
             declToCompletion,
             context,
@@ -247,7 +248,7 @@ fn nodeToCompletion(
             const var_decl = ast.varDecl(tree, node).?;
             const is_const = token_tags[var_decl.ast.mut_token] == .keyword_const;
 
-            if (try analysis.resolveVarDeclAlias(arena, workspace, node_handle)) |result| {
+            if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 const context = DeclToCompletionContext{
                     .completions = list,
                     .config = config,
@@ -381,8 +382,9 @@ fn declToCompletion(
         .ast_node => |node| try nodeToCompletion(
             arena,
             workspace,
+            decl_handle.handle,
+            node,
             context.completions,
-            .{ .node = node, .handle = decl_handle.handle },
             null,
             context.orig_handle,
             false,

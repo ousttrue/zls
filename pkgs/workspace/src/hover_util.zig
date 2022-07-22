@@ -28,7 +28,7 @@ fn hoverSymbol(
 
     const def_str = switch (decl_handle.decl.*) {
         .ast_node => |node| def: {
-            if (try analysis.resolveVarDeclAlias(arena, workspace, .{ .node = node, .handle = handle })) |result| {
+            if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 return try hoverSymbol(arena, workspace, id, result, client_capabilities);
             }
             doc_str = try analysis.getDocComments(arena.allocator(), tree, node, hover_kind);

@@ -413,7 +413,7 @@ fn gotoDefinitionSymbol(
     const location = switch (decl_handle.decl.*) {
         .ast_node => |node| block: {
             if (resolve_alias) {
-                if (try analysis.resolveVarDeclAlias(arena, workspace, .{ .node = node, .handle = handle })) |result| {
+                if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
                     break :block try result.location(offset_encoding);
                 }
