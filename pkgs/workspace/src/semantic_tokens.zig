@@ -403,7 +403,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                 if (child.decl.* == .param_decl) {
                     return try builder.writeToken(main_token, .parameter);
                 }
-                var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
+                var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
                 if (try child.resolveType(arena, workspace, &bound_type_params)) |decl_type| {
                     try colorIdentifierBasedOnType(builder, decl_type, main_token, .{});
                 } else {
@@ -856,7 +856,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             // TODO This is basically exactly the same as what is done in analysis.resolveTypeOfNode, with the added
             //      writeToken code.
             // Maybe we can hook into it insead? Also applies to Identifier and VarDecl
-            var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
+            var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
             const lhs_type = try TypeWithHandle.resolveFieldAccessLhsType(
                 arena,
                 workspace,

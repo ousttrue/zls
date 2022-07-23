@@ -3,7 +3,7 @@ const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const ast = @import("./ast.zig");
-const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, Self);
+pub const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, Self);
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const logger = std.log.scoped(.TypeWithHandle);
 

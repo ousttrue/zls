@@ -4,6 +4,7 @@ const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const analysis = @import("./analysis.zig");
+const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
@@ -203,7 +204,7 @@ pub fn getSymbolFieldAccess(
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
     errdefer held_range.release();
-    const result = (try analysis.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
+    const result = (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
     held_range.release();
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {

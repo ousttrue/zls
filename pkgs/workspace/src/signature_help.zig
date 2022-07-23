@@ -1,5 +1,6 @@
 const std = @import("std");
 const analysis = @import("./analysis.zig");
+const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const offsets = @import("./offsets.zig");
@@ -273,7 +274,7 @@ pub fn getSignatureInfo(
 
                 // Resolve the expression.
                 var tokenizer = std.zig.Tokenizer.init(held_expr.data());
-                if (try analysis.getFieldAccessType(
+                if (try FieldAccessReturn.getFieldAccessType(
                     arena,
                     workspace,
                     handle,

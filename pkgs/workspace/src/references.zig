@@ -481,7 +481,7 @@ fn symbolReferencesInternal(
             try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, encoding, context, handler);
 
             const rhs_str = tree.tokenSlice(datas[node].rhs);
-            var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
+            var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
             const left_type = try TypeWithHandle.resolveFieldAccessLhsType(
                 arena,
                 workspace,

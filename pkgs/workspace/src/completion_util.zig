@@ -9,6 +9,7 @@ const ClientCapabilities = @import("./ClientCapabilities.zig");
 const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
+const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
 const offsets = @import("./offsets.zig");
@@ -20,7 +21,7 @@ fn typeToCompletion(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     list: *std.ArrayList(lsp.CompletionItem),
-    field_access: analysis.FieldAccessReturn,
+    field_access: FieldAccessReturn,
     orig_handle: *Document,
     config: *Config,
     client_capabilities: *ClientCapabilities,
@@ -736,7 +737,7 @@ fn completeFieldAccess(
     errdefer held_range.release();
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
-    if (try analysis.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) |result| {
+    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) |result| {
         held_range.release();
         try typeToCompletion(arena, workspace, &completions, result, handle, config, client_capabilities);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
