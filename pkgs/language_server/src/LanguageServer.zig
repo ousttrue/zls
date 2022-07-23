@@ -459,7 +459,14 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
-    return references_util.process(arena, &self.workspace, id, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding);
+    if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding)) |locations| {
+        return lsp.Response{
+            .id = id,
+            .result = .{ .Locations = locations },
+        };
+    } else {
+        return lsp.Response.createNull(id);
+    }
 }
 
 const no_signatures_response = lsp.ResponseParams{
