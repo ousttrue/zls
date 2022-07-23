@@ -6,7 +6,7 @@ const Config = ws.Config;
 const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
-const analysis = ws.analysis;
+const DocumentPosition = ws.DocumentPosition;
 const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
 const offsets = ws.offsets;
@@ -79,10 +79,10 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
                         if (func.name_token) |name_token| {
                             const loc = tree.tokenLocation(0, name_token);
 
-                            const is_type_function = analysis.isTypeFunction(tree, func);
+                            const is_type_function = ast.isTypeFunction(tree, func);
 
                             const func_name = tree.tokenSlice(name_token);
-                            if (!is_type_function and !analysis.isCamelCase(func_name)) {
+                            if (!is_type_function and !ast.isCamelCase(func_name)) {
                                 try diagnostics.append(.{
                                     .range = astLocationToRange(loc),
                                     .severity = .Information,
@@ -90,7 +90,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
                                     .source = "zls",
                                     .message = "Functions should be camelCase",
                                 });
-                            } else if (is_type_function and !analysis.isPascalCase(func_name)) {
+                            } else if (is_type_function and !ast.isPascalCase(func_name)) {
                                 try diagnostics.append(.{
                                     .range = astLocationToRange(loc),
                                     .severity = .Information,
@@ -337,11 +337,10 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const bytePosition = try TextPosition.getUtf8BytePosition(
-        doc.utf8_buffer.text,
-        .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) },
-        self.offset_encoding,
-    );
+    const bytePosition = switch (self.offset_encoding) {
+        .utf8 => try TextPosition.utf8BytePositionFromUtf8Pos(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }),
+        .utf16 => try TextPosition.utf8BytePositionFromUtf16Pos(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }),
+    };
     if (hover_util.process(arena, &self.workspace, doc, bytePosition, &self.client_capabilities)) |hover_or_null| {
         if (hover_or_null) |hover_contents| {
             return lsp.Response{
@@ -414,7 +413,16 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
+    const doc_position = switch (self.offset_encoding) {
+        .utf8 => try DocumentPosition.fromUtf8Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+        .utf16 => try DocumentPosition.fromUtf16Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+    };
     return if (try self.workspace.gotoHandler(arena, doc, doc_position, true, self.offset_encoding)) |location|
         lsp.Response{
             .id = id,
@@ -442,7 +450,16 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Completion, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
+    const doc_position = switch (self.offset_encoding) {
+        .utf8 => try DocumentPosition.fromUtf8Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+        .utf16 => try DocumentPosition.fromUtf16Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+    };
     return completion_util.process(arena, &self.workspace, id, doc, doc_position, self.config, &self.client_capabilities);
 }
 
@@ -450,7 +467,16 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
+    const doc_position = switch (self.offset_encoding) {
+        .utf8 => try DocumentPosition.fromUtf8Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+        .utf16 => try DocumentPosition.fromUtf16Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+    };
     return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName, self.offset_encoding);
 }
 
@@ -458,7 +484,16 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
+    const doc_position = switch (self.offset_encoding) {
+        .utf8 => try DocumentPosition.fromUtf8Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+        .utf16 => try DocumentPosition.fromUtf16Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+    };
     if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding)) |locations| {
         return lsp.Response{
             .id = id,
@@ -481,7 +516,16 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SignatureHelp, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
-    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
+    const doc_position = switch (self.offset_encoding) {
+        .utf8 => try DocumentPosition.fromUtf8Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+        .utf16 => try DocumentPosition.fromUtf16Pos(doc.utf8_buffer.text, .{
+            .line = @intCast(u32, position.line),
+            .x = @intCast(u32, position.character),
+        }),
+    };
 
     if (try getSignatureInfo(
         arena,

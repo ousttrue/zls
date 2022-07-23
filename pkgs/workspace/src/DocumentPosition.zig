@@ -53,6 +53,44 @@ pub fn getLine(text: []const u8, dst: usize) ?Self {
     };
 }
 
+pub fn fromUtf8Pos(text: []const u8, pos: struct { line: u32, x: u32 = 0 }) !Self {
+    const line = getLine(text, pos.line) orelse {
+        return error.LineNotFound;
+    };
+    return line.advance(pos.x);
+}
+
+fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
+    var utf8_idx: usize = 0;
+    var utf16_idx: usize = 0;
+    while (utf16_idx < utf16Characters) {
+        if (utf8_idx > utf8.len) {
+            unreachable;
+            // return error.InvalidParams;
+        }
+
+        const n = std.unicode.utf8ByteSequenceLength(utf8[utf8_idx]) catch unreachable;
+        const next_utf8_idx = utf8_idx + n;
+        const codepoint = std.unicode.utf8Decode(utf8[utf8_idx..next_utf8_idx]) catch unreachable;
+        if (codepoint < 0x10000) {
+            utf16_idx += 1;
+        } else {
+            utf16_idx += 2;
+        }
+        utf8_idx = next_utf8_idx;
+    }
+    return utf8_idx;
+}
+
+pub fn fromUtf16Pos(text: []const u8, pos: struct { line: u32, x: u32 = 0 }) !Self {
+    const line = getLine(text, pos.line) orelse {
+        return error.LineNotFound;
+    };
+    const utf8 = text[line.absolute_index..];
+    const utf8_idx = getUtf8Length(utf8, pos.x);
+    return line.advance(utf8_idx);
+}
+
 pub fn advance(self: Self, delta: usize) Self {
     return Self{
         .row = self.row,

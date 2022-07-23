@@ -6,7 +6,6 @@ const Utf8Buffer = @import("./Utf8Buffer.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
-const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
 const Location = @import("./Location.zig");
 const logger = std.log.scoped(.offset);
@@ -33,42 +32,6 @@ pub const Encoding = enum {
             "utf-16";
     }
 };
-
-fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
-    var utf8_idx: usize = 0;
-    var utf16_idx: usize = 0;
-    while (utf16_idx < utf16Characters) {
-        if (utf8_idx > utf8.len) {
-            unreachable;
-            // return error.InvalidParams;
-        }
-
-        const n = std.unicode.utf8ByteSequenceLength(utf8[utf8_idx]) catch unreachable;
-        const next_utf8_idx = utf8_idx + n;
-        const codepoint = std.unicode.utf8Decode(utf8[utf8_idx..next_utf8_idx]) catch unreachable;
-        if (codepoint < 0x10000) {
-            utf16_idx += 1;
-        } else {
-            utf16_idx += 2;
-        }
-        utf8_idx = next_utf8_idx;
-    }
-    return utf8_idx;
-}
-
-pub fn documentPosition(text: []const u8, pos: struct { line: u32, x: u32 = 0 }, encoding: Encoding) OffsetError!DocumentPosition {
-    const line = DocumentPosition.getLine(text, pos.line) orelse {
-        return OffsetError.LineNotFound;
-    };
-
-    if (encoding == .utf8) {
-        return line.advance(pos.x);
-    } else {
-        const utf8 = text[line.absolute_index..];
-        const utf8_idx = getUtf8Length(utf8, pos.x);
-        return line.advance(utf8_idx);
-    }
-}
 
 pub fn lineSectionLength(tree: Ast, start_index: usize, end_index: usize, encoding: Encoding) !usize {
     const source = tree.source[start_index..];
@@ -166,4 +129,3 @@ pub fn tokenLength(tree: Ast, token: Ast.TokenIndex, encoding: Encoding) usize {
     }
     return utf16_len;
 }
-
