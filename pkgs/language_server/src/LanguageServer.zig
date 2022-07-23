@@ -423,21 +423,27 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    return if (try self.workspace.gotoHandler(arena, doc, doc_position, true, self.offset_encoding)) |location|
-        lsp.Response{
+    if (try self.workspace.gotoHandler(arena, doc, doc_position, true)) |*location| {
+        const col: i64 = if (self.offset_encoding == .utf16) 
+            try TextPosition.toUtf16(doc.utf8_buffer.text, location.col)
+        else
+            location.col;
+        
+        return lsp.Response{
             .id = id,
             .result = .{
                 .Location = .{
                     .uri = location.uri,
                     .range = .{
-                        .start = .{ .line = location.row, .character = location.col },
-                        .end = .{ .line = location.row, .character = location.col },
+                        .start = .{ .line = location.row, .character = col },
+                        .end = .{ .line = location.row, .character = col },
                     },
                 },
             },
-        }
-    else
-        lsp.Response.createNull(id);
+        };
+    } else {
+        return lsp.Response.createNull(id);
+    }
 }
 
 pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {

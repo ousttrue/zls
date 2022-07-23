@@ -333,27 +333,26 @@ pub fn gotoHandler(
     doc: *Document,
     doc_position: DocumentPosition,
     resolve_alias: bool,
-    offset_encoding: offsets.Encoding,
 ) !?Location {
     const pos_context = position_context.documentPositionContext(arena, doc_position);
     // const pos_context = doc.getPositionContext(doc_position.absolute_index);
     switch (pos_context) {
         .var_access => {
             if (try self.getSymbolGlobal(arena, doc, doc_position.absolute_index)) |decl| {
-                return self.gotoDefinitionSymbol(arena, decl, resolve_alias, offset_encoding);
+                return self.gotoDefinitionSymbol(arena, decl, resolve_alias);
             } else {
                 return null;
             }
         },
         .field_access => |range| {
             const decl = try DeclWithHandle.getSymbolFieldAccess(arena, self, doc, doc_position, range);
-            return self.gotoDefinitionSymbol(arena, decl, resolve_alias, offset_encoding);
+            return self.gotoDefinitionSymbol(arena, decl, resolve_alias);
         },
         .string_literal => {
             return doc.gotoDefinitionString(arena, doc_position.absolute_index, self.zigenv);
         },
         .label => {
-            return self.gotoDefinitionLabel(arena, doc, doc_position.absolute_index, offset_encoding);
+            return self.gotoDefinitionLabel(arena, doc, doc_position.absolute_index);
         },
         else => {
             logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
@@ -408,7 +407,6 @@ fn gotoDefinitionSymbol(
     arena: *std.heap.ArenaAllocator,
     decl_handle: DeclWithHandle,
     resolve_alias: bool,
-    offset_encoding: offsets.Encoding,
 ) !?Location {
     var handle = decl_handle.handle;
 
@@ -417,15 +415,15 @@ fn gotoDefinitionSymbol(
             if (resolve_alias) {
                 if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
-                    break :block try result.location(offset_encoding);
+                    break :block try result.location(.utf8);
                 }
             }
 
             const name_token = ast.getDeclNameToken(handle.tree, node) orelse
                 return null;
-            break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], offset_encoding);
+            break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], .utf8);
         },
-        else => try decl_handle.location(offset_encoding),
+        else => try decl_handle.location(.utf8),
     };
 
     return Location.init(
@@ -440,10 +438,9 @@ fn gotoDefinitionLabel(
     arena: *std.heap.ArenaAllocator,
     handle: *Document,
     pos_index: usize,
-    offset_encoding: offsets.Encoding,
 ) !?Location {
     if (try handle.getLabelGlobal(pos_index)) |decl| {
-        return self.gotoDefinitionSymbol(arena, decl, false, offset_encoding);
+        return self.gotoDefinitionSymbol(arena, decl, false);
     } else {
         return null;
     }
