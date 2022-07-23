@@ -311,7 +311,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
         .aligned_var_decl,
         => {
             const var_decl = ast.varDecl(tree, node).?;
-            if (analysis.getDocCommentTokenIndex(token_tags, main_token)) |comment_idx|
+            if (ast.getDocCommentTokenIndex(token_tags, main_token)) |comment_idx|
                 try writeDocComments(builder, tree, comment_idx);
 
             try builder.writeToken(var_decl.visib_token, .keyword);
@@ -419,7 +419,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
         => {
             var buf: [1]Ast.Node.Index = undefined;
             const fn_proto: Ast.full.FnProto = ast.fnProto(tree, node, &buf).?;
-            if (analysis.getDocCommentTokenIndex(token_tags, main_token)) |docs|
+            if (ast.getDocCommentTokenIndex(token_tags, main_token)) |docs|
                 try writeDocComments(builder, tree, docs);
 
             try builder.writeToken(fn_proto.visib_token, .keyword);
@@ -475,7 +475,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
         .@"comptime",
         .@"nosuspend",
         => {
-            if (analysis.getDocCommentTokenIndex(token_tags, main_token)) |doc|
+            if (ast.getDocCommentTokenIndex(token_tags, main_token)) |doc|
                 try writeDocComments(builder, tree, doc);
             try builder.writeToken(main_token, .keyword);
             try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
@@ -771,7 +771,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             // TODO Inputs, outputs.
         },
         .test_decl => {
-            if (analysis.getDocCommentTokenIndex(token_tags, main_token)) |doc|
+            if (ast.getDocCommentTokenIndex(token_tags, main_token)) |doc|
                 try writeDocComments(builder, tree, doc);
 
             try builder.writeToken(main_token, .keyword);
@@ -976,7 +976,7 @@ fn writeContainerField(builder: *Builder, arena: *std.heap.ArenaAllocator, works
     const base = tree.nodes.items(.main_token)[node];
     const tokens = tree.tokens.items(.tag);
 
-    if (analysis.getDocCommentTokenIndex(tokens, base)) |docs|
+    if (ast.getDocCommentTokenIndex(tokens, base)) |docs|
         try writeDocComments(builder, tree, docs);
 
     try builder.writeToken(container_field.comptime_token, .keyword);

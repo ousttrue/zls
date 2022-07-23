@@ -24,7 +24,7 @@ fn hoverSymbol(
     const handle = decl_handle.handle;
     const tree = handle.tree;
 
-    const hover_kind: lsp.MarkupContent.Kind = if (client_capabilities.hover_supports_md) .Markdown else .PlainText;
+    const hover_kind: ast.MarkupFormat = if (client_capabilities.hover_supports_md) .Markdown else .PlainText;
     var doc_str: ?[]const u8 = null;
 
     const def_str = switch (decl_handle.decl.*) {
@@ -32,7 +32,7 @@ fn hoverSymbol(
             if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 return try hoverSymbol(arena, workspace, result, client_capabilities);
             }
-            doc_str = try analysis.getDocComments(arena.allocator(), tree, node, hover_kind);
+            doc_str = try ast.getDocComments(arena.allocator(), tree, node, hover_kind);
 
             var buf: [1]Ast.Node.Index = undefined;
 
@@ -51,7 +51,7 @@ fn hoverSymbol(
         },
         .param_decl => |param| def: {
             if (param.first_doc_comment) |doc_comments| {
-                doc_str = try analysis.collectDocComments(arena.allocator(), handle.tree, doc_comments, hover_kind, false);
+                doc_str = try ast.collectDocComments(arena.allocator(), handle.tree, doc_comments, hover_kind, false);
             }
 
             const first_token = param.first_doc_comment orelse

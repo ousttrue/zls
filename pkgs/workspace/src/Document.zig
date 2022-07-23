@@ -4,6 +4,7 @@ const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
 const analysis = @import("./analysis.zig");
+const DocumentScope = @import("./DocumentScope.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
@@ -25,7 +26,7 @@ import_uris: []const []const u8,
 imports_used: std.ArrayListUnmanaged([]const u8),
 tree: Ast,
 ast_context: *AstContext,
-document_scope: analysis.DocumentScope,
+document_scope: DocumentScope,
 
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
@@ -45,7 +46,7 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .utf8_buffer = Utf8Buffer.init(uri, text),
         .tree = tree,
         .ast_context = AstContext.new(allocator, &self.tree),
-        .document_scope = try analysis.makeDocumentScope(allocator, tree),
+        .document_scope = try DocumentScope.init(allocator, tree),
         .associated_build_file = null,
         .is_build_file = null,
     };
@@ -258,7 +259,7 @@ fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
     self.tree = try std.zig.parse(self.allocator, self.utf8_buffer.text);
 
     self.document_scope.deinit(self.allocator);
-    self.document_scope = try analysis.makeDocumentScope(self.allocator, self.tree);
+    self.document_scope = try DocumentScope.init(self.allocator, self.tree);
 
     const new_imports = try self.collectImportUris(zigenv);
     errdefer {

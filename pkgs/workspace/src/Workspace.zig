@@ -4,6 +4,7 @@ const URI = @import("./uri.zig");
 const analysis = @import("./analysis.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Document = @import("./Document.zig");
+const DocumentScope = @import("./DocumentScope.zig");
 const BuildFile = @import("./BuildFile.zig");
 const Location = @import("./Location.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
@@ -304,7 +305,7 @@ fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *S
         max_len += @field(self.handles.get(uri).?.document_scope, name).count();
     }
 
-    var result_set = analysis.CompletionSet{};
+    var result_set = DocumentScope.CompletionSet{};
     try result_set.ensureTotalCapacity(arena.allocator(), max_len);
     for (@field(base.document_scope, name).entries.items(.key)) |completion| {
         result_set.putAssumeCapacityNoClobber(completion, {});

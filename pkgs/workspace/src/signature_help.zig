@@ -26,7 +26,7 @@ fn fnProtoToSignatureInfo(
     const token_starts = tree.tokens.items(.start);
     const alloc = arena.allocator();
     const label = analysis.getFunctionSignature(tree, proto);
-    const proto_comments = (try analysis.getDocComments(alloc, tree, fn_node, .Markdown)) orelse "";
+    const proto_comments = (try ast.getDocComments(alloc, tree, fn_node, .Markdown)) orelse "";
 
     const arg_idx = if (skip_self_param) blk: {
         const has_self_param = try TypeWithHandle.hasSelfParam(arena, workspace, handle, proto);
@@ -37,7 +37,7 @@ fn fnProtoToSignatureInfo(
     var param_it = proto.iterate(&tree);
     while (param_it.next()) |param| {
         const param_comments = if (param.first_doc_comment) |dc|
-            try analysis.collectDocComments(alloc, tree, dc, .Markdown, false)
+            try ast.collectDocComments(alloc, tree, dc, .Markdown, false)
         else
             "";
 

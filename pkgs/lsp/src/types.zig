@@ -68,6 +68,13 @@ pub const MarkupContent = struct {
 
     kind: Kind = .Markdown,
     value: string,
+
+    pub fn init(is_markdown: bool, value: []const u8) @This() {
+        return .{
+            .kind = if (is_markdown) .Markdown else .PlainText,
+            .value = value,
+        };
+    }
 };
 
 pub const CompletionList = struct {

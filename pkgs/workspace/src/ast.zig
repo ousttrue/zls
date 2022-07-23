@@ -1075,3 +1075,74 @@ fn hasComment(tree: Ast.Tree, start_token: Ast.TokenIndex, end_token: Ast.TokenI
 
     return std.mem.indexOf(u8, tree.source[start..end], "//") != null;
 }
+
+pub const MarkupFormat = enum(u1) {
+    PlainText = 0,
+    Markdown = 1,
+};
+
+/// Gets a declaration's doc comments. Caller owns returned memory.
+pub fn getDocComments(allocator: std.mem.Allocator, tree: Ast, node: Ast.Node.Index, format: MarkupFormat) !?[]const u8 {
+    const base = tree.nodes.items(.main_token)[node];
+    const base_kind = tree.nodes.items(.tag)[node];
+    const tokens = tree.tokens.items(.tag);
+
+    switch (base_kind) {
+        // As far as I know, this does not actually happen yet, but it
+        // may come in useful.
+        .root => return try collectDocComments(allocator, tree, 0, format, true),
+        .fn_proto,
+        .fn_proto_one,
+        .fn_proto_simple,
+        .fn_proto_multi,
+        .fn_decl,
+        .local_var_decl,
+        .global_var_decl,
+        .aligned_var_decl,
+        .simple_var_decl,
+        .container_field_init,
+        => {
+            if (getDocCommentTokenIndex(tokens, base)) |doc_comment_index|
+                return try collectDocComments(allocator, tree, doc_comment_index, format, false);
+        },
+        else => {},
+    }
+    return null;
+}
+
+/// Get the first doc comment of a declaration.
+pub fn getDocCommentTokenIndex(tokens: []std.zig.Token.Tag, base_token: Ast.TokenIndex) ?Ast.TokenIndex {
+    var idx = base_token;
+    if (idx == 0) return null;
+    idx -= 1;
+    if (tokens[idx] == .keyword_threadlocal and idx > 0) idx -= 1;
+    if (tokens[idx] == .string_literal and idx > 1 and tokens[idx - 1] == .keyword_extern) idx -= 1;
+    if (tokens[idx] == .keyword_extern and idx > 0) idx -= 1;
+    if (tokens[idx] == .keyword_export and idx > 0) idx -= 1;
+    if (tokens[idx] == .keyword_inline and idx > 0) idx -= 1;
+    if (tokens[idx] == .keyword_pub and idx > 0) idx -= 1;
+
+    // Find first doc comment token
+    if (!(tokens[idx] == .doc_comment))
+        return null;
+    return while (tokens[idx] == .doc_comment) {
+        if (idx == 0) break 0;
+        idx -= 1;
+    } else idx + 1;
+}
+
+pub fn collectDocComments(allocator: std.mem.Allocator, tree: Ast, doc_comments: Ast.TokenIndex, format: MarkupFormat, container_doc: bool) ![]const u8 {
+    var lines = std.ArrayList([]const u8).init(allocator);
+    defer lines.deinit();
+    const tokens = tree.tokens.items(.tag);
+
+    var curr_line_tok = doc_comments;
+    while (true) : (curr_line_tok += 1) {
+        const comm = tokens[curr_line_tok];
+        if ((container_doc and comm == .container_doc_comment) or (!container_doc and comm == .doc_comment)) {
+            try lines.append(std.mem.trim(u8, tree.tokenSlice(curr_line_tok)[3..], &std.ascii.spaces));
+        } else break;
+    }
+
+    return try std.mem.join(allocator, if (format == .Markdown) "  \n" else "\n", lines.items);
+}

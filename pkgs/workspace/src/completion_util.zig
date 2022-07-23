@@ -170,21 +170,18 @@ fn nodeToCompletion(
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
 
-    const doc_kind: lsp.MarkupContent.Kind = if (client_capabilities.completion_doc_supports_md)
+    const doc_kind: ast.MarkupFormat = if (client_capabilities.completion_doc_supports_md)
         .Markdown
     else
         .PlainText;
 
-    const doc = if (try analysis.getDocComments(
+    const doc = if (try ast.getDocComments(
         list.allocator,
         handle.tree,
         node,
         doc_kind,
     )) |doc_comments|
-        lsp.MarkupContent{
-            .kind = doc_kind,
-            .value = doc_comments,
-        }
+        lsp.MarkupContent.init(client_capabilities.completion_doc_supports_md, doc_comments)
     else
         null;
 
@@ -394,12 +391,12 @@ fn declToCompletion(
             client_capabilities,
         ),
         .param_decl => |param| {
-            const doc_kind: lsp.MarkupContent.Kind = if (client_capabilities.completion_doc_supports_md) .Markdown else .PlainText;
+            const doc_kind: ast.MarkupFormat = if (client_capabilities.completion_doc_supports_md) .Markdown else .PlainText;
             const doc = if (param.first_doc_comment) |doc_comments|
-                lsp.MarkupContent{
-                    .kind = doc_kind,
-                    .value = try analysis.collectDocComments(context.arena.allocator(), tree, doc_comments, doc_kind, false),
-                }
+                lsp.MarkupContent.init(
+                    client_capabilities.completion_doc_supports_md,
+                    try ast.collectDocComments(context.arena.allocator(), tree, doc_comments, doc_kind, false),
+                )
             else
                 null;
 
