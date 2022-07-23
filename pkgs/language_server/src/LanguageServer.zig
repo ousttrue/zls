@@ -313,7 +313,7 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    try doc.applyChanges(params.contentChanges.Array, self.offset_encoding, self.zigenv);
+    try doc.applyChanges(params.contentChanges.Array, self.offset_encoding == .utf16, self.zigenv);
     // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}

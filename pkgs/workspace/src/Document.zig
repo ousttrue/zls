@@ -296,21 +296,21 @@ fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
     }
 }
 
-fn getPosition(text: []const u8, obj: std.json.Value, encoding: offsets.Encoding) !usize {
-    const pos = switch (encoding) {
-        .utf8 => try DocumentPosition.fromUtf8Pos(text, .{
+fn getPosition(text: []const u8, obj: std.json.Value, is_utf16: bool) !usize {
+    const pos = if (is_utf16)
+        try DocumentPosition.fromUtf16Pos(text, .{
             .line = @intCast(u32, obj.Object.get("line").?.Integer),
             .x = @intCast(u32, obj.Object.get("character").?.Integer),
-        }),
-        .utf16 => try DocumentPosition.fromUtf16Pos(text, .{
+        })
+    else
+        try DocumentPosition.fromUtf8Pos(text, .{
             .line = @intCast(u32, obj.Object.get("line").?.Integer),
             .x = @intCast(u32, obj.Object.get("character").?.Integer),
-        }),
-    };
+        });
     return pos.absolute_index;
 }
 
-pub fn applyChanges(self: *Self, content_changes: std.json.Array, offset_encoding: offsets.Encoding, zigenv: ZigEnv) !void {
+pub fn applyChanges(self: *Self, content_changes: std.json.Array, is_utf16: bool, zigenv: ZigEnv) !void {
     const document = &self.utf8_buffer;
 
     for (content_changes.items) |change| {
@@ -322,8 +322,8 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, offset_encodin
             const end_obj = range.Object.get("end").?;
 
             const change_text = change.Object.get("text").?.String;
-            const start_index = try getPosition(document.text, start_obj, offset_encoding);
-            const end_index = try getPosition(document.text, end_obj, offset_encoding);
+            const start_index = try getPosition(document.text, start_obj, is_utf16);
+            const end_index = try getPosition(document.text, end_obj, is_utf16);
 
             const old_len = document.text.len;
             const new_len = old_len - (end_index - start_index) + change_text.len;

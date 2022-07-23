@@ -3,7 +3,17 @@ const lsp = @import("lsp");
 const ws = @import("workspace");
 const DocumentPosition = ws.DocumentPosition;
 
-pub const Encoding = ws.offsets.Encoding;
+pub const Encoding = enum {
+    utf8,
+    utf16,
+
+    pub fn toString(self: Encoding) []const u8 {
+        return if (self == .utf8)
+            @as([]const u8, "utf-8")
+        else
+            "utf-16";
+    }
+};
 
 pub fn utf8BytePositionFromUtf8Pos(
     text: []const u8,
