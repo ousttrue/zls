@@ -1,22 +1,122 @@
 const std = @import("std");
 const lsp = @import("lsp");
+const Ast = std.zig.Ast;
 const ws = @import("workspace");
 const Config = ws.Config;
 const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
+const Document = ws.Document;
 const analysis = ws.analysis;
+const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
 const offsets = ws.offsets;
 const document_symbols = ws.document_symbols;
 const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
 const ClientCapabilities = ws.ClientCapabilities;
+const builtin_completions = ws.builtin_completions;
 const TextPosition = @import("./TextPosition.zig");
 const rename_util = @import("./rename_util.zig");
 const references_util = @import("./references_util.zig");
 const Self = @This();
-pub var keep_running: bool = true;
+const getSignatureInfo = ws.signature_help.getSignatureInfo;
+
 const logger = std.log.scoped(.LanguageServer);
+pub var keep_running: bool = true;
+
+// TODO: Is this correct or can we get a better end?
+fn astLocationToRange(loc: Ast.Location) lsp.Range {
+    return .{
+        .start = .{
+            .line = @intCast(i64, loc.line),
+            .character = @intCast(i64, loc.column),
+        },
+        .end = .{
+            .line = @intCast(i64, loc.line),
+            .character = @intCast(i64, loc.column),
+        },
+    };
+}
+
+fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Document, config: *Config) !lsp.Notification {
+    const tree = handle.tree;
+
+    var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
+
+    for (tree.errors) |err| {
+        const loc = tree.tokenLocation(0, err.token);
+
+        var mem_buffer: [256]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&mem_buffer);
+        try tree.renderError(err, fbs.writer());
+
+        try diagnostics.append(.{
+            .range = astLocationToRange(loc),
+            .severity = .Error,
+            .code = @tagName(err.tag),
+            .source = "zls",
+            .message = try arena.allocator().dupe(u8, fbs.getWritten()),
+            // .relatedInformation = undefined
+        });
+    }
+
+    // TODO: style warnings for types, values and declarations below root scope
+    if (tree.errors.len == 0) {
+        for (tree.rootDecls()) |decl_idx| {
+            const decl = tree.nodes.items(.tag)[decl_idx];
+            switch (decl) {
+                .fn_proto,
+                .fn_proto_multi,
+                .fn_proto_one,
+                .fn_proto_simple,
+                .fn_decl,
+                => blk: {
+                    var buf: [1]Ast.Node.Index = undefined;
+                    const func = ast.fnProto(tree, decl_idx, &buf).?;
+                    if (func.extern_export_inline_token != null) break :blk;
+
+                    if (config.warn_style) {
+                        if (func.name_token) |name_token| {
+                            const loc = tree.tokenLocation(0, name_token);
+
+                            const is_type_function = analysis.isTypeFunction(tree, func);
+
+                            const func_name = tree.tokenSlice(name_token);
+                            if (!is_type_function and !analysis.isCamelCase(func_name)) {
+                                try diagnostics.append(.{
+                                    .range = astLocationToRange(loc),
+                                    .severity = .Information,
+                                    .code = "BadStyle",
+                                    .source = "zls",
+                                    .message = "Functions should be camelCase",
+                                });
+                            } else if (is_type_function and !analysis.isPascalCase(func_name)) {
+                                try diagnostics.append(.{
+                                    .range = astLocationToRange(loc),
+                                    .severity = .Information,
+                                    .code = "BadStyle",
+                                    .source = "zls",
+                                    .message = "Type functions should be PascalCase",
+                                });
+                            }
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+
+    return lsp.Notification{
+        .method = "textDocument/publishDiagnostics",
+        .params = .{
+            .PublishDiagnostics = .{
+                .uri = handle.document.uri,
+                .diagnostics = diagnostics.items,
+            },
+        },
+    };
+}
 
 pub fn documentRange(text: []const u8, encoding: offsets.Encoding) !lsp.Range {
     var line_idx: i64 = 0;
@@ -83,9 +183,9 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     .documentHighlightProvider = false,
     .hoverProvider = true,
     .codeActionProvider = false,
-    .declarationProvider = true,
+    .declarationProvider = false,
     .definitionProvider = true,
-    .typeDefinitionProvider = true,
+    .typeDefinitionProvider = false,
     .implementationProvider = false,
     .referencesProvider = true,
     .documentSymbolProvider = true,
@@ -360,4 +460,40 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const position = params.position;
     const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
     return references_util.process(arena, &self.workspace, id, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding);
+}
+
+const no_signatures_response = lsp.ResponseParams{
+    .SignatureHelp = .{
+        .signatures = &.{},
+        .activeSignature = null,
+        .activeParameter = null,
+    },
+};
+
+pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.SignatureHelp, jsonParams.?);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const position = params.position;
+    const doc_position = try offsets.documentPosition(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }, self.offset_encoding);
+
+    if (try getSignatureInfo(
+        arena,
+        &self.workspace,
+        doc,
+        doc_position.absolute_index,
+        builtin_completions.data(),
+    )) |sig_info| {
+        return lsp.Response{
+            .id = id,
+            .result = .{
+                .SignatureHelp = .{
+                    .signatures = &[1]lsp.SignatureInformation{sig_info},
+                    .activeSignature = 0,
+                    .activeParameter = sig_info.activeParameter,
+                },
+            },
+        };
+    }
+
+    return lsp.Response{ .id = id, .result = no_signatures_response };
 }

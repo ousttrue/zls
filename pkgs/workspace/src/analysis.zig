@@ -118,7 +118,13 @@ pub const FieldAccessReturn = struct {
     unwrapped: ?TypeWithHandle = null,
 };
 
-pub fn getFieldAccessType(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, source_index: usize, tokenizer: *std.zig.Tokenizer) !?FieldAccessReturn {
+pub fn getFieldAccessType(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    source_index: usize,
+    tokenizer: *std.zig.Tokenizer,
+) !?FieldAccessReturn {
     var current_type = TypeWithHandle.typeVal(handle, undefined);
 
     var bound_type_params = BoundTypeParams.init(arena.allocator());
@@ -466,7 +472,7 @@ fn iterateSymbolsGlobalInternal(
                 if (std.mem.indexOfScalar(*const Ast.Node.Index, use_trail.items, use) != null) continue;
                 try use_trail.append(use);
 
-                const use_expr = (try  TypeWithHandle.resolveTypeOfNode(
+                const use_expr = (try TypeWithHandle.resolveTypeOfNode(
                     arena,
                     workspace,
                     handle,

@@ -1066,3 +1066,12 @@ pub fn getDeclNameToken(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
         else => null,
     };
 }
+
+fn hasComment(tree: Ast.Tree, start_token: Ast.TokenIndex, end_token: Ast.TokenIndex) bool {
+    const token_starts = tree.tokens.items(.start);
+
+    const start = token_starts[start_token];
+    const end = token_starts[end_token];
+
+    return std.mem.indexOf(u8, tree.source[start..end], "//") != null;
+}

@@ -1,6 +1,9 @@
 const std = @import("std");
 const analysis = @import("./analysis.zig");
+const TypeWithHandle = @import("./TypeWithHandle.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const offsets = @import("./offsets.zig");
+const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
@@ -9,17 +12,25 @@ const ast = @import("./ast.zig");
 const Session = struct {};
 const Builtin = @import("./Builtin.zig");
 
-fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool, handle: *Document, fn_node: Ast.Node.Index, proto: Ast.full.FnProto) !lsp.SignatureInformation {
+fn fnProtoToSignatureInfo(
+    arena: *std.heap.ArenaAllocator,
+    commas: u32,
+    skip_self_param: bool,
+    workspace: *Workspace,
+    handle: *Document,
+    fn_node: Ast.Node.Index,
+    proto: Ast.full.FnProto,
+) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
 
     const tree = handle.tree;
     const token_starts = tree.tokens.items(.start);
-    const alloc = session.arena.allocator();
+    const alloc = arena.allocator();
     const label = analysis.getFunctionSignature(tree, proto);
     const proto_comments = (try analysis.getDocComments(alloc, tree, fn_node, .Markdown)) orelse "";
 
     const arg_idx = if (skip_self_param) blk: {
-        const has_self_param = try analysis.hasSelfParam(session, handle, proto);
+        const has_self_param = try TypeWithHandle.hasSelfParam(arena, workspace, handle, proto);
         break :blk commas + @boolToInt(has_self_param);
     } else commas;
 
@@ -68,7 +79,13 @@ fn fnProtoToSignatureInfo(session: *Session, commas: u32, skip_self_param: bool,
     };
 }
 
-pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: usize, builtins: []const Builtin) !?lsp.SignatureInformation {
+pub fn getSignatureInfo(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    absolute_index: usize,
+    builtins: []const Builtin,
+) !?lsp.SignatureInformation {
     const innermost_block = analysis.innermostBlockScope(handle.*, absolute_index);
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);
@@ -120,7 +137,7 @@ pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: us
             };
         }
     };
-    const alloc = session.arena.allocator();
+    const alloc = arena.allocator();
     var symbol_stack = try std.ArrayListUnmanaged(StackSymbol).initCapacity(alloc, 8);
     var curr_commas: u32 = 0;
     var comma_stack = try std.ArrayListUnmanaged(u32).initCapacity(alloc, 4);
@@ -252,13 +269,14 @@ pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: us
                 const last_token_slice = tree.tokenSlice(expr_last_token);
                 const expr_end = token_starts[expr_last_token] + last_token_slice.len;
 
-                var held_expr = handle.document.borrowNullTerminatedSlice(expr_start, expr_end);
+                var held_expr = handle.utf8_buffer.borrowNullTerminatedSlice(expr_start, expr_end);
                 defer held_expr.release();
 
                 // Resolve the expression.
                 var tokenizer = std.zig.Tokenizer.init(held_expr.data());
                 if (try analysis.getFieldAccessType(
-                    session,
+                    arena,
+                    workspace,
                     handle,
                     expr_start,
                     &tokenizer,
@@ -275,24 +293,27 @@ pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: us
                     var buf: [1]Ast.Node.Index = undefined;
                     if (ast.fnProto(type_handle.handle.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
-                            session,
+                            arena,
                             paren_commas,
                             false,
+                            workspace,
                             type_handle.handle,
                             node,
                             proto,
                         );
                     }
 
-                    const name = offsets.identifierFromPosition(expr_end - 1, handle.document.text) catch {
+                    const name = handle.identifierFromPosition(expr_end - 1) orelse {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;
                     };
 
                     const skip_self_param = !type_handle.type.is_type_val;
-                    const decl_handle = (try analysis.lookupSymbolContainer(
-                        session,
-                        .{ .node = node, .handle = type_handle.handle },
+                    const decl_handle = (try DeclWithHandle.lookupSymbolContainer(
+                        arena,
+                        workspace,
+                        type_handle.handle,
+                        node,
                         name,
                         true,
                     )) orelse {
@@ -308,9 +329,11 @@ pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: us
                         },
                     };
 
-                    if (try analysis.resolveVarDeclAlias(
-                        session,
-                        .{ .node = node, .handle = decl_handle.handle },
+                    if (try DeclWithHandle.resolveVarDeclAlias(
+                        arena,
+                        workspace,
+                        decl_handle.handle,
+                        node,
                     )) |resolved| {
                         switch (resolved.decl.*) {
                             .ast_node => |n| {
@@ -323,9 +346,10 @@ pub fn getSignatureInfo(session: *Session, handle: *Document, absolute_index: us
 
                     if (ast.fnProto(res_handle.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
-                            session,
+                            arena,
                             paren_commas,
                             skip_self_param,
+                            workspace,
                             res_handle,
                             node,
                             proto,

@@ -192,7 +192,7 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&language_server, "textDocument/completion");
     dispatcher.registerRequest(&language_server, "textDocument/rename");
     dispatcher.registerRequest(&language_server, "textDocument/references");
-    // dispatcher.registerRequest("textDocument/signatureHelp", requests.SignatureHelp, server.signatureHelpHandler);
+    dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
     // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
