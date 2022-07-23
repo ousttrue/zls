@@ -9,7 +9,6 @@ const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const ast = @import("./ast.zig");
-const Session = struct {};
 const Builtin = @import("./Builtin.zig");
 
 fn fnProtoToSignatureInfo(

@@ -1,8 +1,6 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const language_server = @import("language_server");
-const document = @import("document");
-const Session = document.Session;
 const logger = std.log.scoped(.jsonrpc);
 
 const RequestProto = fn (self: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response;

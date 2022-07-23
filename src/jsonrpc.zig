@@ -4,7 +4,6 @@ const ws = @import("workspace");
 const language_server = @import("language_server");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
-const Session = ws.Session;
 const Workspace = ws.Workspace;
 const Config = ws.Config;
 const Stdio = ws.Stdio;
@@ -52,8 +51,6 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Di
                 continue;
             };
             defer tree.deinit();
-            // var session = Session.init(allocator, &arena, config, &document_store, transport, tree);
-            // defer session.deinit();
 
             // request: id, method, ?params
             // reponse: id, ?result, ?error
