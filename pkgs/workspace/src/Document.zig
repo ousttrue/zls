@@ -37,9 +37,6 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     var tree = try std.zig.parse(allocator, text);
     errdefer tree.deinit(allocator);
 
-    var document_scope = try analysis.makeDocumentScope(allocator, tree);
-    errdefer document_scope.deinit(allocator);
-
     self.* = Self{
         .allocator = allocator,
         .count = 1,
@@ -47,13 +44,11 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .imports_used = .{},
         .utf8_buffer = Utf8Buffer.init(uri, text),
         .tree = tree,
-        .ast_context = undefined,
-        .document_scope = document_scope,
+        .ast_context = AstContext.new(allocator, &self.tree),
+        .document_scope = try analysis.makeDocumentScope(allocator, tree),
         .associated_build_file = null,
         .is_build_file = null,
     };
-
-    self.ast_context = AstContext.new(allocator, &self.tree);
 
     return self;
 }
