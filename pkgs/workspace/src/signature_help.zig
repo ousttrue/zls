@@ -1,5 +1,4 @@
 const std = @import("std");
-const analysis = @import("./analysis.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
@@ -26,7 +25,7 @@ fn fnProtoToSignatureInfo(
     const tree = handle.tree;
     const token_starts = tree.tokens.items(.start);
     const alloc = arena.allocator();
-    const label = analysis.getFunctionSignature(tree, proto);
+    const label = ast.getFunctionSignature(tree, proto);
     const proto_comments = (try ast.getDocComments(alloc, tree, fn_node, .Markdown)) orelse "";
 
     const arg_idx = if (skip_self_param) blk: {

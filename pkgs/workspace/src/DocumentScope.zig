@@ -9,8 +9,8 @@ const TypeWithHandle = @import("./TypeWithHandle.zig");
 const logger = std.log.scoped(.Self);
 
 fn nodeSourceRange(tree: Ast, node: Ast.Node.Index) std.zig.Token.Loc {
-    const loc_start = offsets.tokenLocation(tree, tree.firstToken(node));
-    const loc_end = offsets.tokenLocation(tree, ast.lastToken(tree, node));
+    const loc_start = ast.tokenLocation(tree, tree.firstToken(node));
+    const loc_end = ast.tokenLocation(tree, ast.lastToken(tree, node));
 
     return .{
         .start = loc_start.start,
@@ -263,8 +263,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 const scope = try scopes.addOne(allocator);
                 scope.* = .{
                     .range = .{
-                        .start = offsets.tokenLocation(tree, main_tokens[node_idx]).start,
-                        .end = offsets.tokenLocation(tree, last_token).start,
+                        .start = ast.tokenLocation(tree, main_tokens[node_idx]).start,
+                        .end = ast.tokenLocation(tree, last_token).start,
                     },
                     .decls = std.StringHashMap(Declaration).init(allocator),
                     .data = .other,
@@ -330,8 +330,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 var scope = try scopes.addOne(allocator);
                 scope.* = .{
                     .range = .{
-                        .start = offsets.tokenLocation(tree, payload).start,
-                        .end = offsets.tokenLocation(tree, ast.lastToken(tree, if_node.ast.then_expr)).end,
+                        .start = ast.tokenLocation(tree, payload).start,
+                        .end = ast.tokenLocation(tree, ast.lastToken(tree, if_node.ast.then_expr)).end,
                     },
                     .decls = std.StringHashMap(Declaration).init(allocator),
                     .data = .other,
@@ -358,8 +358,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     var scope = try scopes.addOne(allocator);
                     scope.* = .{
                         .range = .{
-                            .start = offsets.tokenLocation(tree, err_token).start,
-                            .end = offsets.tokenLocation(tree, ast.lastToken(tree, if_node.ast.else_expr)).end,
+                            .start = ast.tokenLocation(tree, err_token).start,
+                            .end = ast.tokenLocation(tree, ast.lastToken(tree, if_node.ast.else_expr)).end,
                         },
                         .decls = std.StringHashMap(Declaration).init(allocator),
                         .data = .other,
@@ -381,8 +381,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             var scope = try scopes.addOne(allocator);
             scope.* = .{
                 .range = .{
-                    .start = offsets.tokenLocation(tree, tree.firstToken(catch_expr)).start,
-                    .end = offsets.tokenLocation(tree, ast.lastToken(tree, catch_expr)).end,
+                    .start = ast.tokenLocation(tree, tree.firstToken(catch_expr)).start,
+                    .end = ast.tokenLocation(tree, ast.lastToken(tree, catch_expr)).end,
                 },
                 .decls = std.StringHashMap(Declaration).init(allocator),
                 .data = .other,
@@ -412,8 +412,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 var scope = try scopes.addOne(allocator);
                 scope.* = .{
                     .range = .{
-                        .start = offsets.tokenLocation(tree, while_node.ast.while_token).start,
-                        .end = offsets.tokenLocation(tree, ast.lastToken(tree, node_idx)).end,
+                        .start = ast.tokenLocation(tree, while_node.ast.while_token).start,
+                        .end = ast.tokenLocation(tree, ast.lastToken(tree, node_idx)).end,
                     },
                     .decls = std.StringHashMap(Declaration).init(allocator),
                     .data = .other,
@@ -427,8 +427,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 var scope = try scopes.addOne(allocator);
                 scope.* = .{
                     .range = .{
-                        .start = offsets.tokenLocation(tree, payload).start,
-                        .end = offsets.tokenLocation(tree, ast.lastToken(tree, while_node.ast.then_expr)).end,
+                        .start = ast.tokenLocation(tree, payload).start,
+                        .end = ast.tokenLocation(tree, ast.lastToken(tree, while_node.ast.then_expr)).end,
                     },
                     .decls = std.StringHashMap(Declaration).init(allocator),
                     .data = .other,
@@ -472,8 +472,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     var scope = try scopes.addOne(allocator);
                     scope.* = .{
                         .range = .{
-                            .start = offsets.tokenLocation(tree, err_token).start,
-                            .end = offsets.tokenLocation(tree, ast.lastToken(tree, while_node.ast.else_expr)).end,
+                            .start = ast.tokenLocation(tree, err_token).start,
+                            .end = ast.tokenLocation(tree, ast.lastToken(tree, while_node.ast.else_expr)).end,
                         },
                         .decls = std.StringHashMap(Declaration).init(allocator),
                         .data = .other,
@@ -504,8 +504,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     var scope = try scopes.addOne(allocator);
                     scope.* = .{
                         .range = .{
-                            .start = offsets.tokenLocation(tree, payload).start,
-                            .end = offsets.tokenLocation(tree, ast.lastToken(tree, switch_case.ast.target_expr)).end,
+                            .start = ast.tokenLocation(tree, payload).start,
+                            .end = ast.tokenLocation(tree, ast.lastToken(tree, switch_case.ast.target_expr)).end,
                         },
                         .decls = std.StringHashMap(Declaration).init(allocator),
                         .data = .other,
@@ -677,8 +677,8 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 var scope = try scopes.addOne(allocator);
                 scope.* = .{
                     .range = .{
-                        .start = offsets.tokenLocation(tree, payload_token).start,
-                        .end = offsets.tokenLocation(tree, ast.lastToken(tree, expr)).end,
+                        .start = ast.tokenLocation(tree, payload_token).start,
+                        .end = ast.tokenLocation(tree, ast.lastToken(tree, expr)).end,
                     },
                     .decls = std.StringHashMap(Declaration).init(allocator),
                     .data = .other,

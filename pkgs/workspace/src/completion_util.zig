@@ -6,7 +6,6 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const Scope = @import("./Scope.zig");
 const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
-const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
@@ -338,7 +337,7 @@ fn nodeToCompletion(
                     .label = handle.tree.tokenSlice(name_token),
                     .kind = if (is_type_function) .Struct else .Function,
                     .documentation = doc,
-                    .detail = analysis.getFunctionSignature(handle.tree, func),
+                    .detail = ast.getFunctionSignature(handle.tree, func),
                     .insertText = insert_text,
                     .insertTextFormat = if (use_snippets) .Snippet else .PlainText,
                 });
@@ -366,7 +365,7 @@ fn nodeToCompletion(
                 .label = handle.tree.tokenSlice(var_decl.ast.mut_token + 1),
                 .kind = if (is_const) .Constant else .Variable,
                 .documentation = doc,
-                .detail = analysis.getVariableSignature(tree, var_decl),
+                .detail = ast.getVariableSignature(tree, var_decl),
                 .insertText = tree.tokenSlice(var_decl.ast.mut_token + 1),
                 .insertTextFormat = .PlainText,
             });
@@ -380,7 +379,7 @@ fn nodeToCompletion(
                 .label = handle.tree.tokenSlice(field.ast.name_token),
                 .kind = .Field,
                 .documentation = doc,
-                .detail = analysis.getContainerFieldSignature(handle.tree, field),
+                .detail = ast.getContainerFieldSignature(handle.tree, field),
                 .insertText = tree.tokenSlice(field.ast.name_token),
                 .insertTextFormat = .PlainText,
             });
@@ -516,7 +515,7 @@ fn declToCompletion(
                 .label = tree.tokenSlice(param.name_token.?),
                 .kind = .Constant,
                 .documentation = doc,
-                .detail = tree.source[offsets.tokenLocation(tree, first_token).start..offsets.tokenLocation(tree, last_token).end],
+                .detail = tree.source[ast.tokenLocation(tree, first_token).start..ast.tokenLocation(tree, last_token).end],
                 .insertText = tree.tokenSlice(param.name_token.?),
                 .insertTextFormat = .PlainText,
             });

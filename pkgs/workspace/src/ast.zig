@@ -1183,3 +1183,48 @@ pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
 
     return null;
 }
+
+pub const Loc = struct {
+    start: usize,
+    end: usize,
+};
+
+pub fn tokenLocation(tree: Ast, token_index: Ast.TokenIndex) Loc {
+    const start = tree.tokens.items(.start)[token_index];
+    const tag = tree.tokens.items(.tag)[token_index];
+
+    // For some tokens, re-tokenization is needed to find the end.
+    var tokenizer: std.zig.Tokenizer = .{
+        .buffer = tree.source,
+        .index = start,
+        .pending_invalid_token = null,
+    };
+
+    const token = tokenizer.next();
+    std.debug.assert(token.tag == tag);
+    return .{ .start = token.loc.start, .end = token.loc.end };
+}
+
+pub fn getVariableSignature(tree: Ast, var_decl: Ast.full.VarDecl) []const u8 {
+    const start = tokenLocation(tree, var_decl.ast.mut_token).start;
+    const end = tokenLocation(tree, lastToken(tree, var_decl.ast.init_node)).end;
+    return tree.source[start..end];
+}
+
+pub fn getContainerFieldSignature(tree: Ast, field: Ast.full.ContainerField) []const u8 {
+    const start = tokenLocation(tree, field.ast.name_token).start;
+    const end_node = if (field.ast.value_expr != 0) field.ast.value_expr else field.ast.type_expr;
+    const end = tokenLocation(tree, lastToken(tree, end_node)).end;
+    return tree.source[start..end];
+}
+
+/// Gets a function's keyword, name, arguments and return value.
+pub fn getFunctionSignature(tree: Ast, func: Ast.full.FnProto) []const u8 {
+    const start = tokenLocation(tree, func.ast.fn_token);
+
+    const end = if (func.ast.return_type != 0)
+        tokenLocation(tree, lastToken(tree, func.ast.return_type))
+    else
+        start;
+    return tree.source[start.start..end.end];
+}

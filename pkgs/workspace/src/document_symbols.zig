@@ -2,7 +2,6 @@ const std = @import("std");
 const lsp = @import("lsp");
 const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
-const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
 

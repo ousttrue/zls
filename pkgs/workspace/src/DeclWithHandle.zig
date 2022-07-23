@@ -13,6 +13,13 @@ const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, TypeWithHandle);
 decl: *Declaration,
 handle: *Document,
 
+fn isContainerDecl(self: Self) bool {
+    return switch (self.decl.*) {
+        .ast_node => |inner_node| ast.isContainer(self.handle.tree.nodes.items(.tag)[inner_node]),
+        else => false,
+    };
+}
+
 pub fn nameToken(self: Self) Ast.TokenIndex {
     const tree = self.handle.tree;
     return switch (self.decl.*) {

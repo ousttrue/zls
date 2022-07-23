@@ -3,7 +3,6 @@ const lsp = @import("lsp");
 const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
-const analysis = @import("./analysis.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
@@ -459,8 +458,8 @@ const ImportStrIterator = struct {
 };
 
 fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, source_index: usize) bool {
-    const first_token = offsets.tokenLocation(tree, tree.firstToken(node)).start;
-    const last_token = offsets.tokenLocation(tree, ast.lastToken(tree, node)).end;
+    const first_token = ast.tokenLocation(tree, tree.firstToken(node)).start;
+    const last_token = ast.tokenLocation(tree, ast.lastToken(tree, node)).end;
     return source_index >= first_token and source_index <= last_token;
 }
 

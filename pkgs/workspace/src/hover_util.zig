@@ -6,7 +6,6 @@ const Workspace = @import("./Workspace.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
 const offsets = @import("./offsets.zig");
-const analysis = @import("./analysis.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 // const TypeWithHandle = @import("./TypeWithHandle.zig");
 const ast = @import("./ast.zig");
@@ -37,11 +36,11 @@ fn hoverSymbol(
             var buf: [1]Ast.Node.Index = undefined;
 
             if (ast.varDecl(tree, node)) |var_decl| {
-                break :def analysis.getVariableSignature(tree, var_decl);
+                break :def ast.getVariableSignature(tree, var_decl);
             } else if (ast.fnProto(tree, node, &buf)) |fn_proto| {
-                break :def analysis.getFunctionSignature(tree, fn_proto);
+                break :def ast.getFunctionSignature(tree, fn_proto);
             } else if (ast.containerField(tree, node)) |field| {
-                break :def analysis.getContainerFieldSignature(tree, field);
+                break :def ast.getContainerFieldSignature(tree, field);
             } else {
                 if (ast.nodeToString(tree, node)) |text| {
                     break :def text;
@@ -60,8 +59,8 @@ fn hoverSymbol(
                 tree.firstToken(param.type_expr); // extern fn
             const last_token = param.anytype_ellipsis3 orelse tree.lastToken(param.type_expr);
 
-            const start = offsets.tokenLocation(tree, first_token).start;
-            const end = offsets.tokenLocation(tree, last_token).end;
+            const start = ast.tokenLocation(tree, first_token).start;
+            const end = ast.tokenLocation(tree, last_token).end;
             break :def tree.source[start..end];
         },
         .pointer_payload => |payload| tree.tokenSlice(payload.name),
@@ -123,7 +122,7 @@ pub fn process(
                         }
                     },
                     .fn_proto_multi => {
-                        return analysis.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
+                        return ast.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
                     },
                     .field_access => {
                         const lhs = AstGetChildren.getChild(arena.allocator(), &doc.tree, idx);

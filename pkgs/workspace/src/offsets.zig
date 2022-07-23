@@ -3,7 +3,6 @@ const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
-const analysis = @import("./analysis.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const offsets = @import("./offsets.zig");
@@ -150,7 +149,7 @@ pub fn tokenRelativeLocation(tree: Ast, start_index: usize, token_start: usize, 
 
 /// Asserts the token is comprised of valid utf8
 pub fn tokenLength(tree: Ast, token: Ast.TokenIndex, encoding: Encoding) usize {
-    const token_loc = tokenLocation(tree, token);
+    const token_loc = ast.tokenLocation(tree, token);
     if (encoding == .utf8)
         return token_loc.end - token_loc.start;
 
@@ -170,26 +169,6 @@ pub fn tokenLength(tree: Ast, token: Ast.TokenIndex, encoding: Encoding) usize {
 }
 
 /// Token location inside source
-pub const Loc = struct {
-    start: usize,
-    end: usize,
-};
-
-pub fn tokenLocation(tree: Ast, token_index: Ast.TokenIndex) Loc {
-    const start = tree.tokens.items(.start)[token_index];
-    const tag = tree.tokens.items(.tag)[token_index];
-
-    // For some tokens, re-tokenization is needed to find the end.
-    var tokenizer: std.zig.Tokenizer = .{
-        .buffer = tree.source,
-        .index = start,
-        .pending_invalid_token = null,
-    };
-
-    const token = tokenizer.next();
-    std.debug.assert(token.tag == tag);
-    return .{ .start = token.loc.start, .end = token.loc.end };
-}
 
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,

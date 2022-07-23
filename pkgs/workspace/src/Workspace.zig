@@ -1,7 +1,6 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const URI = @import("./uri.zig");
-const analysis = @import("./analysis.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Document = @import("./Document.zig");
 const DocumentScope = @import("./DocumentScope.zig");

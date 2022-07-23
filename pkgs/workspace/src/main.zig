@@ -15,7 +15,6 @@ pub const hover_util = @import("./hover_util.zig");
 pub const completion_util = @import("./completion_util.zig");
 pub const rename = @import("./rename.zig");
 pub const references = @import("./references.zig");
-pub const analysis = @import("./analysis.zig");
 pub const ast = @import("./ast.zig");
 pub const signature_help = @import("./signature_help.zig");
 pub const builtin_completions = @import("./builtin_completions.zig");

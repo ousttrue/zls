@@ -2,7 +2,6 @@ const std = @import("std");
 const offsets = @import("./offsets.zig");
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
-const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Ast = std.zig.Ast;

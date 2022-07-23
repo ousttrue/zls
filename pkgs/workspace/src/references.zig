@@ -2,7 +2,6 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
-const analysis = @import("./analysis.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const lsp = @import("lsp");
