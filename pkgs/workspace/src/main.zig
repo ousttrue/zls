@@ -17,13 +17,17 @@ pub const rename = @import("./rename.zig");
 pub const references = @import("./references.zig");
 pub const analysis = @import("./analysis.zig");
 const builtin_completions = @import("./builtin_completions.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
+const TypeWithHandle = @import("./TypeWithHandle.zig");
 
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
-    analysis.init(allocator);
+    TypeWithHandle.init(allocator);
+    DeclWithHandle.init(allocator);
     builtin_completions.init(allocator, builtins, config);
 }
 
 pub fn deinit() void {
     builtin_completions.deinit();
-    analysis.deinit();
+    TypeWithHandle.deinit();
+    DeclWithHandle.deinit();
 }

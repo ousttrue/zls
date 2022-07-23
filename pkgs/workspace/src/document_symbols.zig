@@ -157,7 +157,7 @@ fn addOutlineNodes(allocator: std.mem.Allocator, tree: Ast, child: Ast.Node.Inde
 }
 
 fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast.Node.Index, context: *GetDocumentSymbolsContext) anyerror!void {
-    const name = analysis.getDeclName(tree, node) orelse return;
+    const name = TypeWithHandle.getDeclName(tree, node) orelse return;
     if (name.len == 0)
         return;
 
@@ -240,7 +240,7 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
                 var params: [1]Ast.Node.Index = undefined;
                 const fn_proto = ast.fnProto(tree, fn_decl.lhs, &params) orelse break :fn_ch;
                 if (!TypeWithHandle.isTypeFunction(tree, fn_proto)) break :fn_ch;
-                const ret_stmt = analysis.findReturnStatement(tree, fn_proto, fn_decl.rhs) orelse break :fn_ch;
+                const ret_stmt = TypeWithHandle.findReturnStatement(tree, fn_proto, fn_decl.rhs) orelse break :fn_ch;
                 const type_decl = tree.nodes.items(.data)[ret_stmt].lhs;
                 if (type_decl != 0)
                     try addOutlineNodes(allocator, tree, type_decl, &child_context);

@@ -4,6 +4,7 @@ const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const analysis = @import("./analysis.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Ast = std.zig.Ast;
 const log = std.log.scoped(.semantic_tokens);
 const ast = @import("./ast.zig");
@@ -319,7 +320,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             try builder.writeToken(var_decl.comptime_token, .keyword);
             try builder.writeToken(var_decl.ast.mut_token, .keyword);
 
-            if (try analysis.resolveTypeOfNode(arena, workspace, handle, node)) |decl_type| {
+            if (try TypeWithHandle.resolveTypeOfNode(arena, workspace, handle, node)) |decl_type| {
                 try colorIdentifierBasedOnType(builder, decl_type, var_decl.ast.mut_token + 1, .{ .declaration = true });
             } else {
                 try builder.writeTokenMod(var_decl.ast.mut_token + 1, .variable, .{ .declaration = true });
@@ -389,7 +390,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             try builder.writeToken(node_data[node].rhs, .enumMember);
         },
         .identifier => {
-            if (analysis.isTypeIdent(tree, main_token)) {
+            if (TypeWithHandle.isTypeIdent(tree, main_token)) {
                 return try builder.writeToken(main_token, .type);
             }
 
@@ -403,7 +404,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                     return try builder.writeToken(main_token, .parameter);
                 }
                 var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
-                if (try analysis.resolveType(child, arena, workspace, &bound_type_params)) |decl_type| {
+                if (try child.resolveType(arena, workspace, &bound_type_params)) |decl_type| {
                     try colorIdentifierBasedOnType(builder, decl_type, main_token, .{});
                 } else {
                     try builder.writeTokenMod(main_token, .variable, .{});
@@ -613,7 +614,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             if (struct_init.ast.type_expr != 0) {
                 try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, struct_init.ast.type_expr });
 
-                field_token_type = if (try analysis.resolveTypeOfNode(
+                field_token_type = if (try TypeWithHandle.resolveTypeOfNode(
                     arena,
                     workspace,
                     handle,
@@ -856,17 +857,17 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
             //      writeToken code.
             // Maybe we can hook into it insead? Also applies to Identifier and VarDecl
             var bound_type_params = analysis.BoundTypeParams.init(arena.allocator());
-            const lhs_type = try analysis.resolveFieldAccessLhsType(
+            const lhs_type = try TypeWithHandle.resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try analysis.resolveTypeOfNodeInternal(arena, workspace, handle, data.lhs, &bound_type_params)) orelse return,
+                (try TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, handle, data.lhs, &bound_type_params)) orelse return,
                 &bound_type_params,
             );
             const left_type_node = switch (lhs_type.type.data) {
                 .other => |n| n,
                 else => return,
             };
-            if (try analysis.lookupSymbolContainer(
+            if (try DeclWithHandle.lookupSymbolContainer(
                 arena,
                 workspace,
                 lhs_type.handle,
@@ -893,7 +894,7 @@ fn writeNodeTokens(builder: *Builder, arena: *std.heap.ArenaAllocator, workspace
                     else => {},
                 }
 
-                if (try analysis.resolveType(decl_type, arena, workspace, &bound_type_params)) |resolved_type| {
+                if (try decl_type.resolveType(arena, workspace, &bound_type_params)) |resolved_type| {
                     try colorIdentifierBasedOnType(builder, resolved_type, data.rhs, .{});
                 }
             }

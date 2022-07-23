@@ -8,6 +8,7 @@ const position_context = @import("./position_context.zig");
 const offsets = @import("./offsets.zig");
 const analysis = @import("./analysis.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
+// const TypeWithHandle = @import("./TypeWithHandle.zig");
 const ast = @import("./ast.zig");
 const builtin_completions = @import("./builtin_completions.zig");
 const Ast = std.zig.Ast;
@@ -28,7 +29,7 @@ fn hoverSymbol(
 
     const def_str = switch (decl_handle.decl.*) {
         .ast_node => |node| def: {
-            if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+            if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 return try hoverSymbol(arena, workspace, result, client_capabilities);
             }
             doc_str = try analysis.getDocComments(arena.allocator(), tree, node, hover_kind);
@@ -177,5 +178,8 @@ pub fn process(
                 }
             },
         }
+    }
+    else{
+        return null;
     }
 }

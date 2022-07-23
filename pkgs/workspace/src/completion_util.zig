@@ -225,7 +225,7 @@ fn nodeToCompletion(
                 const use_snippets = config.enable_snippets and client_capabilities.supports_snippets;
                 const insert_text = if (use_snippets) blk: {
                     const skip_self_param = !(parent_is_type_val orelse true) and
-                        try analysis.hasSelfParam(arena, workspace, handle, func);
+                        try TypeWithHandle.hasSelfParam(arena, workspace, handle, func);
                     break :blk try getFunctionSnippet(arena.allocator(), tree, func, skip_self_param);
                 } else tree.tokenSlice(func.name_token.?);
 
@@ -249,7 +249,7 @@ fn nodeToCompletion(
             const var_decl = ast.varDecl(tree, node).?;
             const is_const = token_tags[var_decl.ast.mut_token] == .keyword_const;
 
-            if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+            if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 const context = DeclToCompletionContext{
                     .completions = list,
                     .config = config,

@@ -388,7 +388,7 @@ pub fn lookupSymbolGlobal(
                     .handle = handle,
                 };
             }
-            if (try analysis.resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
+            if (try DeclWithHandle.resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
         }
         if (curr == 0) break;
     }
@@ -415,7 +415,7 @@ fn gotoDefinitionSymbol(
     const location = switch (decl_handle.decl.*) {
         .ast_node => |node| block: {
             if (resolve_alias) {
-                if (try analysis.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+                if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
                     break :block try result.location(offset_encoding);
                 }

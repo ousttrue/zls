@@ -211,7 +211,7 @@ pub fn getSymbolFieldAccess(
         .other => |n| n,
         else => return OffsetError.NodeNotFound,
     };
-    return (try analysis.lookupSymbolContainer(
+    return (try DeclWithHandle.lookupSymbolContainer(
         arena,
         workspace,
         container_handle.handle,
