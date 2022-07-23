@@ -47,7 +47,7 @@ fn referencesDefinitionFieldAccess(
     id: i64,
     handle: *Document,
     position: DocumentPosition,
-    range: analysis.SourceRange,
+    range: std.zig.Token.Loc,
     include_decl: bool,
     config: *Config,
     offset_encoding: offsets.Encoding,

@@ -43,7 +43,7 @@ fn hoverSymbol(
             } else if (ast.containerField(tree, node)) |field| {
                 break :def analysis.getContainerFieldSignature(tree, field);
             } else {
-                if (analysis.nodeToString(tree, node)) |text| {
+                if (ast.nodeToString(tree, node)) |text| {
                     break :def text;
                 }
                 return null;

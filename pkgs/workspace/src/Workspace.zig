@@ -370,7 +370,7 @@ pub fn lookupSymbolGlobal(
     symbol: []const u8,
     source_index: usize,
 ) error{OutOfMemory}!?DeclWithHandle {
-    const innermost_scope_idx = analysis.innermostBlockScopeIndex(handle.*, source_index);
+    const innermost_scope_idx = handle.innermostBlockScopeIndex(source_index);
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {

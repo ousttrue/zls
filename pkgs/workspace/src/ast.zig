@@ -6,6 +6,7 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const Node = Ast.Node;
 const full = Ast.full;
+const logger = std.log.scoped(.ast_helper);
 
 fn fullPtrType(tree: Ast, info: full.PtrType.Components) full.PtrType {
     const token_tags = tree.tokens.items(.tag);
@@ -1145,4 +1146,40 @@ pub fn collectDocComments(allocator: std.mem.Allocator, tree: Ast, doc_comments:
     }
 
     return try std.mem.join(allocator, if (format == .Markdown) "  \n" else "\n", lines.items);
+}
+
+pub fn nodeToString(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+    const data = tree.nodes.items(.data);
+    const main_token = tree.nodes.items(.main_token)[node];
+    var buf: [1]Ast.Node.Index = undefined;
+    switch (tree.nodes.items(.tag)[node]) {
+        .container_field => return tree.tokenSlice(tree.containerField(node).ast.name_token),
+        .container_field_init => return tree.tokenSlice(tree.containerFieldInit(node).ast.name_token),
+        .container_field_align => return tree.tokenSlice(tree.containerFieldAlign(node).ast.name_token),
+        .error_value => return tree.tokenSlice(data[node].rhs),
+        .identifier => return tree.tokenSlice(main_token),
+        .fn_proto,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto_simple,
+        .fn_decl,
+        => if (fnProto(tree, node, &buf).?.name_token) |name|
+            return tree.tokenSlice(name),
+        .field_access => return tree.tokenSlice(data[node].rhs),
+        .call,
+        .call_comma,
+        .async_call,
+        .async_call_comma,
+        => return tree.tokenSlice(tree.callFull(node).ast.lparen - 1),
+        .call_one,
+        .call_one_comma,
+        .async_call_one,
+        .async_call_one_comma,
+        => return tree.tokenSlice(tree.callOne(&buf, node).ast.lparen - 1),
+        .test_decl => if (data[node].lhs != 0)
+            return tree.tokenSlice(data[node].lhs),
+        else => |tag| logger.debug("INVALID: {}", .{tag}),
+    }
+
+    return null;
 }

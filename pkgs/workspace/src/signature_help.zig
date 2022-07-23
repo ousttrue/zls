@@ -85,7 +85,7 @@ pub fn getSignatureInfo(
     absolute_index: usize,
     builtins: []const Builtin,
 ) !?lsp.SignatureInformation {
-    const innermost_block = analysis.innermostBlockScope(handle.*, absolute_index);
+    const innermost_block = handle.innermostBlockScope(absolute_index);
     const tree = handle.tree;
     const token_tags = tree.tokens.items(.tag);
     const token_starts = tree.tokens.items(.start);

@@ -541,10 +541,49 @@ test "identifierFromPosition" {
     // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }
 
+pub fn lookupLabel(handle: *Self, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
+    for (handle.document_scope.scopes) |scope| {
+        if (source_index >= scope.range.start and source_index < scope.range.end) {
+            if (scope.decls.getEntry(symbol)) |candidate| {
+                switch (candidate.value_ptr.*) {
+                    .label_decl => {},
+                    else => continue,
+                }
+                return DeclWithHandle{
+                    .decl = candidate.value_ptr,
+                    .handle = handle,
+                };
+            }
+        }
+        if (scope.range.start > source_index) return null;
+    }
+    return null;
+}
+
 pub fn getLabelGlobal(self: *Self, pos_index: usize) !?DeclWithHandle {
     if (self.identifierFromPosition(pos_index)) |name| {
-        return try analysis.lookupLabel(self, name, pos_index);
+        return try lookupLabel(self, name, pos_index);
     } else {
         return null;
     }
+}
+
+pub fn innermostBlockScopeIndex(handle: Self, source_index: usize) usize {
+    if (handle.document_scope.scopes.len == 1) return 0;
+
+    var current: usize = 0;
+    for (handle.document_scope.scopes[1..]) |*scope, idx| {
+        if (source_index >= scope.range.start and source_index <= scope.range.end) {
+            switch (scope.data) {
+                .container, .function, .block => current = idx + 1,
+                else => {},
+            }
+        }
+        if (scope.range.start > source_index) break;
+    }
+    return current;
+}
+
+pub fn innermostBlockScope(self: Self, source_index: usize) Ast.Node.Index {
+    return self.document_scope.scopes[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
 }

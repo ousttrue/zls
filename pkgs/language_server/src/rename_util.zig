@@ -38,7 +38,7 @@ fn renameDefinitionFieldAccess(
     id: i64,
     handle: *Document,
     position: DocumentPosition,
-    range: analysis.SourceRange,
+    range: std.zig.Token.Loc,
     new_name: []const u8,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {

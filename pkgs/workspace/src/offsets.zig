@@ -190,13 +190,12 @@ pub fn tokenLocation(tree: Ast, token_index: Ast.TokenIndex) Loc {
     return .{ .start = token.loc.start, .end = token.loc.end };
 }
 
-
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
     position: DocumentPosition,
-    range: analysis.SourceRange,
+    range: std.zig.Token.Loc,
 ) !DeclWithHandle {
     const name = handle.identifierFromPosition(position.absolute_index) orelse return error.NoIdentifier;
     const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
