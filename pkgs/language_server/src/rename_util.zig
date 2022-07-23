@@ -3,6 +3,7 @@ const lsp = @import("lsp");
 const ws = @import("workspace");
 const position_context = ws.position_context;
 const DocumentPosition = ws.DocumentPosition;
+const DeclWithHandle = ws.DeclWithHandle;
 const offsets = ws.offsets;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
@@ -42,7 +43,7 @@ fn renameDefinitionFieldAccess(
     new_name: []const u8,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {
-    const decl = try offsets.getSymbolFieldAccess(arena, workspace, handle, position, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position, range);
 
     var workspace_edit = lsp.WorkspaceEdit{
         .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),

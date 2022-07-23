@@ -5,6 +5,7 @@ const position_context = ws.position_context;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
 const DocumentPosition = ws.DocumentPosition;
+const DeclWithHandle = ws.DeclWithHandle;
 const offsets = ws.offsets;
 const analysis = ws.analysis;
 const references = ws.references;
@@ -52,7 +53,7 @@ fn referencesDefinitionFieldAccess(
     config: *Config,
     offset_encoding: offsets.Encoding,
 ) !lsp.Response {
-    const decl = try offsets.getSymbolFieldAccess(arena, workspace, handle, position, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position, range);
     var locs = std.ArrayList(lsp.Location).init(arena.allocator());
     try references.symbolReferences(arena, workspace, decl, offset_encoding, include_decl, &locs, std.ArrayList(lsp.Location).append, config.skip_std_references);
     return lsp.Response{

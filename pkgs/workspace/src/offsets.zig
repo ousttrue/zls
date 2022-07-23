@@ -5,7 +5,6 @@ const Workspace = @import("./Workspace.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
-const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
@@ -168,34 +167,3 @@ pub fn tokenLength(tree: Ast, token: Ast.TokenIndex, encoding: Encoding) usize {
     return utf16_len;
 }
 
-/// Token location inside source
-
-pub fn getSymbolFieldAccess(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    handle: *Document,
-    position: DocumentPosition,
-    range: std.zig.Token.Loc,
-) !DeclWithHandle {
-    const name = handle.identifierFromPosition(position.absolute_index) orelse return error.NoIdentifier;
-    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
-    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
-    var tokenizer = std.zig.Tokenizer.init(held_range.data());
-
-    errdefer held_range.release();
-    const result = (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return OffsetError.NoFieldAccessType;
-    held_range.release();
-    const container_handle = result.unwrapped orelse result.original;
-    const container_handle_node = switch (container_handle.type.data) {
-        .other => |n| n,
-        else => return OffsetError.NodeNotFound,
-    };
-    return (try DeclWithHandle.lookupSymbolContainer(
-        arena,
-        workspace,
-        container_handle.handle,
-        container_handle_node,
-        name,
-        true,
-    )) orelse return OffsetError.ContainerSymbolNotFound;
-}

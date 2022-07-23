@@ -11,7 +11,6 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
-const offsets = @import("./offsets.zig");
 const position_context = @import("./position_context.zig");
 const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.Completion);

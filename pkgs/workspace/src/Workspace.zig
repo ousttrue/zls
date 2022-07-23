@@ -346,7 +346,7 @@ pub fn gotoHandler(
             }
         },
         .field_access => |range| {
-            const decl = try offsets.getSymbolFieldAccess(arena, self, doc, doc_position, range);
+            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, self, doc, doc_position, range);
             return self.gotoDefinitionSymbol(arena, decl, resolve_alias, offset_encoding);
         },
         .string_literal => {

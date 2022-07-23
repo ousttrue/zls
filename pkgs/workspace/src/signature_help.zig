@@ -2,7 +2,6 @@ const std = @import("std");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
-const offsets = @import("./offsets.zig");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const lsp = @import("lsp");

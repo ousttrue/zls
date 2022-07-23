@@ -2,7 +2,6 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const ast = @import("./ast.zig");
-const offsets = @import("./offsets.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
 const TypeWithHandle = @import("./TypeWithHandle.zig");
