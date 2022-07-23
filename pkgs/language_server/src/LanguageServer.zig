@@ -23,6 +23,16 @@ const getSignatureInfo = ws.signature_help.getSignatureInfo;
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 
+fn symbolToUtf16(text: []const u8, symbol: *lsp.DocumentSymbol) anyerror!void {
+    symbol.range.start = try TextPosition.utf8PositionToUtf16(text, symbol.range.start);
+    symbol.range.end = try TextPosition.utf8PositionToUtf16(text, symbol.range.end);
+    symbol.selectionRange.start = try TextPosition.utf8PositionToUtf16(text, symbol.selectionRange.start);
+    symbol.selectionRange.end = try TextPosition.utf8PositionToUtf16(text, symbol.selectionRange.end);
+    for (symbol.children) |*child| {
+        try symbolToUtf16(text, child);
+    }
+}
+
 // TODO: Is this correct or can we get a better end?
 fn astLocationToRange(loc: Ast.Location) lsp.Range {
     return .{
@@ -324,7 +334,12 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    var symbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree, self.offset_encoding);
+    var symbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree);
+    if (self.offset_encoding == .utf16) {
+        for (symbols) |*symbol| {
+            try symbolToUtf16(doc.utf8_buffer.text, symbol);
+        }
+    }
     return lsp.Response{
         .id = id,
         .result = .{

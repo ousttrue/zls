@@ -174,7 +174,7 @@ pub const DocumentSymbol = struct {
     deprecated: bool = false,
     range: Range,
     selectionRange: Range,
-    children: []const DocumentSymbol = &[_]DocumentSymbol{},
+    children: [] DocumentSymbol = &[_]DocumentSymbol{},
 };
 
 pub const WorkspaceFolder = struct {

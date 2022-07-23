@@ -12,7 +12,6 @@ const GetDocumentSymbolsContext = struct {
         .offset = 0,
     },
     symbols: *std.ArrayList(lsp.DocumentSymbol),
-    encoding: offsets.Encoding,
 };
 
 fn addOutlineNodes(allocator: std.mem.Allocator, tree: Ast, child: Ast.Node.Index, context: *GetDocumentSymbolsContext) anyerror!void {
@@ -165,13 +164,13 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
         tree,
         context.prev_loc.offset,
         starts[tree.firstToken(node)],
-        context.encoding,
+        .utf8,
     ));
     const end_loc = start_loc.add(try offsets.tokenRelativeLocation(
         tree,
         start_loc.offset,
         starts[ast.lastToken(tree, node)],
-        context.encoding,
+        .utf8,
     ));
     context.prev_loc = end_loc;
     const range = lsp.Range{
@@ -221,7 +220,6 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
             var child_context = GetDocumentSymbolsContext{
                 .prev_loc = start_loc,
                 .symbols = &children,
-                .encoding = context.encoding,
             };
 
             if (ast.isContainer(tree, node)) {
@@ -249,12 +247,11 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
     };
 }
 
-pub fn getDocumentSymbols(allocator: std.mem.Allocator, tree: Ast, encoding: offsets.Encoding) ![]lsp.DocumentSymbol {
+pub fn getDocumentSymbols(allocator: std.mem.Allocator, tree: Ast) ![]lsp.DocumentSymbol {
     var symbols = try std.ArrayList(lsp.DocumentSymbol).initCapacity(allocator, tree.rootDecls().len);
 
     var context = GetDocumentSymbolsContext{
         .symbols = &symbols,
-        .encoding = encoding,
     };
 
     for (tree.rootDecls()) |idx| {
