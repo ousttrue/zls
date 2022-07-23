@@ -9,7 +9,6 @@ const Document = ws.Document;
 const DocumentPosition = ws.DocumentPosition;
 const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
-const offsets = ws.offsets;
 const document_symbols = ws.document_symbols;
 const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
@@ -118,7 +117,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
     };
 }
 
-pub fn documentRange(text: []const u8, encoding: offsets.Encoding) !lsp.Range {
+pub fn documentRange(text: []const u8, encoding: TextPosition.Encoding) !lsp.Range {
     var line_idx: i64 = 0;
     var curr_line: []const u8 = text;
 
@@ -168,7 +167,7 @@ config: *Config,
 zigenv: ZigEnv,
 workspace: Workspace = undefined,
 client_capabilities: ClientCapabilities = .{},
-offset_encoding: offsets.Encoding = offsets.Encoding.utf16,
+offset_encoding: TextPosition.Encoding = TextPosition.Encoding.utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
     .signatureHelpProvider = .{
         .triggerCharacters = &.{"("},
@@ -325,10 +324,11 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
+    var symbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree, self.offset_encoding);
     return lsp.Response{
         .id = id,
         .result = .{
-            .DocumentSymbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree, self.offset_encoding),
+            .DocumentSymbols = symbols,
         },
     };
 }
@@ -378,7 +378,19 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, doc, self.offset_encoding);
+    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, doc);
+    if (self.offset_encoding == .utf16) {
+        for (token_array) |*token, i| {
+            // { line: 2, startChar:  5, length: 3, tokenType: 0, tokenModifiers: 3 },
+            if (i % 5 == 1) {
+                // startChar
+
+                // length
+
+            }
+            _ = token;
+        }
+    }
     return lsp.Response{
         .id = id,
         .result = .{ .SemanticTokensFull = .{ .data = token_array } },
@@ -423,20 +435,19 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try self.workspace.gotoHandler(arena, doc, doc_position, true)) |*location| {
-        const col: i64 = if (self.offset_encoding == .utf16) 
-            try TextPosition.toUtf16(doc.utf8_buffer.text, location.col)
-        else
-            location.col;
-        
+    if (try self.workspace.gotoHandler(arena, doc, doc_position, true)) |location| {
+        var goto = lsp.Position{ .line = location.row, .character = location.col };
+        if (self.offset_encoding == .utf16) {
+            goto = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, goto);
+        }
         return lsp.Response{
             .id = id,
             .result = .{
                 .Location = .{
                     .uri = location.uri,
                     .range = .{
-                        .start = .{ .line = location.row, .character = col },
-                        .end = .{ .line = location.row, .character = col },
+                        .start = goto,
+                        .end = goto,
                     },
                 },
             },
@@ -488,8 +499,8 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             var it = workspace_edit.changes.?.valueIterator();
             while (it.next()) |edits| {
                 for (edits.*) |*edit| {
-                    edit.range.start.character = try TextPosition.toUtf16(doc.utf8_buffer.text, edit.range.start.character);
-                    edit.range.end.character = try TextPosition.toUtf16(doc.utf8_buffer.text, edit.range.end.character);
+                    edit.range.start = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, edit.range.start);
+                    edit.range.end = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, edit.range.end);
                 }
             }
         }
@@ -519,8 +530,8 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config)) |*locations| {
         if (self.offset_encoding == .utf16) {
             for (locations.*) |*loc| {
-                loc.range.start.character = try TextPosition.toUtf16(doc.utf8_buffer.text, loc.range.start.character);
-                loc.range.end.character = try TextPosition.toUtf16(doc.utf8_buffer.text, loc.range.end.character);
+                loc.range.start = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, loc.range.start);
+                loc.range.end = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, loc.range.end);
             }
         }
 

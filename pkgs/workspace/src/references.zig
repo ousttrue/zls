@@ -20,7 +20,7 @@ fn tokenReference(document: *Document, tok: Ast.TokenIndex, context: anytype, co
             },
             .end = .{
                 .line = @intCast(i64, loc.line),
-                .character = @intCast(i64, loc.column + offsets.tokenLength(document.tree, tok, .utf8)),
+                .character = @intCast(i64, loc.column + ast.tokenLength(document.tree, tok)),
             },
         },
     });

@@ -1,11 +1,9 @@
 const std = @import("std");
+const lsp = @import("lsp");
 const ws = @import("workspace");
 const DocumentPosition = ws.DocumentPosition;
 
-// pub const Encoding = enum {
-//     utf8,
-//     utf16,
-// };
+pub const Encoding = ws.offsets.Encoding;
 
 pub fn utf8BytePositionFromUtf8Pos(
     text: []const u8,
@@ -23,11 +21,12 @@ pub fn utf8BytePositionFromUtf16Pos(
     return @intCast(u32, doc_position.absolute_index);
 }
 
-pub fn toUtf16(text: []const u8, target: i64) !i64 {
+pub fn utf8PositionToUtf16(text: []const u8, src: lsp.Position) !lsp.Position {
     var n: u32 = 0;
     var utf8: u32 = 0;
-    while (utf8 < target) : (n += 1) {
-        utf8 += @intCast(u32, try std.unicode.utf8ByteSequenceLength(text[utf8]));
+    const line_pos = try DocumentPosition.getLine(text, @intCast(usize, src.line));
+    while (utf8 < src.character) : (n += 1) {
+        utf8 += @intCast(u32, try std.unicode.utf8ByteSequenceLength(line_pos.line[utf8]));
     }
-    return n;
+    return lsp.Position{ .line = src.line, .character = n };
 }

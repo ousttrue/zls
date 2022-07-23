@@ -1228,3 +1228,9 @@ pub fn getFunctionSignature(tree: Ast, func: Ast.full.FnProto) []const u8 {
         start;
     return tree.source[start.start..end.end];
 }
+
+/// Asserts the token is comprised of valid utf8
+pub fn tokenLength(tree: Ast, token: Ast.TokenIndex) usize {
+    const token_loc = tokenLocation(tree, token);
+    return token_loc.end - token_loc.start;
+}

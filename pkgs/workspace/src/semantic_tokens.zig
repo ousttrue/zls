@@ -1,15 +1,60 @@
 const std = @import("std");
-const offsets = @import("./offsets.zig");
+const lsp = @import("lsp");
+const Ast = std.zig.Ast;
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
-const Ast = std.zig.Ast;
-const log = std.log.scoped(.semantic_tokens);
 const ast = @import("./ast.zig");
-const lsp = @import("lsp");
-
 const logger = std.log.scoped(.semantic_tokens);
+
+pub fn lineSectionLength(tree: Ast, start_index: usize, end_index: usize) !usize {
+    const source = tree.source[start_index..];
+    std.debug.assert(end_index >= start_index and source.len >= end_index - start_index);
+    return end_index - start_index;
+}
+
+const TokenLocation = struct {
+    line: usize,
+    column: usize,
+    offset: usize,
+
+    pub fn add(lhs: TokenLocation, rhs: TokenLocation) TokenLocation {
+        return .{
+            .line = lhs.line + rhs.line,
+            .column = if (rhs.line == 0)
+                lhs.column + rhs.column
+            else
+                rhs.column,
+            .offset = rhs.offset,
+        };
+    }
+};
+
+pub fn tokenRelativeLocation(tree: Ast, start_index: usize, token_start: usize) !TokenLocation {
+    std.debug.assert(token_start >= start_index);
+    var loc = TokenLocation{
+        .line = 0,
+        .column = 0,
+        .offset = 0,
+    };
+
+    const source = tree.source[start_index..];
+    var i: usize = 0;
+    while (i + start_index < token_start) {
+        const c = source[i];
+        if (c == '\n') {
+            loc.line += 1;
+            loc.column = 0;
+            i += 1;
+        } else {
+            loc.column += 1;
+            i += 1;
+        }
+    }
+    loc.offset = i + start_index;
+    return loc;
+}
 
 const Builder = struct {
     const Self = @This();
@@ -18,13 +63,11 @@ const Builder = struct {
     previous_position: usize = 0,
     previous_token: ?Ast.TokenIndex = null,
     arr: std.ArrayList(u32),
-    encoding: offsets.Encoding,
 
-    fn init(allocator: std.mem.Allocator, handle: *Document, encoding: offsets.Encoding) Self {
+    fn init(allocator: std.mem.Allocator, handle: *Document) Self {
         return Self{
             .handle = handle,
             .arr = std.ArrayList(u32).init(allocator),
-            .encoding = encoding,
         };
     }
 
@@ -48,7 +91,7 @@ const Builder = struct {
         self.previous_token = token;
         try self.handleComments(if (token > 0) starts[token - 1] else 0, next_start);
 
-        const length = offsets.tokenLength(tree, token, self.encoding);
+        const length = ast.tokenLength(tree, token);
         try self.addDirect(token_type, token_modifiers, next_start, length);
     }
 
@@ -88,7 +131,7 @@ const Builder = struct {
             },
         };
         const start = tree.tokens.items(.start)[tok];
-        const length = offsets.tokenLength(tree, tok, self.encoding);
+        const length = ast.tokenLength(tree, tok);
         try self.addDirect(tok_type, .{}, start, length);
     }
 
@@ -135,17 +178,16 @@ const Builder = struct {
 
             while (i < to - 1 and source[i] != '\n') : (i += 1) {}
 
-            const length = try offsets.lineSectionLength(self.handle.tree, comment_start, i, self.encoding);
+            const length = try lineSectionLength(self.handle.tree, comment_start, i);
             try self.addDirect(lsp.SemanticTokenType.comment, mods, comment_start, length);
         }
     }
 
     fn addDirect(self: *Self, tok_type: lsp.SemanticTokenType, tok_mod: lsp.SemanticTokenModifiers, start: usize, length: usize) !void {
-        const delta = offsets.tokenRelativeLocation(
+        const delta = tokenRelativeLocation(
             self.handle.tree,
             self.previous_position,
             start,
-            self.encoding,
         ) catch return;
 
         try self.arr.appendSlice(&.{
@@ -1003,8 +1045,8 @@ fn writeContainerField(builder: *Builder, arena: *std.heap.ArenaAllocator, works
 }
 
 // TODO Range version, edit version.
-pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, encoding: offsets.Encoding) ![]u32 {
-    var builder = Builder.init(arena.child_allocator, handle, encoding);
+pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document) ![]u32 {
+    var builder = Builder.init(arena.child_allocator, handle);
     errdefer builder.arr.deinit();
 
     // reverse the ast from the root declarations

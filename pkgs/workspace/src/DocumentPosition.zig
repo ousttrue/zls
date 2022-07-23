@@ -17,7 +17,7 @@ line: []const u8,
 absolute_index: usize,
 all: []const u8,
 
-pub fn getLine(text: []const u8, dst: usize) ?Self {
+pub fn getLine(text: []const u8, dst: usize) !Self {
     // doc: lsp.TextDocument
     // var split_iterator = std.mem.split(u8, doc.text, "\n");
     // const dst = position.line - 1;
@@ -42,7 +42,7 @@ pub fn getLine(text: []const u8, dst: usize) ?Self {
         end += 1;
     }
     if (i != dst) {
-        return null;
+        return error.LineNotFound;
     }
     return Self{
         .row = i,
@@ -54,9 +54,7 @@ pub fn getLine(text: []const u8, dst: usize) ?Self {
 }
 
 pub fn fromUtf8Pos(text: []const u8, pos: struct { line: u32, x: u32 = 0 }) !Self {
-    const line = getLine(text, pos.line) orelse {
-        return error.LineNotFound;
-    };
+    const line = try getLine(text, pos.line);
     return line.advance(pos.x);
 }
 
@@ -83,9 +81,7 @@ fn getUtf8Length(utf8: []const u8, utf16Characters: i64) usize {
 }
 
 pub fn fromUtf16Pos(text: []const u8, pos: struct { line: u32, x: u32 = 0 }) !Self {
-    const line = getLine(text, pos.line) orelse {
-        return error.LineNotFound;
-    };
+    const line = try getLine(text, pos.line);
     const utf8 = text[line.absolute_index..];
     const utf8_idx = getUtf8Length(utf8, pos.x);
     return line.advance(utf8_idx);
