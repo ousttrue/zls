@@ -6,11 +6,11 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
-const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const Self = @This();
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, TypeWithHandle);
+const TokenLocation = @import("./TokenLocation.zig");
 
 decl: *Declaration,
 handle: *Document,
@@ -35,9 +35,9 @@ pub fn nameToken(self: Self) Ast.TokenIndex {
     };
 }
 
-pub fn location(self: Self, encoding: offsets.Encoding) !offsets.TokenLocation {
+pub fn location(self: Self) !TokenLocation {
     const tree = self.handle.tree;
-    return try offsets.tokenRelativeLocation(tree, 0, tree.tokens.items(.start)[self.nameToken()], encoding);
+    return try TokenLocation.tokenRelativeLocation(tree, 0, tree.tokens.items(.start)[self.nameToken()]);
 }
 
 pub fn isNodePublic(tree: Ast, node: Ast.Node.Index) bool {

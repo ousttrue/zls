@@ -1,12 +1,12 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const offsets = @import("./offsets.zig");
 const ast = @import("./ast.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
+const TokenLocation = @import("./TokenLocation.zig");
 
 const GetDocumentSymbolsContext = struct {
-    prev_loc: offsets.TokenLocation = .{
+    prev_loc: TokenLocation = .{
         .line = 0,
         .column = 0,
         .offset = 0,
@@ -160,17 +160,15 @@ fn getDocumentSymbolsInternal(allocator: std.mem.Allocator, tree: Ast, node: Ast
         return;
 
     const starts = tree.tokens.items(.start);
-    const start_loc = context.prev_loc.add(try offsets.tokenRelativeLocation(
+    const start_loc = context.prev_loc.add(try TokenLocation.tokenRelativeLocation(
         tree,
         context.prev_loc.offset,
         starts[tree.firstToken(node)],
-        .utf8,
     ));
-    const end_loc = start_loc.add(try offsets.tokenRelativeLocation(
+    const end_loc = start_loc.add(try TokenLocation.tokenRelativeLocation(
         tree,
         start_loc.offset,
         starts[ast.lastToken(tree, node)],
-        .utf8,
     ));
     context.prev_loc = end_loc;
     const range = lsp.Range{

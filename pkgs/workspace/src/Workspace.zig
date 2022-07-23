@@ -7,11 +7,11 @@ const DocumentScope = @import("./DocumentScope.zig");
 const BuildFile = @import("./BuildFile.zig");
 const Location = @import("./Location.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
-const offsets = @import("./offsets.zig");
 const position_context = @import("./position_context.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const ast = @import("./ast.zig");
 const logger = std.log.scoped(.Workspace);
+const TokenLocation = @import("./TokenLocation.zig");
 
 const Self = @This();
 
@@ -415,15 +415,15 @@ fn gotoDefinitionSymbol(
             if (resolve_alias) {
                 if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
-                    break :block try result.location(.utf8);
+                    break :block try result.location();
                 }
             }
 
             const name_token = ast.getDeclNameToken(handle.tree, node) orelse
                 return null;
-            break :block try offsets.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token], .utf8);
+            break :block try TokenLocation.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token]);
         },
-        else => try decl_handle.location(.utf8),
+        else => try decl_handle.location(),
     };
 
     return Location.init(

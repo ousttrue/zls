@@ -1,16 +1,16 @@
 const std = @import("std");
+const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
-const lsp = @import("lsp");
-const offsets = @import("./offsets.zig");
 const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
+const TokenLocation = @import("./TokenLocation.zig");
 
 fn tokenReference(document: *Document, tok: Ast.TokenIndex, context: anytype, comptime handler: anytype) !void {
-    const loc = offsets.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok], .utf8) catch return;
+    const loc = TokenLocation.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok]) catch return;
     try handler(context, lsp.Location{
         .uri = document.utf8_buffer.uri,
         .range = .{

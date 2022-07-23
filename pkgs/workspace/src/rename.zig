@@ -1,9 +1,8 @@
 const std = @import("std");
+const lsp = @import("lsp");
 const Workspace = @import("./Workspace.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const references = @import("./references.zig");
-const lsp = @import("lsp");
-const offsets = @import("./offsets.zig");
 
 // TODO Use a map to array lists and collect at the end instead?
 const RefHandlerContext = struct {

@@ -11,7 +11,6 @@ const BuildFile = @import("./BuildFile.zig");
 const DocumentPosition = @import("./DocumentPosition.zig");
 const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
-const offsets = @import("./offsets.zig");
 const Location = @import("./Location.zig");
 const Self = @This();
 const logger = std.log.scoped(.Document);
