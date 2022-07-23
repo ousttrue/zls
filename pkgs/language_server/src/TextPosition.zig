@@ -1,3 +1,4 @@
+const std = @import("std");
 const ws = @import("workspace");
 const DocumentPosition = ws.DocumentPosition;
 
@@ -20,4 +21,13 @@ pub fn utf8BytePositionFromUtf16Pos(
 ) !u32 {
     const doc_position = try DocumentPosition.fromUtf16Pos(text, .{ .line = pos.line, .x = pos.x });
     return @intCast(u32, doc_position.absolute_index);
+}
+
+pub fn toUtf16(text: []const u8, target: i64) !i64 {
+    var n: u32 = 0;
+    var utf8: u32 = 0;
+    while (utf8 < target) : (n += 1) {
+        utf8 += @intCast(u32, try std.unicode.utf8ByteSequenceLength(text[utf8]));
+    }
+    return n;
 }

@@ -477,7 +477,23 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             .x = @intCast(u32, position.character),
         }),
     };
-    return rename_util.process(arena, &self.workspace, id, doc, doc_position, params.newName, self.offset_encoding);
+    if (try rename_util.process(arena, &self.workspace, doc, doc_position, params.newName)) |*workspace_edit| {
+        if (self.offset_encoding == .utf16) {
+            var it = workspace_edit.changes.?.valueIterator();
+            while (it.next()) |edits| {
+                for (edits.*) |*edit| {
+                    edit.range.start.character = try TextPosition.toUtf16(doc.utf8_buffer.text, edit.range.start.character);
+                    edit.range.end.character = try TextPosition.toUtf16(doc.utf8_buffer.text, edit.range.end.character);
+                }
+            }
+        }
+        return lsp.Response{
+            .id = id,
+            .result = .{ .WorkspaceEdit = workspace_edit.* },
+        };
+    } else {
+        return lsp.Response.createNull(id);
+    }
 }
 
 pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
@@ -494,10 +510,17 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config, self.offset_encoding)) |locations| {
+    if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config)) |*locations| {
+        if (self.offset_encoding == .utf16) {
+            for (locations.*) |*loc| {
+                loc.range.start.character = try TextPosition.toUtf16(doc.utf8_buffer.text, loc.range.start.character);
+                loc.range.end.character = try TextPosition.toUtf16(doc.utf8_buffer.text, loc.range.end.character);
+            }
+        }
+
         return lsp.Response{
             .id = id,
-            .result = .{ .Locations = locations },
+            .result = .{ .Locations = locations.* },
         };
     } else {
         return lsp.Response.createNull(id);

@@ -31,19 +31,23 @@ pub fn renameSymbol(
     decl_handle: DeclWithHandle,
     new_name: []const u8,
     edits: *std.StringHashMap([]lsp.TextEdit),
-    encoding: offsets.Encoding,
 ) !void {
     std.debug.assert(decl_handle.decl.* != .label_decl);
-    try references.symbolReferences(arena, workspace, decl_handle, encoding, true, RefHandlerContext{
+    try references.symbolReferences(arena, workspace, decl_handle, true, RefHandlerContext{
         .edits = edits,
         .allocator = arena.allocator(),
         .new_name = new_name,
     }, refHandler, true);
 }
 
-pub fn renameLabel(arena: *std.heap.ArenaAllocator, decl_handle: DeclWithHandle, new_name: []const u8, edits: *std.StringHashMap([]lsp.TextEdit), encoding: offsets.Encoding) !void {
+pub fn renameLabel(
+    arena: *std.heap.ArenaAllocator,
+    decl_handle: DeclWithHandle,
+    new_name: []const u8,
+    edits: *std.StringHashMap([]lsp.TextEdit),
+) !void {
     std.debug.assert(decl_handle.decl.* == .label_decl);
-    try references.labelReferences(decl_handle, encoding, true, RefHandlerContext{
+    try references.labelReferences(decl_handle, true, RefHandlerContext{
         .edits = edits,
         .allocator = arena.allocator(),
         .new_name = new_name,

@@ -13,82 +13,72 @@ const analysis = ws.analysis;
 fn renameDefinitionGlobal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     handle: *Document,
     pos_index: usize,
     new_name: []const u8,
-    offset_encoding: offsets.Encoding,
-) !lsp.Response {
+) !?lsp.WorkspaceEdit {
     if (try workspace.getSymbolGlobal(arena, handle, pos_index)) |decl| {
         var workspace_edit = lsp.WorkspaceEdit{
             .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
         };
-        try rename.renameSymbol(arena, workspace, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-        return lsp.Response{
-            .id = id,
-            .result = .{ .WorkspaceEdit = workspace_edit },
-        };
+        try rename.renameSymbol(arena, workspace, decl, new_name, &workspace_edit.changes.?);
+        return workspace_edit;
     } else {
-        return lsp.Response.createNull(id);
+        return null;
     }
 }
 
 fn renameDefinitionFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     handle: *Document,
     position: DocumentPosition,
     range: std.zig.Token.Loc,
     new_name: []const u8,
-    offset_encoding: offsets.Encoding,
-) !lsp.Response {
+) !lsp.WorkspaceEdit {
     const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position, range);
-
     var workspace_edit = lsp.WorkspaceEdit{
         .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
     };
-    try rename.renameSymbol(arena, workspace, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .WorkspaceEdit = workspace_edit },
-    };
+    try rename.renameSymbol(arena, workspace, decl, new_name, &workspace_edit.changes.?);
+    return workspace_edit;
 }
 
 fn renameDefinitionLabel(
     arena: *std.heap.ArenaAllocator,
-    id: i64,
     handle: *Document,
     pos_index: usize,
     new_name: []const u8,
-    offset_encoding: offsets.Encoding,
-) !lsp.Response {
-    const decl = (try handle.getLabelGlobal(pos_index)) orelse return lsp.Response.createNull(id);
-
-    var workspace_edit = lsp.WorkspaceEdit{
-        .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
-    };
-    try rename.renameLabel(arena, decl, new_name, &workspace_edit.changes.?, offset_encoding);
-    return lsp.Response{
-        .id = id,
-        .result = .{ .WorkspaceEdit = workspace_edit },
-    };
+) !?lsp.WorkspaceEdit {
+    if (try handle.getLabelGlobal(pos_index)) |decl| {
+        var workspace_edit = lsp.WorkspaceEdit{
+            .changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator()),
+        };
+        try rename.renameLabel(arena, decl, new_name, &workspace_edit.changes.?);
+        return workspace_edit;
+    } else {
+        return null;
+    }
 }
 
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     handle: *Document,
     doc_position: DocumentPosition,
     new_name: []const u8,
-    offset_encoding: offsets.Encoding,
-) !lsp.Response {
+) !?lsp.WorkspaceEdit {
     const pos_context = position_context.documentPositionContext(arena, doc_position);
     return switch (pos_context) {
-        .var_access => try renameDefinitionGlobal(arena, workspace, id, handle, doc_position.absolute_index, new_name, offset_encoding),
-        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, id, handle, doc_position, range, new_name, offset_encoding),
-        .label => try renameDefinitionLabel(arena, id, handle, doc_position.absolute_index, new_name, offset_encoding),
-        else => lsp.Response.createNull(id),
+        .var_access => try renameDefinitionGlobal(arena, workspace, handle, doc_position.absolute_index, new_name),
+        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, handle, doc_position, range, new_name),
+        .label => try renameDefinitionLabel(arena, handle, doc_position.absolute_index, new_name),
+        else => null,
     };
 }
+
+// lsp.Response.createNull(id),
+// return lsp.Response{
+//     .id = id,
+//     .result = .{ .WorkspaceEdit = workspace_edit },
+// };
