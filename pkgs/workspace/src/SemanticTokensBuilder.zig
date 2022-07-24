@@ -1,5 +1,7 @@
 const std = @import("std");
 const semantic_tokens = @import("./semantic_tokens.zig");
+const SemanticTokenType = semantic_tokens.SemanticTokenType;
+const SemanticTokenModifiers = semantic_tokens.SemanticTokenModifiers;
 
 const LineX = struct {
     line: u32,
@@ -39,13 +41,32 @@ fn init(allocator: std.mem.Allocator, text: []const u8) Self {
 fn push(self: *Self, token: std.zig.Token) !void {
     switch (token.tag) {
         .eof => unreachable,
-        .invalid,
-        .invalid_periodasterisks,
-        .identifier,
         .string_literal,
         .multiline_string_literal_line,
         .char_literal,
-        .builtin,
+        => {
+            try self.push_semantic_token(token.loc, .string, .{});
+        },
+        .integer_literal,
+        .float_literal,
+        => {
+            try self.push_semantic_token(token.loc, .number, .{});
+        },
+        .identifier => {
+            // container variable
+            // field
+            // decl, call
+            // type
+            try self.push_semantic_token(token.loc, .variable, .{});
+        },
+        .builtin => {
+            try self.push_semantic_token(token.loc, .function, .{
+                .defaultLibrary = true,
+            });
+        },
+        .invalid,
+        .invalid_periodasterisks,
+        => {},
         .bang,
         .pipe,
         .pipe_pipe,
@@ -108,11 +129,14 @@ fn push(self: *Self, token: std.zig.Token) !void {
         .angle_bracket_angle_bracket_right,
         .angle_bracket_angle_bracket_right_equal,
         .tilde,
-        .integer_literal,
-        .float_literal,
+        => {
+            try self.push_semantic_token(token.loc, .operator, .{});
+        },
         .doc_comment,
         .container_doc_comment,
-        => {},
+        => {
+            try self.push_semantic_token(token.loc, .comment, .{ .documentation = true });
+        },
         .keyword_addrspace,
         .keyword_align,
         .keyword_allowzero,
@@ -163,7 +187,7 @@ fn push(self: *Self, token: std.zig.Token) !void {
         .keyword_volatile,
         .keyword_while,
         => {
-            try self.push_semantic_token(token.loc, semantic_tokens.SemanticTokenType.keyword, .{});
+            try self.push_semantic_token(token.loc, .keyword, .{});
         },
     }
 }
@@ -171,8 +195,8 @@ fn push(self: *Self, token: std.zig.Token) !void {
 fn push_semantic_token(
     self: *Self,
     loc: std.zig.Token.Loc,
-    token_type: semantic_tokens.SemanticTokenType,
-    modifier: semantic_tokens.SemanticTokenModifiers,
+    token_type: SemanticTokenType,
+    modifier: SemanticTokenModifiers,
 ) !void {
     const pos_x = try getPositionFromBytePosition(self.text, loc.start);
     try self.array.appendSlice(&.{
