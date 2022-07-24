@@ -36,6 +36,11 @@ pub fn utf8PositionToUtf16(text: []const u8, src: lsp.Position) !lsp.Position {
     var utf8: u32 = 0;
     const line_pos = try DocumentPosition.getLine(text, @intCast(usize, src.line));
     while (utf8 < src.character) : (n += 1) {
+        if(utf8>=line_pos.line.len)
+        {
+            std.log.err("EOL: {}", .{src});
+            break;
+        }
         utf8 += @intCast(u32, try std.unicode.utf8ByteSequenceLength(line_pos.line[utf8]));
     }
     return lsp.Position{ .line = src.line, .character = n };

@@ -4,29 +4,6 @@ const SemanticTokenType = semantic_tokens.SemanticTokenType;
 const SemanticTokenModifiers = semantic_tokens.SemanticTokenModifiers;
 const Document = @import("./Document.zig");
 
-const LineX = struct {
-    line: u32,
-    x: u32,
-};
-
-fn getPositionFromBytePosition(text: []const u8, byte_position: usize) !LineX {
-    var line: u32 = 0;
-    var x: u32 = 0;
-    var i: u32 = 0;
-    while (i < byte_position) {
-        const len: u32 = try std.unicode.utf8ByteSequenceLength(text[i]);
-        if (text[i] == '\n') {
-            // new line
-            line += 1;
-            x = 0;
-        } else {
-            x += len;
-        }
-        i += len;
-    }
-    return LineX{ .line = line, .x = x };
-}
-
 const Self = @This();
 
 array: std.ArrayList(u32),
@@ -199,7 +176,7 @@ fn push_semantic_token(
     token_type: SemanticTokenType,
     modifier: SemanticTokenModifiers,
 ) !void {
-    const pos_x = try getPositionFromBytePosition(self.document.utf8_buffer.text, loc.start);
+    const pos_x = try self.document.line_search.getPositionFromBytePosition(loc.start);
     try self.array.appendSlice(&.{
         pos_x.line,
         pos_x.x,
