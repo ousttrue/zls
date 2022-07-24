@@ -2,6 +2,7 @@ const std = @import("std");
 const semantic_tokens = @import("./semantic_tokens.zig");
 const SemanticTokenType = semantic_tokens.SemanticTokenType;
 const SemanticTokenModifiers = semantic_tokens.SemanticTokenModifiers;
+const Document = @import("./Document.zig");
 
 const LineX = struct {
     line: u32,
@@ -29,12 +30,12 @@ fn getPositionFromBytePosition(text: []const u8, byte_position: usize) !LineX {
 const Self = @This();
 
 array: std.ArrayList(u32),
-text: []const u8,
+document: *Document,
 
-fn init(allocator: std.mem.Allocator, text: []const u8) Self {
+fn init(allocator: std.mem.Allocator, document: *Document) Self {
     return Self{
         .array = std.ArrayList(u32).init(allocator),
-        .text = text,
+        .document = document,
     };
 }
 
@@ -198,7 +199,7 @@ fn push_semantic_token(
     token_type: SemanticTokenType,
     modifier: SemanticTokenModifiers,
 ) !void {
-    const pos_x = try getPositionFromBytePosition(self.text, loc.start);
+    const pos_x = try getPositionFromBytePosition(self.document.utf8_buffer.text, loc.start);
     try self.array.appendSlice(&.{
         pos_x.line,
         pos_x.x,
@@ -208,11 +209,11 @@ fn push_semantic_token(
     });
 }
 
-pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, text: []const u8) ![]u32 {
+pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Document) ![]u32 {
     const allocator = arena.allocator();
 
-    var self = init(allocator, text);
-    var tokenizer = std.zig.Tokenizer.init(try allocator.dupeZ(u8, text));
+    var self = init(allocator, document);
+    var tokenizer = std.zig.Tokenizer.init(document.utf8_buffer.text);
     while (true) {
         const token = tokenizer.next();
         if (token.tag == .eof) {
