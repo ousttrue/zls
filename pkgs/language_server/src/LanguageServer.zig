@@ -218,7 +218,7 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
         .range = false,
         .legend = .{
             .tokenTypes = block: {
-                const tokTypeFields = std.meta.fields(lsp.SemanticTokenType);
+                const tokTypeFields = std.meta.fields(semantic_tokens.SemanticTokenType);
                 var names: [tokTypeFields.len][]const u8 = undefined;
                 for (tokTypeFields) |field, i| {
                     names[i] = field.name;
@@ -226,7 +226,7 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
                 break :block &names;
             },
             .tokenModifiers = block: {
-                const tokModFields = std.meta.fields(lsp.SemanticTokenModifiers);
+                const tokModFields = std.meta.fields(semantic_tokens.SemanticTokenModifiers);
                 var names: [tokModFields.len][]const u8 = undefined;
                 for (tokModFields) |field, i| {
                     names[i] = field.name;

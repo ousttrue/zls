@@ -8,6 +8,7 @@ pub const ZigEnv = @import("./ZigEnv.zig");
 pub const Stdio = @import("./Stdio.zig");
 pub const Builtin = @import("./Builtin.zig");
 pub const ClientCapabilities = @import("./ClientCapabilities.zig");
+pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
 pub const TokenLocation = @import("./TokenLocation.zig");
 pub const document_symbols = @import("./document_symbols.zig");

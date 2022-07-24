@@ -1,7 +1,6 @@
 pub const types = @import("./types.zig");
 const response = @import("./response.zig");
 const notification = @import("./notification.zig");
-const semantic_token = @import("./semantic_token.zig");
 pub const requests = @import("./requests.zig");
 pub const initialize = @import("./initialize.zig");
 pub const TextEdit = types.TextEdit;
@@ -22,8 +21,5 @@ pub const Diagnostic = notification.Diagnostic;
 
 pub const Response = response.Response;
 pub const ResponseParams = response.ResponseParams;
-
-pub const SemanticTokenType = semantic_token.SemanticTokenType;
-pub const SemanticTokenModifiers = semantic_token.SemanticTokenModifiers;
 
 pub const fromDynamicTree = @import("./deserializer.zig").fromDynamicTree;

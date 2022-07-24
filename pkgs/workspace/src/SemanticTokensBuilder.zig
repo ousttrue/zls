@@ -1,16 +1,18 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
-const lsp = @import("lsp");
 const ast = @import("./ast.zig");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
+const semantic_tokens = @import("./semantic_tokens.zig");
+const SemanticTokenType = semantic_tokens.SemanticTokenType;
+const SemanticTokenModifiers = semantic_tokens.SemanticTokenModifiers;
 
-fn fieldTokenType(container_decl: Ast.Node.Index, handle: *Document) ?lsp.SemanticTokenType {
+fn fieldTokenType(container_decl: Ast.Node.Index, handle: *Document) ?SemanticTokenType {
     const main_token = handle.tree.nodes.items(.main_token)[container_decl];
     if (main_token > handle.tree.tokens.len) return null;
-    return @as(?lsp.SemanticTokenType, switch (handle.tree.tokens.items(.tag)[main_token]) {
+    return @as(?SemanticTokenType, switch (handle.tree.tokens.items(.tag)[main_token]) {
         .keyword_struct => .property,
         .keyword_union, .keyword_enum => .enumMember,
         else => null,
@@ -60,7 +62,7 @@ fn init(allocator: std.mem.Allocator, handle: *Document) Self {
     };
 }
 
-fn add(self: *Self, token: Ast.TokenIndex, token_type: lsp.SemanticTokenType, token_modifiers: lsp.SemanticTokenModifiers) !void {
+fn add(self: *Self, token: Ast.TokenIndex, token_type: SemanticTokenType, token_modifiers: SemanticTokenModifiers) !void {
     const tree = self.handle.tree;
     const starts = tree.tokens.items(.start);
     const next_start = starts[token];
@@ -101,7 +103,7 @@ fn handleToken(self: *Self, tok: Ast.TokenIndex) !void {
     const tree = self.handle.tree;
     // TODO More highlighting here
     const tok_id = tree.tokens.items(.tag)[tok];
-    const tok_type: lsp.SemanticTokenType = switch (tok_id) {
+    const tok_type: SemanticTokenType = switch (tok_id) {
         .keyword_unreachable => .keyword,
         .integer_literal, .float_literal => .number,
         .string_literal, .multiline_string_literal_line, .char_literal => .string,
@@ -111,10 +113,10 @@ fn handleToken(self: *Self, tok: Ast.TokenIndex) !void {
             const id = @enumToInt(tok_id);
             if (id >= @enumToInt(std.zig.Token.Tag.keyword_align) and
                 id <= @enumToInt(std.zig.Token.Tag.keyword_while))
-                break :blk lsp.SemanticTokenType.keyword;
+                break :blk SemanticTokenType.keyword;
             if (id >= @enumToInt(std.zig.Token.Tag.bang) and
                 id <= @enumToInt(std.zig.Token.Tag.tilde))
-                break :blk lsp.SemanticTokenType.operator;
+                break :blk SemanticTokenType.operator;
 
             return;
         },
@@ -161,18 +163,18 @@ fn handleComments(self: *Self, from: usize, to: usize) !void {
             continue;
 
         const comment_start = i;
-        var mods = lsp.SemanticTokenModifiers{};
+        var mods = SemanticTokenModifiers{};
         if (i + 2 < to and (source[i + 2] == '!' or source[i + 2] == '/'))
             mods.documentation = true;
 
         while (i < to - 1 and source[i] != '\n') : (i += 1) {}
 
         const length = try lineSectionLength(self.handle.tree, comment_start, i);
-        try self.addDirect(lsp.SemanticTokenType.comment, mods, comment_start, length);
+        try self.addDirect(SemanticTokenType.comment, mods, comment_start, length);
     }
 }
 
-fn addDirect(self: *Self, tok_type: lsp.SemanticTokenType, tok_mod: lsp.SemanticTokenModifiers, start: usize, length: usize) !void {
+fn addDirect(self: *Self, tok_type: SemanticTokenType, tok_mod: SemanticTokenModifiers, start: usize, length: usize) !void {
     // const delta = tokenRelativeLocation(
     //     self.handle.tree,
     //     self.previous_position,
@@ -195,13 +197,13 @@ fn toOwnedSlice(self: *Self) []u32 {
     return self.arr.toOwnedSlice();
 }
 
-inline fn writeTokenMod(self: *Self, token_idx: ?Ast.TokenIndex, tok_type: lsp.SemanticTokenType, tok_mod: lsp.SemanticTokenModifiers) !void {
+inline fn writeTokenMod(self: *Self, token_idx: ?Ast.TokenIndex, tok_type: SemanticTokenType, tok_mod: SemanticTokenModifiers) !void {
     if (token_idx) |ti| {
         try self.add(ti, tok_type, tok_mod);
     }
 }
 
-inline fn writeToken(self: *Self, token_idx: ?Ast.TokenIndex, tok_type: lsp.SemanticTokenType) !void {
+inline fn writeToken(self: *Self, token_idx: ?Ast.TokenIndex, tok_type: SemanticTokenType) !void {
     return try self.writeTokenMod(token_idx, tok_type, .{});
 }
 
@@ -211,14 +213,14 @@ fn writeDocComments(builder: *Self, tree: Ast, doc: Ast.TokenIndex) !void {
     while (token_tags[tok_idx] == .doc_comment or
         token_tags[tok_idx] == .container_doc_comment) : (tok_idx += 1)
     {
-        var tok_mod = lsp.SemanticTokenModifiers{};
+        var tok_mod = SemanticTokenModifiers{};
         tok_mod.set("documentation");
 
         try builder.add(tok_idx, .comment, tok_mod);
     }
 }
 
-fn colorIdentifierBasedOnType(builder: *Self, type_node: TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: lsp.SemanticTokenModifiers) !void {
+fn colorIdentifierBasedOnType(builder: *Self, type_node: TypeWithHandle, target_tok: Ast.TokenIndex, tok_mod: SemanticTokenModifiers) !void {
     if (type_node.type.is_type_val) {
         var new_tok_mod = tok_mod;
         if (type_node.isNamespace()) {
@@ -448,17 +450,17 @@ fn writeNodeTokens(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *
             try builder.writeToken(fn_proto.lib_name, .string);
             try builder.writeToken(fn_proto.ast.fn_token, .keyword);
 
-            const func_name_tok_type: lsp.SemanticTokenType = if (TypeWithHandle.isTypeFunction(tree, fn_proto))
+            const func_name_tok_type: SemanticTokenType = if (TypeWithHandle.isTypeFunction(tree, fn_proto))
                 .type
             else
                 .function;
 
             const tok_mod = if (TypeWithHandle.isGenericFunction(tree, fn_proto))
-                lsp.SemanticTokenModifiers{
+                SemanticTokenModifiers{
                     // .generic = true
                 }
             else
-                lsp.SemanticTokenModifiers{};
+                SemanticTokenModifiers{};
 
             try builder.writeTokenMod(fn_proto.name_token, func_name_tok_type, tok_mod);
 
@@ -630,7 +632,7 @@ fn writeNodeTokens(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *
                 else => unreachable,
             };
 
-            var field_token_type: ?lsp.SemanticTokenType = null;
+            var field_token_type: ?SemanticTokenType = null;
 
             if (struct_init.ast.type_expr != 0) {
                 try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, struct_init.ast.type_expr });
@@ -859,7 +861,7 @@ fn writeNodeTokens(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *
         .@"orelse",
         => {
             try await @asyncCall(child_frame, {}, writeNodeTokens, .{ builder, arena, workspace, node_data[node].lhs });
-            const token_type: lsp.SemanticTokenType = switch (tag) {
+            const token_type: SemanticTokenType = switch (tag) {
                 .bool_and, .bool_or, .@"orelse" => .keyword,
                 else => .operator,
             };
@@ -899,10 +901,10 @@ fn writeNodeTokens(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *
                 switch (decl_type.decl.*) {
                     .ast_node => |decl_node| {
                         if (decl_type.handle.tree.nodes.items(.tag)[decl_node].isContainerField()) {
-                            const tok_type: ?lsp.SemanticTokenType = if (ast.isContainer(lhs_type.handle.tree, left_type_node))
+                            const tok_type: ?SemanticTokenType = if (ast.isContainer(lhs_type.handle.tree, left_type_node))
                                 fieldTokenType(decl_node, lhs_type.handle)
                             else if (left_type_node == 0)
-                                lsp.SemanticTokenType.property
+                                SemanticTokenType.property
                             else
                                 null;
 
@@ -991,7 +993,7 @@ fn writeNodeTokens(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *
     }
 }
 
-fn writeContainerField(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *Workspace, node: Ast.Node.Index, field_token_type: ?lsp.SemanticTokenType, child_frame: anytype) !void {
+fn writeContainerField(builder: *Self, arena: *std.heap.ArenaAllocator, workspace: *Workspace, node: Ast.Node.Index, field_token_type: ?SemanticTokenType, child_frame: anytype) !void {
     const tree = builder.handle.tree;
     const container_field = ast.containerField(tree, node).?;
     const base = tree.nodes.items(.main_token)[node];
