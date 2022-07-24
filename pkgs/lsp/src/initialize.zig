@@ -29,6 +29,15 @@ pub const InitializeParams = struct {
     workspaceFolders: ?[]const types.WorkspaceFolder,
 };
 
+pub const SemanticTokensProvider = struct {
+    full: bool,
+    range: bool,
+    legend: struct {
+        tokenTypes: []const string,
+        tokenModifiers: []const string,
+    },
+};
+
 // Only includes options we set in our initialize result.
 pub const ServerCapabilities = struct {
     signatureHelpProvider: struct {
@@ -72,14 +81,7 @@ pub const ServerCapabilities = struct {
             changeNotifications: bool,
         },
     },
-    semanticTokensProvider: struct {
-        full: bool,
-        range: bool,
-        legend: struct {
-            tokenTypes: []const string,
-            tokenModifiers: []const string,
-        },
-    },
+    semanticTokensProvider: SemanticTokensProvider,
 };
 
 pub const InitializeResult = struct {

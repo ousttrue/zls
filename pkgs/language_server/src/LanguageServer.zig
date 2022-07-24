@@ -9,6 +9,7 @@ const Document = ws.Document;
 const DocumentPosition = ws.DocumentPosition;
 const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
+const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const document_symbols = ws.document_symbols;
 const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
@@ -393,17 +394,35 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const token_array = try semantic_tokens.writeAllSemanticTokens(arena, &self.workspace, doc);
+    var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, &self.workspace, doc);
     if (self.offset_encoding == .utf16) {
-        for (token_array) |*token, i| {
+        var i: u32 = 0;
+        while (i < token_array.len) : (i += 5) {
             // { line: 2, startChar:  5, length: 3, tokenType: 0, tokenModifiers: 3 },
-            if (i % 5 == 1) {
-                // startChar
+            const line = token_array[i];
+            const start_char = token_array[i + 1];
+            const end_char = start_char + token_array[i + 2];
+            const start = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, .{ .line = line, .character = start_char });
+            const end = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, .{ .line = line, .character = end_char });
 
-                // length
+            token_array[i + 1] = @intCast(u32, start.character);
+            token_array[i + 2] = @intCast(u32, end.character - start.character);
+        }
+    }
+    // convert to delta
+    {
+        var prev_line: u32 = 0;
+        var prev_character: u32 = 0;
+        var i: u32 = 0;
+        while (i < token_array.len) : (i += 5) {
+            const current_line = token_array[i];
+            const current_character = token_array[i + 1];
 
-            }
-            _ = token;
+            token_array[i] = current_line - prev_line;
+            token_array[i + 1] = current_character - if(current_line==prev_line) prev_character else 0;
+
+            prev_line = current_line;
+            prev_character = current_character;
         }
     }
     return lsp.Response{
