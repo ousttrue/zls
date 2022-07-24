@@ -394,7 +394,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     }
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, &self.workspace, doc);
+    var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, doc.utf8_buffer.text);
     if (self.offset_encoding == .utf16) {
         var i: u32 = 0;
         while (i < token_array.len) : (i += 5) {
