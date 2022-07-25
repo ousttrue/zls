@@ -7,6 +7,7 @@ const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
 const DocumentPosition = ws.DocumentPosition;
+const LinePosition = ws.LinePosition;
 const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
@@ -24,13 +25,26 @@ const getSignatureInfo = ws.signature_help.getSignatureInfo;
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 
-fn symbolToUtf16(text: []const u8, symbol: *lsp.DocumentSymbol) anyerror!void {
-    symbol.range.start = try TextPosition.utf8PositionToUtf16(text, symbol.range.start);
-    symbol.range.end = try TextPosition.utf8PositionToUtf16(text, symbol.range.end);
-    symbol.selectionRange.start = try TextPosition.utf8PositionToUtf16(text, symbol.selectionRange.start);
-    symbol.selectionRange.end = try TextPosition.utf8PositionToUtf16(text, symbol.selectionRange.end);
+fn toLineX(src: lsp.Position) LinePosition.LineX {
+    return .{ .line = @intCast(u32, src.line), .x = @intCast(u32, src.character) };
+}
+
+fn fromLineX(src: LinePosition.LineX) lsp.Position {
+    return .{ .line = src.line, .character = src.x };
+}
+
+fn utf8PositionToUtf16(line_position: LinePosition, src: lsp.Position) !lsp.Position
+{
+    return fromLineX(try line_position.utf8PositionToUtf16(toLineX(src)));
+}
+
+fn symbolToUtf16(line_position: LinePosition, symbol: *lsp.DocumentSymbol) anyerror!void {
+    symbol.range.start = try utf8PositionToUtf16(line_position, symbol.range.start);
+    symbol.range.end = try utf8PositionToUtf16(line_position, symbol.range.end);
+    symbol.selectionRange.start = try utf8PositionToUtf16(line_position, symbol.selectionRange.start);
+    symbol.selectionRange.end = try utf8PositionToUtf16(line_position, symbol.selectionRange.end);
     for (symbol.children) |*child| {
-        try symbolToUtf16(text, child);
+        try symbolToUtf16(line_position, child);
     }
 }
 
@@ -338,7 +352,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     var symbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree);
     if (self.offset_encoding == .utf16) {
         for (symbols) |*symbol| {
-            try symbolToUtf16(doc.utf8_buffer.text, symbol);
+            try symbolToUtf16(doc.line_position, symbol);
         }
     }
     return lsp.Response{
@@ -419,7 +433,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
             const current_character = token_array[i + 1];
 
             token_array[i] = current_line - prev_line;
-            token_array[i + 1] = current_character - if(current_line==prev_line) prev_character else 0;
+            token_array[i + 1] = current_character - if (current_line == prev_line) prev_character else 0;
 
             prev_line = current_line;
             prev_character = current_character;
@@ -472,7 +486,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     if (try self.workspace.gotoHandler(arena, doc, doc_position, true)) |location| {
         var goto = lsp.Position{ .line = location.row, .character = location.col };
         if (self.offset_encoding == .utf16) {
-            goto = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, goto);
+            goto = try utf8PositionToUtf16(doc.line_position, goto);
         }
         return lsp.Response{
             .id = id,
@@ -533,8 +547,8 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             var it = workspace_edit.changes.?.valueIterator();
             while (it.next()) |edits| {
                 for (edits.*) |*edit| {
-                    edit.range.start = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, edit.range.start);
-                    edit.range.end = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, edit.range.end);
+                    edit.range.start = try utf8PositionToUtf16(doc.line_position, edit.range.start);
+                    edit.range.end = try utf8PositionToUtf16(doc.line_position, edit.range.end);
                 }
             }
         }
@@ -564,8 +578,8 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config)) |*locations| {
         if (self.offset_encoding == .utf16) {
             for (locations.*) |*loc| {
-                loc.range.start = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, loc.range.start);
-                loc.range.end = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, loc.range.end);
+                loc.range.start = try utf8PositionToUtf16(doc.line_position, loc.range.start);
+                loc.range.end = try utf8PositionToUtf16(doc.line_position, loc.range.end);
             }
         }
 

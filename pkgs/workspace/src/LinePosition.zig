@@ -63,7 +63,7 @@ pub fn getLineIndexFromBytePosition(self: Self, byte_position: usize) !usize {
     unreachable;
 }
 
-const LineX = struct {
+pub const LineX = struct {
     line: u32,
     x: u32,
 };
