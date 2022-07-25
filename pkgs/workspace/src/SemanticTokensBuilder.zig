@@ -168,8 +168,19 @@ fn push(self: *Self, token_idx: usize, token: std.zig.Token) !void {
 
 fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void
 {
-    _ = token_idx;
-    return self.push_semantic_token(loc, .variable, .{});
+    const ast_context = self.document.ast_context;
+    const idx = ast_context.tokens_node[token_idx];
+    const tag = ast_context.tree.nodes.items(.tag);
+    const node_tag = tag[idx];
+    switch(node_tag)
+    {
+        .enum_literal => {
+            try self.push_semantic_token(loc, .enumMember, .{});
+        },
+        else =>{
+            try self.push_semantic_token(loc, .variable, .{});
+        },
+    }
 }
 
 fn push_semantic_token(
