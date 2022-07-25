@@ -260,6 +260,9 @@ fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
     self.tree.deinit(self.allocator);
     self.tree = try std.zig.parse(self.allocator, self.utf8_buffer.text);
 
+    self.line_position.deinit();
+    self.line_position = try LinePosition.init(self.allocator, self.utf8_buffer.text);
+
     self.document_scope.deinit(self.allocator);
     self.document_scope = try DocumentScope.init(self.allocator, self.tree);
 
