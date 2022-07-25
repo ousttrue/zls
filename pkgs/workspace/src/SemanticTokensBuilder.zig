@@ -166,19 +166,146 @@ fn push(self: *Self, token_idx: usize, token: std.zig.Token) !void {
     }
 }
 
-fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void
-{
+fn is_call(node_tag: std.zig.Ast.Node.Tag) bool {
+    return switch (node_tag) {
+        .call, .call_one => true,
+        else => false,
+    };
+}
+
+fn is_operator(node_tag: std.zig.Ast.Node.Tag) bool {
+    return switch (node_tag) {
+        .@"errdefer",
+        .@"defer",
+        .@"catch",
+        // .field_access,
+        .unwrap_optional,
+        .equal_equal,
+        .bang_equal,
+        .less_than,
+        .greater_than,
+        .less_or_equal,
+        .greater_or_equal,
+        .assign_mul,
+        .assign_div,
+        .assign_mod,
+        .assign_add,
+        .assign_sub,
+        .assign_shl,
+        .assign_shl_sat,
+        .assign_shr,
+        .assign_bit_and,
+        .assign_bit_xor,
+        .assign_bit_or,
+        .assign_mul_wrap,
+        .assign_add_wrap,
+        .assign_sub_wrap,
+        .assign_mul_sat,
+        .assign_add_sat,
+        .assign_sub_sat,
+        .assign,
+        .merge_error_sets,
+        .mul,
+        .div,
+        .mod,
+        .array_mult,
+        .mul_wrap,
+        .mul_sat,
+        .add,
+        .sub,
+        .array_cat,
+        .add_wrap,
+        .sub_wrap,
+        .add_sat,
+        .sub_sat,
+        .shl,
+        .shl_sat,
+        .shr,
+        .bit_and,
+        .bit_xor,
+        .bit_or,
+        .@"orelse",
+        .bool_and,
+        .bool_or,
+        .bool_not,
+        .negation,
+        .bit_not,
+        .negation_wrap,
+        .address_of,
+        .@"try",
+        => true,
+        else => false,
+    };
+}
+
+fn is_variable(node_tag: std.zig.Ast.Node.Tag) bool {
+    if (is_call(node_tag)) {
+        return true;
+    }
+    if (is_operator(node_tag)) {
+        return true;
+    }
+    return switch (node_tag) {
+        .switch_comma => true,
+        else => false,
+    };
+}
+
+fn is_literal(name: []const u8) bool {
+    for ([_][]const u8{ "true", "false", "null", "undefined" }) |value| {
+        if (std.mem.eql(u8, name, value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn is_type(name: []const u8) bool {
+    for ([_][]const u8{ "type", "bool", "f16", "f32", "f64", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize" }) |value| {
+        if (std.mem.eql(u8, name, value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void {
     const ast_context = self.document.ast_context;
     const idx = ast_context.tokens_node[token_idx];
     const tag = ast_context.tree.nodes.items(.tag);
     const node_tag = tag[idx];
-    switch(node_tag)
-    {
+    // const parent_idx = ast_context.nodes_parent[idx];
+    // const parent_tag = tag[parent_idx];
+    const name = ast_context.getText(loc);
+    switch (node_tag) {
         .enum_literal => {
             try self.push_semantic_token(loc, .enumMember, .{});
         },
-        else =>{
+        .identifier, .field_access => {
+            if (is_literal(name)) {
+                try self.push_semantic_token(loc, .number, .{});
+            } else if (std.ascii.isUpper(name[0])) {
+                try self.push_semantic_token(loc, .type, .{});
+            } else if (is_type(name)) {
+                try self.push_semantic_token(loc, .type, .{});
+            } else {
+                try self.push_semantic_token(loc, .variable, .{});
+            }
+        },
+        .ptr_type_aligned => {
+            try self.push_semantic_token(loc, .type, .{});
+        },
+        .simple_var_decl => {
             try self.push_semantic_token(loc, .variable, .{});
+        },
+        .fn_proto_multi, .fn_proto_simple => {
+            try self.push_semantic_token(loc, .function, .{});
+        },
+        .container_field_init => {
+            try self.push_semantic_token(loc, .property, .{});
+        },
+        else => {
+            // try self.push_semantic_token(loc, .variable, .{});
         },
     }
 }
@@ -203,8 +330,7 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
     const allocator = arena.allocator();
 
     var self = init(allocator, document);
-    for(document.ast_context.tokens.items)|token, i|
-    {
+    for (document.ast_context.tokens.items) |token, i| {
         try self.push(i, token);
     }
 

@@ -48,17 +48,44 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .block_two,
         .block_two_semicolon,
         .@"catch",
+        .equal_equal,
+        .bang_equal,
+        .less_than,
+        .greater_than,
+        .less_or_equal,
+        .greater_or_equal,
+        .assign_mul,
+        .assign,
+        .merge_error_sets,
+        .mul,
+        .div,
+        .mod,
+        .array_mult,
+        .mul_wrap,
+        .mul_sat,
+        .add,
+        .sub,
+        .array_cat,
+        .bit_and,
+        .bit_xor,
+        .bit_or,
+        .@"orelse",
+        .bool_and,
+        .bool_or,
         .if_simple,
         .while_simple,
         .for_simple,
+        .@"for",
         .call_one,
         .call_one_comma,
+        .container_field_init,
         => {
             self.nodeData(node_data);
         },
         .@"try",
         .@"return",
         .field_access,
+        .optional_type,
         => {
             self.append(node_data.lhs);
         },
@@ -109,6 +136,21 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
             for (struct_init.ast.fields) |child| {
                 self.append(child);
             }
+        },
+        .fn_proto_multi => {
+            const fn_proto = tree.fnProtoMulti(idx);
+            for (fn_proto.ast.params) |child| {
+                self.append(child);
+            }
+            self.append(fn_proto.ast.return_type);
+        },
+        .fn_proto_simple => {
+            var buf: [1]std.zig.Ast.Node.Index = undefined;
+            const fn_proto = tree.fnProtoSimple(&buf, idx);
+            for (fn_proto.ast.params) |child| {
+                self.append(child);
+            }
+            self.append(fn_proto.ast.return_type);
         },
         else => {
             // std.debug.print("unknown node: {s}\n", .{@tagName(node_tag)});

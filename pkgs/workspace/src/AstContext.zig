@@ -88,8 +88,12 @@ pub fn delete(self: *Self) void {
     self.allocator.destroy(self);
 }
 
+pub fn getText(self: Self, loc: std.zig.Token.Loc) []const u8{
+    return self.tree.source[loc.start..loc.end];
+}
+
 pub fn getTokenText(self: Self, token: std.zig.Token) []const u8 {
-    return self.tree.source[token.loc.start..token.loc.end];
+    return self.getText(token.loc);
 }
 
 pub fn getTokens(self: Self, start: usize, last: usize) []const std.zig.Token {

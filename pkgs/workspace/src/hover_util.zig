@@ -90,6 +90,8 @@ pub fn process(
     byte_position: u32,
     client_capabilities: *ClientCapabilities,
 ) !?[]const u8 {
+    _ = workspace;
+    _ = client_capabilities;
     if (doc.ast_context.tokenFromBytePos(byte_position)) |token_with_index| {
         const name = doc.ast_context.getTokenText(token_with_index.token);
         switch (token_with_index.token.tag) {
@@ -111,42 +113,42 @@ pub fn process(
                 const idx = doc.ast_context.tokens_node[token_with_index.index];
                 const node_tag = tag[idx];
                 switch (node_tag) {
-                    .simple_var_decl => {
-                        logger.debug("(hover)[var_access]", .{});
-                        if (try workspace.getSymbolGlobal(arena, doc, byte_position)) |decl| {
-                            return try hoverSymbol(arena, workspace, decl, client_capabilities);
-                        } else {
-                            return error.HoverError;
-                        }
-                    },
-                    .fn_proto_multi => {
-                        return ast.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
-                    },
-                    .field_access => {
-                        const lhs = AstGetChildren.getChild(arena.allocator(), &doc.tree, idx);
-                        const lhs_tag = tag[lhs];
+                    // .simple_var_decl => {
+                    //     logger.debug("(hover)[var_access]", .{});
+                    //     if (try workspace.getSymbolGlobal(arena, doc, byte_position)) |decl| {
+                    //         return try hoverSymbol(arena, workspace, decl, client_capabilities);
+                    //     } else {
+                    //         return error.HoverError;
+                    //     }
+                    // },
+                    // .fn_proto_multi => {
+                    //     return ast.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
+                    // },
+                    // .field_access => {
+                    //     const lhs = AstGetChildren.getChild(arena.allocator(), &doc.tree, idx);
+                    //     const lhs_tag = tag[lhs];
 
-                        // const decl = try getSymbolFieldAccess(arena, workspace, doc, doc_position, token_with_index.token.loc. name);
-                        // return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-                        var buffer = std.ArrayList(u8).init(arena.allocator());
-                        const w = buffer.writer();
-                        try w.print("[field_access] ({}).{s}: {} =>\n* [0]{}\n", .{
-                            lhs_tag,
-                            name,
-                            token_with_index.token.tag,
-                            node_tag,
-                        });
-                        var current = doc.ast_context.nodes_parent[idx];
-                        var i: u32 = 1;
-                        while (current != 0) : ({
-                            current = doc.ast_context.nodes_parent[current];
-                            i += 1;
-                        }) {
-                            const current_tag = tag[current];
-                            try w.print("* [{}]{}\n", .{ i, current_tag });
-                        }
-                        return buffer.items;
-                    },
+                    //     // const decl = try getSymbolFieldAccess(arena, workspace, doc, doc_position, token_with_index.token.loc. name);
+                    //     // return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+                    //     var buffer = std.ArrayList(u8).init(arena.allocator());
+                    //     const w = buffer.writer();
+                    //     try w.print("[field_access] ({}).{s}: {} =>\n* [0]{}\n", .{
+                    //         lhs_tag,
+                    //         name,
+                    //         token_with_index.token.tag,
+                    //         node_tag,
+                    //     });
+                    //     var current = doc.ast_context.nodes_parent[idx];
+                    //     var i: u32 = 1;
+                    //     while (current != 0) : ({
+                    //         current = doc.ast_context.nodes_parent[current];
+                    //         i += 1;
+                    //     }) {
+                    //         const current_tag = tag[current];
+                    //         try w.print("* [{}]{}\n", .{ i, current_tag });
+                    //     }
+                    //     return buffer.items;
+                    // },
                     //     .label => {
                     //         logger.debug("[hover][label_access]", .{});
                     //         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
