@@ -16,7 +16,7 @@ fn init(allocator: std.mem.Allocator, document: *Document) Self {
     };
 }
 
-fn push(self: *Self, token: std.zig.Token) !void {
+fn push(self: *Self, token_idx: usize, token: std.zig.Token) !void {
     switch (token.tag) {
         .eof => unreachable,
         .string_literal,
@@ -31,11 +31,7 @@ fn push(self: *Self, token: std.zig.Token) !void {
             try self.push_semantic_token(token.loc, .number, .{});
         },
         .identifier => {
-            // container variable
-            // field
-            // decl, call
-            // type
-            try self.push_semantic_token(token.loc, .variable, .{});
+            try self.push_identifier(token_idx, token.loc);
         },
         .builtin => {
             try self.push_semantic_token(token.loc, .function, .{
@@ -170,6 +166,12 @@ fn push(self: *Self, token: std.zig.Token) !void {
     }
 }
 
+fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void
+{
+    _ = token_idx;
+    return self.push_semantic_token(loc, .variable, .{});
+}
+
 fn push_semantic_token(
     self: *Self,
     loc: std.zig.Token.Loc,
@@ -190,13 +192,9 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
     const allocator = arena.allocator();
 
     var self = init(allocator, document);
-    var tokenizer = std.zig.Tokenizer.init(document.utf8_buffer.text);
-    while (true) {
-        const token = tokenizer.next();
-        if (token.tag == .eof) {
-            break;
-        }
-        try self.push(token);
+    for(document.ast_context.tokens.items)|token, i|
+    {
+        try self.push(i, token);
     }
 
     return self.array.items;
