@@ -176,7 +176,7 @@ fn push_semantic_token(
     token_type: SemanticTokenType,
     modifier: SemanticTokenModifiers,
 ) !void {
-    const pos_x = try self.document.line_search.getPositionFromBytePosition(loc.start);
+    const pos_x = try self.document.line_position.getPositionFromBytePosition(loc.start);
     try self.array.appendSlice(&.{
         pos_x.line,
         pos_x.x,

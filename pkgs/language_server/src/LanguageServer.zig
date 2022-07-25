@@ -402,11 +402,11 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
             const line = token_array[i];
             const start_char = token_array[i + 1];
             const end_char = start_char + token_array[i + 2];
-            const start = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, .{ .line = line, .character = start_char });
-            const end = try TextPosition.utf8PositionToUtf16(doc.utf8_buffer.text, .{ .line = line, .character = end_char });
+            const start = try doc.line_position.utf8PositionToUtf16(.{ .line = line, .x = start_char });
+            const end = try doc.line_position.utf8PositionToUtf16(.{ .line = line, .x = end_char });
 
-            token_array[i + 1] = @intCast(u32, start.character);
-            token_array[i + 2] = @intCast(u32, end.character - start.character);
+            token_array[i + 1] = @intCast(u32, start.x);
+            token_array[i + 2] = @intCast(u32, end.x - start.x);
         }
     }
     // convert to delta

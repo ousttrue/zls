@@ -14,7 +14,7 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "zig test pkgs/workspace/src/LineSearch.zig",
+            "command": "zig test pkgs/workspace/src/LinePosition.zig",
             // "command": "zig test src/position_context.zig",
             // "command": "zig test src/document_position.zig",
             "problemMatcher": [

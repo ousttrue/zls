@@ -12,7 +12,7 @@ const DocumentPosition = @import("./DocumentPosition.zig");
 const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
 const Location = @import("./Location.zig");
-const LineSearch = @import("./LineSearch.zig");
+const LinePosition = @import("./LinePosition.zig");
 const Self = @This();
 const logger = std.log.scoped(.Document);
 
@@ -26,7 +26,7 @@ imports_used: std.ArrayListUnmanaged([]const u8),
 tree: Ast,
 ast_context: *AstContext,
 document_scope: DocumentScope,
-line_search: LineSearch,
+line_position: LinePosition,
 
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
@@ -49,14 +49,14 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .document_scope = try DocumentScope.init(allocator, tree),
         .associated_build_file = null,
         .is_build_file = null,
-        .line_search = try LineSearch.init(allocator, text),
+        .line_position = try LinePosition.init(allocator, text),
     };
 
     return self;
 }
 
 pub fn delete(self: *Self) void {
-    self.line_search.deinit();
+    self.line_position.deinit();
     for (self.import_uris) |imp_uri| {
         self.allocator.free(imp_uri);
     }
