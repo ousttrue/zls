@@ -8,6 +8,7 @@ const Workspace = ws.Workspace;
 const Document = ws.Document;
 const DocumentPosition = ws.DocumentPosition;
 const LinePosition = ws.LinePosition;
+const Line = ws.Line;
 const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
@@ -16,7 +17,6 @@ const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
 const ClientCapabilities = ws.ClientCapabilities;
 const builtin_completions = ws.builtin_completions;
-const TextPosition = @import("./TextPosition.zig");
 const rename_util = @import("./rename_util.zig");
 const references_util = @import("./references_util.zig");
 const Self = @This();
@@ -141,7 +141,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
     };
 }
 
-pub fn documentRange(text: []const u8, encoding: TextPosition.Encoding) !lsp.Range {
+pub fn documentRange(text: []const u8, encoding: Line.Encoding) !lsp.Range {
     var line_idx: i64 = 0;
     var curr_line: []const u8 = text;
 
@@ -214,14 +214,14 @@ fn node_tag_to_lsp_symbol_kind(node_tag: std.zig.Ast.Node.Tag) lsp.DocumentSymbo
     };
 }
 
-fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: TextPosition.Encoding, src: []const SymbolTree.Symbol, parent: u32) anyerror![]lsp.DocumentSymbol {
+fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: Line.Encoding, src: []const SymbolTree.Symbol, parent: u32) anyerror![]lsp.DocumentSymbol {
     var dst = std.ArrayList(lsp.DocumentSymbol).init(allocator);
     const tree = doc.tree;
     const ast_context = doc.ast_context;
     const tags = tree.nodes.items(.tag);
     for (src) |symbol| {
         if (symbol.parent == parent) {
-            const first =ast_context.tokens.items[tree.firstToken(symbol.node)];
+            const first = ast_context.tokens.items[tree.firstToken(symbol.node)];
             var start_loc = try doc.line_position.getPositionFromBytePosition(first.loc.start);
             if (encoding == .utf16) {
                 start_loc = try doc.line_position.utf8PositionToUtf16(start_loc);
@@ -260,7 +260,7 @@ config: *Config,
 zigenv: ZigEnv,
 workspace: Workspace = undefined,
 client_capabilities: ClientCapabilities = .{},
-offset_encoding: TextPosition.Encoding = TextPosition.Encoding.utf16,
+offset_encoding: Line.Encoding = .utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
     .signatureHelpProvider = .{
         .triggerCharacters = &.{"("},
@@ -414,6 +414,30 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
     _ = doc.decrement();
 }
 
+pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
+    const doc = try self.workspace.getDocument(params.textDocument.uri);
+
+    const stdout_bytes = self.zigenv.spawnZigFmt(arena.allocator(), doc.utf8_buffer.text) catch |err|
+        {
+        logger.err("zig fmt: {}", .{err});
+        return lsp.Response.createNull(id);
+    };
+
+    var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
+    edits[0] = .{
+        .range = try documentRange(doc.utf8_buffer.text, self.offset_encoding),
+        .newText = stdout_bytes,
+    };
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .TextEdits = edits,
+        },
+    };
+}
+
+/// document request
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
@@ -429,40 +453,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     };
 }
 
-pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
-    const doc = try self.workspace.getDocument(params.textDocument.uri);
-    const position = params.position;
-    const bytePosition = switch (self.offset_encoding) {
-        .utf8 => try TextPosition.utf8BytePositionFromUtf8Pos(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }),
-        .utf16 => try TextPosition.utf8BytePositionFromUtf16Pos(doc.utf8_buffer.text, .{ .line = @intCast(u32, position.line), .x = @intCast(u32, position.character) }),
-    };
-    if (hover_util.process(arena, &self.workspace, doc, bytePosition, &self.client_capabilities)) |hover_or_null| {
-        if (hover_or_null) |hover_contents| {
-            return lsp.Response{
-                .id = id,
-                .result = .{
-                    .Hover = .{
-                        .contents = .{ .value = hover_contents },
-                    },
-                },
-            };
-        } else {
-            return lsp.Response.createNull(id);
-        }
-    } else |err| {
-        const hover_contents = try std.fmt.allocPrint(arena.allocator(), "{}", .{err});
-        return lsp.Response{
-            .id = id,
-            .result = .{
-                .Hover = .{
-                    .contents = .{ .value = hover_contents },
-                },
-            },
-        };
-    }
-}
-
+/// document request
 pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     if (!self.config.enable_semantic_tokens) {
         return lsp.Response{
@@ -511,27 +502,38 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     };
 }
 
-pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
+/// document position request
+pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
+    const position = params.position;
+    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
 
-    const stdout_bytes = self.zigenv.spawnZigFmt(arena.allocator(), doc.utf8_buffer.text) catch |err|
-        {
-        logger.err("zig fmt: {}", .{err});
-        return lsp.Response.createNull(id);
-    };
-
-    var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
-    edits[0] = .{
-        .range = try documentRange(doc.utf8_buffer.text, self.offset_encoding),
-        .newText = stdout_bytes,
-    };
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .TextEdits = edits,
-        },
-    };
+    if (hover_util.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities)) |hover_or_null| {
+        if (hover_or_null) |hover_contents| {
+            return lsp.Response{
+                .id = id,
+                .result = .{
+                    .Hover = .{
+                        .contents = .{ .value = hover_contents },
+                    },
+                },
+            };
+        } else {
+            return lsp.Response.createNull(id);
+        }
+    } else |err| {
+        const hover_contents = try std.fmt.allocPrint(arena.allocator(), "{}", .{err});
+        return lsp.Response{
+            .id = id,
+            .result = .{
+                .Hover = .{
+                    .contents = .{ .value = hover_contents },
+                },
+            },
+        };
+    }
 }
 
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {

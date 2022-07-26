@@ -1,4 +1,6 @@
 const std = @import("std");
+const Line = @import("./Line.zig");
+
 const Self = @This();
 
 line_heads: std.ArrayList(u32),
@@ -63,6 +65,28 @@ pub fn getLineIndexFromBytePosition(self: Self, byte_position: usize) !usize {
     unreachable;
 }
 
+pub fn getLine(self: Self, line_index: u32) !Line {
+    const line_count = self.line_heads.items.len;
+    if (line_count == 0) {
+        return error.NoLine;
+    } else if (line_index < line_count - 1) {
+        return Line{
+            .full = self.text,
+            .begin = self.line_heads.items[line_index],
+            .end = self.line_heads.items[line_index + 1] - 1,
+        };
+    } else if (line_index == line_count - 1) {
+        // last line
+        return Line{
+            .full = self.text,
+            .begin = self.line_heads.items[line_index],
+            .end = @intCast(u32, self.text.len),
+        };
+    } else {
+        return error.OverLine;
+    }
+}
+
 pub const LineX = struct {
     line: u32,
     x: u32,
@@ -113,3 +137,19 @@ test "LinePosition" {
     try std.testing.expectEqual((try ls.getPositionFromBytePosition(0)), .{ .line = 0, .x = 0 });
     try std.testing.expectEqual((try ls.getPositionFromBytePosition(7)), .{ .line = 3, .x = 1 });
 }
+
+// pub fn utf8BytePositionFromUtf8Pos(
+//     text: []const u8,
+//     pos: struct { line: u32, x: u32 = 0 },
+// ) !u32 {
+//     const doc_position = try DocumentPosition.fromUtf8Pos(text, .{ .line = pos.line, .x = pos.x });
+//     return @intCast(u32, doc_position.absolute_index);
+// }
+
+// pub fn utf8BytePositionFromUtf16Pos(
+//     text: []const u8,
+//     pos: struct { line: u32, x: u32 = 0 },
+// ) !u32 {
+//     const doc_position = try DocumentPosition.fromUtf16Pos(text, .{ .line = pos.line, .x = pos.x });
+//     return @intCast(u32, doc_position.absolute_index);
+// }
