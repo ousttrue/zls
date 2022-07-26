@@ -79,6 +79,10 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .call_one,
         .call_one_comma,
         .container_field_init,
+        .struct_init_one,
+        .struct_init_one_comma,
+        .struct_init_dot_two,
+        .struct_init_dot_two_comma,
         => {
             self.nodeData(node_data);
         },
@@ -133,6 +137,14 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         },
         .struct_init_dot_comma => {
             const struct_init = tree.structInitDot(idx);
+            self.append(struct_init.ast.type_expr);
+            for (struct_init.ast.fields) |child| {
+                self.append(child);
+            }
+        },
+        .struct_init, .struct_init_comma => {
+            const struct_init = tree.structInit(idx);
+            self.append(struct_init.ast.type_expr);
             for (struct_init.ast.fields) |child| {
                 self.append(child);
             }

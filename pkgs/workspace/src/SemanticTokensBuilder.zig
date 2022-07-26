@@ -304,6 +304,9 @@ fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void 
         .container_field_init => {
             try self.push_semantic_token(loc, .property, .{});
         },
+        .struct_init_comma => {
+            try self.push_semantic_token(loc, .property, .{});
+        },
         else => {
             // try self.push_semantic_token(loc, .variable, .{});
         },
