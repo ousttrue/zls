@@ -44,7 +44,8 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
                 self.append(child);
             }
         },
-        .test_decl, .global_var_decl, .local_var_decl, .simple_var_decl, .aligned_var_decl => {
+        // .test_decl, 
+        .global_var_decl, .local_var_decl, .simple_var_decl, .aligned_var_decl => {
             self.nodeData(node_data);
         },
         .@"errdefer" => {

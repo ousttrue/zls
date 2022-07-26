@@ -25,7 +25,9 @@ fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayLis
 pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
     const tree = context.tree;
     const idx = stack.items[stack.items.len - 1];
-    context.nodes_parent[idx] = stack.items[stack.items.len - 2];
+    std.debug.assert(stack.items.len>1);
+    const parent_idx = stack.items[stack.items.len - 2];
+    context.nodes_parent[idx] = parent_idx;
     const token_start = tree.firstToken(idx);
     const token_last = tree.lastToken(idx);
     var token_idx = token_start;
@@ -36,6 +38,13 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
     var children = AstGetChildren.init(context.allocator);
     defer children.deinit();
     for (children.getChildren(context.tree, idx)) |child| {
+        if(child>=context.nodes_parent.len)
+        {
+            const tags = tree.nodes.items(.tag);
+            const node_tag = tags[idx];
+            std.log.err("{}: {}>=nodes_parent.len", .{node_tag, child});
+            unreachable;
+        }
         stack.append(child) catch unreachable;
         traverse(context, stack);
         _ = stack.pop();
