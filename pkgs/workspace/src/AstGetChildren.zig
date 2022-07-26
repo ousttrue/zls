@@ -44,7 +44,7 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
                 self.append(child);
             }
         },
-        // .test_decl, 
+        // .test_decl,
         .global_var_decl, .local_var_decl, .simple_var_decl, .aligned_var_decl => {
             self.nodeData(node_data);
         },
@@ -84,8 +84,8 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .bool_not, .negation, .bit_not, .negation_wrap, .address_of, .@"try", .@"await", .optional_type => {
             self.append(node_data.lhs);
         },
-        .string_literal => {
-            // leaf. no children
+        .array_type, .array_type_sentinel, .ptr_type_aligned, .ptr_type_sentinel, .ptr_type, .ptr_type_bit_range => {
+            self.nodeData(node_data);
         },
         .fn_decl,
         .builtin_call_two,
@@ -105,10 +105,11 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .array_access,
         .container_decl_two,
         .container_decl_two_trailing,
-        .array_type,
-        .ptr_type_sentinel,
         => {
             self.nodeData(node_data);
+        },
+        .string_literal => {
+            // leaf. no children
         },
         .deref, .@"return" => {
             self.append(node_data.lhs);
