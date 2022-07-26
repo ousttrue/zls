@@ -39,8 +39,20 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
     const node_data = data[idx];
 
     switch (node_tag) {
-        .string_literal => {
-            // leaf. no children
+        .test_decl, .global_var_decl, .local_var_decl, .simple_var_decl, .aligned_var_decl => {
+            self.nodeData(node_data);
+        },
+        .@"errdefer" => {
+            self.nodeData(node_data);
+        },
+        .@"defer" => {
+            self.append(node_data.rhs);
+        },
+        .@"catch" => {
+            self.nodeData(node_data);
+        },
+        .field_access, .unwrap_optional => {
+            self.append(node_data.lhs);
         },
         // == != < > <= >=
         .equal_equal, .bang_equal, .less_than, .greater_than, .less_or_equal, .greater_or_equal => {
@@ -62,12 +74,17 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .bit_and, .bit_xor, .bit_or, .@"orelse", .bool_and, .bool_or => {
             self.nodeData(node_data);
         },
-        .simple_var_decl,
+        // !x -x
+        .bool_not, .negation, .bit_not, .negation_wrap, .address_of, .@"try", .@"await", .optional_type => {
+            self.append(node_data.lhs);
+        },
+        .string_literal => {
+            // leaf. no children
+        },
         .fn_decl,
         .builtin_call_two,
         .block_two,
         .block_two_semicolon,
-        .@"catch",
         .if_simple,
         .while_simple,
         .for_simple,
@@ -87,12 +104,7 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         => {
             self.nodeData(node_data);
         },
-        .@"try",
-        .@"return",
-        .field_access,
-        .optional_type,
-        .address_of,
-        => {
+        .@"return" => {
             self.append(node_data.lhs);
         },
         .call => {
