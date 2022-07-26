@@ -19,7 +19,7 @@ fn referencesDefinitionGlobal(
 ) !?[]lsp.Location {
     if (try workspace.getSymbolGlobal(arena, handle, pos_index)) |decl| {
         var locs = std.ArrayList(lsp.Location).init(arena.allocator());
-        try references.symbolReferences(arena, workspace, decl, include_decl, &locs, std.ArrayList(lsp.Location).append, skip_std_references);
+        try references.symbolReferences(arena, workspace, decl, include_decl, &locs, skip_std_references);
         return locs.items;
     } else {
         return null;
@@ -37,7 +37,7 @@ fn referencesDefinitionFieldAccess(
 ) ![]lsp.Location {
     const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position, range);
     var locs = std.ArrayList(lsp.Location).init(arena.allocator());
-    try references.symbolReferences(arena, workspace, decl, include_decl, &locs, std.ArrayList(lsp.Location).append, config.skip_std_references);
+    try references.symbolReferences(arena, workspace, decl, include_decl, &locs, config.skip_std_references);
     return locs.items;
 }
 
@@ -49,7 +49,7 @@ fn referencesDefinitionLabel(
 ) !?[]lsp.Location {
     if ((try handle.getLabelGlobal(pos_index))) |decl| {
         var locs = std.ArrayList(lsp.Location).init(arena.allocator());
-        try references.labelReferences(decl, include_decl, &locs, std.ArrayList(lsp.Location).append);
+        try references.labelReferences(decl, include_decl, &locs);
         return locs.items;
     } else {
         return null;

@@ -32,11 +32,18 @@ pub fn renameSymbol(
     edits: *std.StringHashMap([]lsp.TextEdit),
 ) !void {
     std.debug.assert(decl_handle.decl.* != .label_decl);
-    try references.symbolReferences(arena, workspace, decl_handle, true, RefHandlerContext{
+    var locations = std.ArrayList(lsp.Location).init(arena.allocator());
+    defer locations.deinit();
+
+    try references.symbolReferences(arena, workspace, decl_handle, true, &locations, true);
+    var context = RefHandlerContext{
         .edits = edits,
         .allocator = arena.allocator(),
         .new_name = new_name,
-    }, refHandler, true);
+    };
+    for (locations.items) |location| {
+        try refHandler(context, location);
+    }
 }
 
 pub fn renameLabel(
@@ -46,9 +53,16 @@ pub fn renameLabel(
     edits: *std.StringHashMap([]lsp.TextEdit),
 ) !void {
     std.debug.assert(decl_handle.decl.* == .label_decl);
-    try references.labelReferences(decl_handle, true, RefHandlerContext{
+    var locations = std.ArrayList(lsp.Location).init(arena.allocator());
+    defer locations.deinit();
+
+    try references.labelReferences(decl_handle, true, &locations);
+    var context = RefHandlerContext{
         .edits = edits,
         .allocator = arena.allocator(),
         .new_name = new_name,
-    }, refHandler);
+    };
+    for (locations.items) |location| {
+        try refHandler(context, location);
+    }
 }
