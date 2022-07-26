@@ -11,7 +11,7 @@ const LinePosition = ws.LinePosition;
 const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
-const document_symbols = ws.document_symbols;
+const SymbolTree = ws.SymbolTree;
 const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
 const ClientCapabilities = ws.ClientCapabilities;
@@ -33,8 +33,7 @@ fn fromLineX(src: LinePosition.LineX) lsp.Position {
     return .{ .line = src.line, .character = src.x };
 }
 
-fn utf8PositionToUtf16(line_position: LinePosition, src: lsp.Position) !lsp.Position
-{
+fn utf8PositionToUtf16(line_position: LinePosition, src: lsp.Position) !lsp.Position {
     return fromLineX(try line_position.utf8PositionToUtf16(toLineX(src)));
 }
 
@@ -186,6 +185,75 @@ pub fn documentRange(text: []const u8, encoding: TextPosition.Encoding) !lsp.Ran
             },
         };
     }
+}
+
+fn node_tag_to_lsp_symbol_kind(node_tag: std.zig.Ast.Node.Tag) lsp.DocumentSymbol.Kind {
+    return switch (node_tag) {
+        .fn_proto,
+        .fn_proto_simple,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_decl,
+        => .Function,
+        .local_var_decl,
+        .global_var_decl,
+        .aligned_var_decl,
+        .simple_var_decl,
+        => .Variable,
+        .container_field,
+        .container_field_align,
+        .container_field_init,
+        .tagged_union_enum_tag,
+        .tagged_union_enum_tag_trailing,
+        .tagged_union,
+        .tagged_union_trailing,
+        .tagged_union_two,
+        .tagged_union_two_trailing,
+        => .Field,
+        else => .Variable,
+    };
+}
+
+fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: TextPosition.Encoding, src: []const SymbolTree.Symbol, parent: u32) anyerror![]lsp.DocumentSymbol {
+    var dst = std.ArrayList(lsp.DocumentSymbol).init(allocator);
+    const tree = doc.tree;
+    const ast_context = doc.ast_context;
+    const tags = tree.nodes.items(.tag);
+    for (src) |symbol| {
+        if (symbol.parent == parent) {
+            const first =ast_context.tokens.items[tree.firstToken(symbol.node)];
+            var start_loc = try doc.line_position.getPositionFromBytePosition(first.loc.start);
+            if (encoding == .utf16) {
+                start_loc = try doc.line_position.utf8PositionToUtf16(start_loc);
+            }
+            const last = ast_context.tokens.items[tree.lastToken(symbol.node)];
+            var end_loc = try doc.line_position.getPositionFromBytePosition(last.loc.end);
+            if (encoding == .utf16) {
+                end_loc = try doc.line_position.utf8PositionToUtf16(end_loc);
+            }
+
+            var range = lsp.Range{
+                .start = .{
+                    .line = @intCast(i64, start_loc.line),
+                    .character = @intCast(i64, start_loc.x),
+                },
+                .end = .{
+                    .line = @intCast(i64, end_loc.line),
+                    .character = @intCast(i64, end_loc.x),
+                },
+            };
+
+            try dst.append(lsp.DocumentSymbol{
+                .name = symbol.name,
+                .kind = node_tag_to_lsp_symbol_kind(tags[symbol.node]),
+                .range = range,
+                .selectionRange = range,
+                .detail = "",
+                .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
+            });
+        }
+    }
+    return dst.items;
 }
 
 config: *Config,
@@ -349,12 +417,10 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    var symbols = try document_symbols.getDocumentSymbols(arena.allocator(), doc.tree);
-    if (self.offset_encoding == .utf16) {
-        for (symbols) |*symbol| {
-            try symbolToUtf16(doc.line_position, symbol);
-        }
-    }
+    var symbol_tree = SymbolTree.init(arena.allocator(), doc.tree);
+    try symbol_tree.traverse(0);
+    logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
+    const symbols = try to_symbols(arena.allocator(), doc, self.offset_encoding, symbol_tree.symbols.items, 0);
     return lsp.Response{
         .id = id,
         .result = .{
