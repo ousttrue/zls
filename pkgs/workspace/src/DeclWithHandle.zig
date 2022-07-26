@@ -359,16 +359,15 @@ pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
-    position: DocumentPosition,
+    byte_position: usize,
     range: std.zig.Token.Loc,
 ) !Self {
-    const name = handle.identifierFromPosition(position.absolute_index) orelse return error.NoIdentifier;
-    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
-    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
+    const name = handle.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
+    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(byte_position + range.start, byte_position + range.end);
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
     errdefer held_range.release();
-    const result = (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) orelse return error.NoFieldAccessType;
+    const result = (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, byte_position, &tokenizer)) orelse return error.NoFieldAccessType;
     held_range.release();
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {

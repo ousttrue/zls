@@ -31,7 +31,7 @@ fn renameDefinitionFieldAccess(
     position: DocumentPosition,
     range: std.zig.Token.Loc,
 ) ![]const UriBytePosition {
-    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position.absolute_index, range);
     return try rename.renameSymbol(arena, workspace, decl);
 }
 

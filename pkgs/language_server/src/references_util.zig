@@ -35,7 +35,7 @@ fn referencesDefinitionFieldAccess(
     include_decl: bool,
     config: *Config,
 ) ![]UriBytePosition {
-    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position.absolute_index, range);
     var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
     try references.symbolReferences(arena, workspace, decl, include_decl, &locs, config.skip_std_references);
     return locs.items;
