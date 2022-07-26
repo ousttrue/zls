@@ -3,7 +3,6 @@ const lsp = @import("lsp");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");
-const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
