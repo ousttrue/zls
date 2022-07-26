@@ -110,7 +110,7 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         => {
             self.nodeData(node_data);
         },
-        .@"return" => {
+        .deref, .@"return" => {
             self.append(node_data.lhs);
         },
         .call => {
