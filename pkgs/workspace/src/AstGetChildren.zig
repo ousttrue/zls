@@ -87,6 +87,12 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .array_type, .array_type_sentinel, .ptr_type_aligned, .ptr_type_sentinel, .ptr_type, .ptr_type_bit_range => {
             self.nodeData(node_data);
         },
+        .struct_init_one, .struct_init_one_comma, .struct_init_dot_two, .struct_init_dot_two_comma => {
+            self.nodeData(node_data);
+        },
+        .call_one, .call_one_comma => {
+            self.nodeData(node_data);
+        },
         .fn_decl,
         .builtin_call_two,
         .block_two,
@@ -95,13 +101,7 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .while_simple,
         .for_simple,
         .@"for",
-        .call_one,
-        .call_one_comma,
         .container_field_init,
-        .struct_init_one,
-        .struct_init_one_comma,
-        .struct_init_dot_two,
-        .struct_init_dot_two_comma,
         .array_access,
         .container_decl_two,
         .container_decl_two_trailing,
@@ -114,7 +114,7 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .deref, .@"return" => {
             self.append(node_data.lhs);
         },
-        .call => {
+        .call, .call_comma => {
             self.append(node_data.lhs);
             const call_full = tree.callFull(idx);
             for (call_full.ast.params) |child| {
