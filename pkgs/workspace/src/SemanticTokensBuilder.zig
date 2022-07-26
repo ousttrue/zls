@@ -16,7 +16,7 @@ fn init(allocator: std.mem.Allocator, document: *Document) Self {
     };
 }
 
-fn push(self: *Self, token_idx: usize, token: std.zig.Token) !void {
+fn push(self: *Self, token_idx: u32, token: std.zig.Token) !void {
     switch (token.tag) {
         .eof => unreachable,
         .string_literal,
@@ -269,7 +269,7 @@ fn is_type(name: []const u8) bool {
     return false;
 }
 
-fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void {
+fn push_identifier(self: *Self, token_idx: u32, loc: std.zig.Token.Loc) !void {
     const ast_context = self.document.ast_context;
     const idx = ast_context.tokens_node[token_idx];
     const tag = ast_context.tree.nodes.items(.tag);
@@ -302,8 +302,26 @@ fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void 
                 try self.push_semantic_token(loc, .variable, .{});
             }
         },
-        .fn_proto_multi, .fn_proto_simple => {
-            try self.push_semantic_token(loc, .function, .{});
+        .fn_proto_multi =>{
+            const fn_proto = ast_context.tree.fnProtoMulti(idx);
+            if(token_idx == fn_proto.name_token)
+            {
+                try self.push_semantic_token(loc, .function, .{});
+            }
+            else{
+                try self.push_semantic_token(loc, .parameter, .{});
+            }
+        },
+        .fn_proto_simple => {
+            var buf: [1]std.zig.Ast.Node.Index = undefined;
+            const fn_proto = ast_context.tree.fnProtoSimple(&buf, idx);
+            if(token_idx == fn_proto.name_token)
+            {
+                try self.push_semantic_token(loc, .function, .{});
+            }
+            else{
+                try self.push_semantic_token(loc, .parameter, .{});
+            }
         },
         .container_field_init => {
             try self.push_semantic_token(loc, .property, .{});
@@ -346,7 +364,7 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
 
     var self = init(allocator, document);
     for (document.ast_context.tokens.items) |token, i| {
-        try self.push(i, token);
+        try self.push(@intCast(u32, i), token);
     }
 
     return self.array.items;
