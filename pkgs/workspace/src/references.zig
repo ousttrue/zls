@@ -9,9 +9,9 @@ const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
 const TokenLocation = @import("./TokenLocation.zig");
 
-fn tokenReference(document: *Document, tok: Ast.TokenIndex, context: anytype, comptime handler: anytype) !void {
-    const loc = TokenLocation.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok]) catch return;
-    try handler(context, lsp.Location{
+fn tokenReference(document: *Document, tok: Ast.TokenIndex) !lsp.Location {
+    const loc = try TokenLocation.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok]);
+    return lsp.Location{
         .uri = document.utf8_buffer.uri,
         .range = .{
             .start = .{
@@ -23,7 +23,7 @@ fn tokenReference(document: *Document, tok: Ast.TokenIndex, context: anytype, co
                 .character = @intCast(i64, loc.column + ast.tokenLength(document.tree, tok)),
             },
         },
-    });
+    };
 }
 
 pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, context: anytype, comptime handler: anytype) !void {
@@ -39,7 +39,7 @@ pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, context: anytyp
 
     if (include_decl) {
         // The first token is always going to be the label
-        try tokenReference(handle, first_tok, context, handler);
+        try handler(context, try tokenReference(handle, first_tok));
     }
 
     var curr_tok = first_tok + 1;
@@ -49,7 +49,7 @@ pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, context: anytyp
             token_tags[curr_tok + 2] == .identifier)
         {
             if (std.mem.eql(u8, tree.tokenSlice(curr_tok + 2), tree.tokenSlice(first_tok))) {
-                try tokenReference(handle, first_tok, context, handler);
+                try handler(context, try tokenReference(handle, first_tok));
             }
         }
     }
@@ -196,7 +196,7 @@ fn symbolReferencesInternal(
         .identifier => {
             if (try workspace.lookupSymbolGlobal(arena, handle, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
                 if (std.meta.eql(decl, child)) {
-                    try tokenReference(handle, main_tokens[node], context, handler);
+                    try handler(context, try tokenReference(handle, main_tokens[node]));
                 }
             }
         },
@@ -494,7 +494,7 @@ fn symbolReferencesInternal(
                 !left_type.type.is_type_val,
             )) |child| {
                 if (std.meta.eql(child, decl)) {
-                    try tokenReference(handle, datas[node].rhs, context, handler);
+                    try handler(context, try tokenReference(handle, datas[node].rhs));
                 }
             }
         },
@@ -558,7 +558,7 @@ pub fn symbolReferences(
     std.debug.assert(decl_handle.decl.* != .label_decl);
     const curr_handle = decl_handle.handle;
     if (include_decl) {
-        try tokenReference(curr_handle, decl_handle.nameToken(), context, handler);
+        try handler(context, try tokenReference(curr_handle, decl_handle.nameToken()));
     }
 
     switch (decl_handle.decl.*) {
