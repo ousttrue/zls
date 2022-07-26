@@ -7,6 +7,7 @@ const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
 const DocumentPosition = ws.DocumentPosition;
+const UriBytePosition = ws.UriBytePosition;
 const LinePosition = ws.LinePosition;
 const Line = ws.Line;
 const ast = ws.ast;
@@ -596,6 +597,36 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     return completion_util.process(arena, &self.workspace, id, doc, doc_position, self.config, &self.client_capabilities);
 }
 
+// TODO Use a map to array lists and collect at the end instead?
+const RefHandlerContext = struct {
+    edits: *std.StringHashMap([]lsp.TextEdit),
+    allocator: std.mem.Allocator,
+    new_name: []const u8,
+
+    fn refHandler(context: *RefHandlerContext, doc: *Document, loc: UriBytePosition, encoding: Line.Encoding) !void {
+        var text_edits = if (context.edits.get(loc.uri)) |slice|
+            std.ArrayList(lsp.TextEdit).fromOwnedSlice(context.allocator, slice)
+        else
+            std.ArrayList(lsp.TextEdit).init(context.allocator);
+
+        var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start);
+        var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end);
+        if (encoding == .utf16) {
+            start = try doc.line_position.utf8PositionToUtf16(start);
+            end = try doc.line_position.utf8PositionToUtf16(end);
+        }
+
+        (try text_edits.addOne()).* = .{
+            .range = .{
+                .start = .{ .line = start.line, .character = start.x },
+                .end = .{ .line = end.line, .character = end.x },
+            },
+            .newText = context.new_name,
+        };
+        try context.edits.put(loc.uri, text_edits.toOwnedSlice());
+    }
+};
+
 pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
@@ -610,24 +641,39 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try rename_util.process(arena, &self.workspace, doc, doc_position, params.newName)) |*workspace_edit| {
-        if (self.offset_encoding == .utf16) {
-            var it = workspace_edit.changes.?.valueIterator();
-            while (it.next()) |edits| {
-                for (edits.*) |*edit| {
-                    edit.range.start = try utf8PositionToUtf16(doc.line_position, edit.range.start);
-                    edit.range.end = try utf8PositionToUtf16(doc.line_position, edit.range.end);
-                }
-            }
+    if (try rename_util.process(arena, &self.workspace, doc, doc_position)) |locations| {
+        var changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator());
+        var context = RefHandlerContext{
+            .edits = &changes,
+            .allocator = arena.allocator(),
+            .new_name = params.newName,
+        };
+        for (locations) |location| {
+            try context.refHandler(try self.workspace.getDocument(location.uri), location, self.offset_encoding);
         }
+
         return lsp.Response{
             .id = id,
-            .result = .{ .WorkspaceEdit = workspace_edit.* },
+            .result = .{ .WorkspaceEdit = .{ .changes = changes } },
         };
     } else {
         return lsp.Response.createNull(id);
     }
 }
+
+// const loc = try TokenLocation.tokenRelativeLocation(document.tree, 0, );
+// return lsp.Location{
+//     .range = .{
+//         .start = .{
+//             .line = @intCast(i64, loc.line),
+//             .character = @intCast(i64, loc.column),
+//         },
+//         .end = .{
+//             .line = @intCast(i64, loc.line),
+//             .character = @intCast(i64, loc.column + ast.tokenLength(document.tree, tok)),
+//         },
+//     },
+// };
 
 pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
@@ -643,17 +689,27 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config)) |*locations| {
-        if (self.offset_encoding == .utf16) {
-            for (locations.*) |*loc| {
-                loc.range.start = try utf8PositionToUtf16(doc.line_position, loc.range.start);
-                loc.range.end = try utf8PositionToUtf16(doc.line_position, loc.range.end);
+    if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config)) |src| {
+        var locations = std.ArrayList(lsp.Location).init(arena.allocator());
+        for (src) |loc| {
+            var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start);
+            var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end);
+            if (self.offset_encoding == .utf16) {
+                start = try doc.line_position.utf8PositionToUtf16(start);
+                end = try doc.line_position.utf8PositionToUtf16(end);
             }
+            try locations.append(.{
+                .uri = loc.uri,
+                .range = .{
+                    .start = .{ .line = start.line, .character = start.x },
+                    .end = .{ .line = end.line, .character = end.x },
+                },
+            });
         }
 
         return lsp.Response{
             .id = id,
-            .result = .{ .Locations = locations.* },
+            .result = .{ .Locations = locations.items },
         };
     } else {
         return lsp.Response.createNull(id);

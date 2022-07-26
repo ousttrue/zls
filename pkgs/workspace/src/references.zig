@@ -8,25 +8,18 @@ const TypeWithHandle = @import("./TypeWithHandle.zig");
 const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
 const TokenLocation = @import("./TokenLocation.zig");
+const UriBytePosition = @import("./UriBytePosition.zig");
 
-fn tokenReference(document: *Document, tok: Ast.TokenIndex) !lsp.Location {
-    const loc = try TokenLocation.tokenRelativeLocation(document.tree, 0, document.tree.tokens.items(.start)[tok]);
-    return lsp.Location{
+fn tokenReference(document: *Document, token_idx: Ast.TokenIndex) UriBytePosition {
+    const token = document.ast_context.tokens.items[token_idx];
+    return UriBytePosition
+    {
         .uri = document.utf8_buffer.uri,
-        .range = .{
-            .start = .{
-                .line = @intCast(i64, loc.line),
-                .character = @intCast(i64, loc.column),
-            },
-            .end = .{
-                .line = @intCast(i64, loc.line),
-                .character = @intCast(i64, loc.column + ast.tokenLength(document.tree, tok)),
-            },
-        },
+        .loc = token.loc,
     };
 }
 
-pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, locations: *std.ArrayList(lsp.Location)) !void {
+pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, locations: *std.ArrayList(UriBytePosition)) !void {
     std.debug.assert(decl.decl.* == .label_decl);
     const handle = decl.handle;
     const tree = handle.tree;
@@ -39,7 +32,7 @@ pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, locations: *std
 
     if (include_decl) {
         // The first token is always going to be the label
-        try locations.append(try tokenReference(handle, first_tok));
+        try locations.append(tokenReference(handle, first_tok));
     }
 
     var curr_tok = first_tok + 1;
@@ -49,7 +42,7 @@ pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, locations: *std
             token_tags[curr_tok + 2] == .identifier)
         {
             if (std.mem.eql(u8, tree.tokenSlice(curr_tok + 2), tree.tokenSlice(first_tok))) {
-                try locations.append(try tokenReference(handle, first_tok));
+                try locations.append(tokenReference(handle, first_tok));
             }
         }
     }
@@ -61,7 +54,7 @@ fn symbolReferencesInternal(
     handle: *Document,
     node: Ast.Node.Index,
     decl: DeclWithHandle,
-    locations: *std.ArrayList(lsp.Location),
+    locations: *std.ArrayList(UriBytePosition),
 ) error{OutOfMemory}!void {
     const tree = handle.tree;
     if (node > tree.nodes.len) return;
@@ -188,7 +181,7 @@ fn symbolReferencesInternal(
         .identifier => {
             if (try workspace.lookupSymbolGlobal(arena, handle, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
                 if (std.meta.eql(decl, child)) {
-                    try locations.append(try tokenReference(handle, main_tokens[node]));
+                    try locations.append(tokenReference(handle, main_tokens[node]));
                 }
             }
         },
@@ -486,7 +479,7 @@ fn symbolReferencesInternal(
                 !left_type.type.is_type_val,
             )) |child| {
                 if (std.meta.eql(child, decl)) {
-                    try locations.append(try tokenReference(handle, datas[node].rhs));
+                    try locations.append(tokenReference(handle, datas[node].rhs));
                 }
             }
         },
@@ -543,13 +536,13 @@ pub fn symbolReferences(
     workspace: *Workspace,
     decl_handle: DeclWithHandle,
     include_decl: bool,
-    locations: *std.ArrayList(lsp.Location),
+    locations: *std.ArrayList(UriBytePosition),
     skip_std_references: bool,
 ) !void {
     std.debug.assert(decl_handle.decl.* != .label_decl);
     const curr_handle = decl_handle.handle;
     if (include_decl) {
-        try locations.append(try tokenReference(curr_handle, decl_handle.nameToken()));
+        try locations.append(tokenReference(curr_handle, decl_handle.nameToken()));
     }
 
     switch (decl_handle.decl.*) {
