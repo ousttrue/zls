@@ -261,7 +261,7 @@ fn is_literal(name: []const u8) bool {
 }
 
 fn is_type(name: []const u8) bool {
-    for ([_][]const u8{ "type", "bool", "f16", "f32", "f64", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize" }) |value| {
+    for ([_][]const u8{ "void", "type", "bool", "f16", "f32", "f64", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize" }) |value| {
         if (std.mem.eql(u8, name, value)) {
             return true;
         }
@@ -296,7 +296,11 @@ fn push_identifier(self: *Self, token_idx: usize, loc: std.zig.Token.Loc) !void 
             try self.push_semantic_token(loc, .type, .{});
         },
         .simple_var_decl => {
-            try self.push_semantic_token(loc, .variable, .{});
+            if (std.ascii.isUpper(name[0])) {
+                try self.push_semantic_token(loc, .type, .{});
+            } else {
+                try self.push_semantic_token(loc, .variable, .{});
+            }
         },
         .fn_proto_multi, .fn_proto_simple => {
             try self.push_semantic_token(loc, .function, .{});
