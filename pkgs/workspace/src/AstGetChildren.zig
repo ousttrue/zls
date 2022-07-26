@@ -203,6 +203,18 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
                 self.append(child);
             }
         },
+        .container_decl_arg, .container_decl_arg_trailing => {
+            const decl = tree.containerDeclArg(idx);
+            for (decl.ast.members) |child| {
+                self.append(child);
+            }
+        },
+        .tagged_union, .tagged_union_trailing => {
+            const decl = tree.taggedUnion(idx);
+            for (decl.ast.members) |child| {
+                self.append(child);
+            }
+        },
         else => {
             // std.debug.print("unknown node: {s}\n", .{@tagName(node_tag)});
         },

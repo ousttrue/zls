@@ -1,5 +1,6 @@
 const types = @import("./types.zig");
 const initialize = @import("./initialize.zig");
+const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
 
 /// Params of a response (result)
 pub const ResponseParams = union(enum) {
@@ -7,7 +8,7 @@ pub const ResponseParams = union(enum) {
     CompletionList: types.CompletionList,
     Location: types.Location,
     Hover: types.Hover,
-    DocumentSymbols: []types.DocumentSymbol,
+    DocumentSymbols: []textdocument_documentSymbol.DocumentSymbol,
     SemanticTokensFull: struct { data: []const u32 },
     TextEdits: []types.TextEdit,
     Locations: []types.Location,

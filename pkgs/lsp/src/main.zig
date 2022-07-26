@@ -2,13 +2,16 @@ pub const types = @import("./types.zig");
 const response = @import("./response.zig");
 const notification = @import("./notification.zig");
 pub const requests = @import("./requests.zig");
+
 pub const initialize = @import("./initialize.zig");
+pub const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
+
 pub const TextEdit = types.TextEdit;
 pub const CompletionItem = types.CompletionItem;
 pub const Range = types.Range;
 pub const Position = types.Position;
 pub const MarkupContent = types.MarkupContent;
-pub const DocumentSymbol = types.DocumentSymbol;
+pub const DocumentSymbol = textdocument_documentSymbol.DocumentSymbol;
 pub const WorkspaceFolder = types.WorkspaceFolder;
 pub const WorkspaceEdit = types.WorkspaceEdit;
 pub const Location = types.Location;
