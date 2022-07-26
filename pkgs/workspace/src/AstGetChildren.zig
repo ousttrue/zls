@@ -42,36 +42,32 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .string_literal => {
             // leaf. no children
         },
+        // == != < > <= >=
+        .equal_equal, .bang_equal, .less_than, .greater_than, .less_or_equal, .greater_or_equal => {
+            self.nodeData(node_data);
+        },
+        // *= /= %= += -= <<= <<|= >>= &= ^= |= *%= +%= -%= *|= +|= -|= =
+        .assign_mul, .assign_div, .assign_mod, .assign_add, .assign_sub, .assign_shl, .assign_shl_sat, .assign_shr, .assign_bit_and, .assign_bit_xor, .assign_bit_or, .assign_mul_wrap, .assign_add_wrap, .assign_sub_wrap, .assign_mul_sat, .assign_add_sat, .assign_sub_sat, .assign => {
+            self.nodeData(node_data);
+        },
+        // || * / % *% *| + - ++
+        .merge_error_sets, .mul, .div, .mod, .array_mult, .mul_wrap, .mul_sat, .add, .sub, .array_cat => {
+            self.nodeData(node_data);
+        },
+        // +% -% +| -| << <<| >>
+        .add_wrap, .sub_wrap, .add_sat, .sub_sat, .shl, .shl_sat, .shr => {
+            self.nodeData(node_data);
+        },
+        // & ^ | orelse and or
+        .bit_and, .bit_xor, .bit_or, .@"orelse", .bool_and, .bool_or => {
+            self.nodeData(node_data);
+        },
         .simple_var_decl,
         .fn_decl,
         .builtin_call_two,
         .block_two,
         .block_two_semicolon,
         .@"catch",
-        .equal_equal,
-        .bang_equal,
-        .less_than,
-        .greater_than,
-        .less_or_equal,
-        .greater_or_equal,
-        .assign_mul,
-        .assign,
-        .merge_error_sets,
-        .mul,
-        .div,
-        .mod,
-        .array_mult,
-        .mul_wrap,
-        .mul_sat,
-        .add,
-        .sub,
-        .array_cat,
-        .bit_and,
-        .bit_xor,
-        .bit_or,
-        .@"orelse",
-        .bool_and,
-        .bool_or,
         .if_simple,
         .while_simple,
         .for_simple,
@@ -84,6 +80,10 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .struct_init_dot_two,
         .struct_init_dot_two_comma,
         .array_access,
+        .container_decl_two,
+        .container_decl_two_trailing,
+        .array_type,
+        .ptr_type_sentinel,
         => {
             self.nodeData(node_data);
         },
@@ -179,6 +179,12 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
                 self.append(child);
             }
             self.append(fn_proto.ast.return_type);
+        },
+        .container_decl, .container_decl_trailing => {
+            const decl = tree.containerDecl(idx);
+            for (decl.ast.members) |child| {
+                self.append(child);
+            }
         },
         else => {
             // std.debug.print("unknown node: {s}\n", .{@tagName(node_tag)});
