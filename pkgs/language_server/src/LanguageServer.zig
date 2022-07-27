@@ -19,10 +19,9 @@ const ClientCapabilities = ws.ClientCapabilities;
 const builtin_completions = ws.builtin_completions;
 const rename_util = @import("./rename_util.zig");
 const references_util = @import("./references_util.zig");
-const Self = @This();
 const getSignatureInfo = ws.signature_help.getSignatureInfo;
-
 const logger = std.log.scoped(.LanguageServer);
+const Self = @This();
 pub var keep_running: bool = true;
 
 fn toLineX(src: lsp.Position) LinePosition.LineX {
@@ -222,15 +221,9 @@ fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: Line.Encod
     for (src) |symbol| {
         if (symbol.parent == parent) {
             const first = ast_context.tokens.items[tree.firstToken(symbol.node)];
-            var start_loc = try doc.line_position.getPositionFromBytePosition(first.loc.start);
-            if (encoding == .utf16) {
-                start_loc = try doc.line_position.utf8PositionToUtf16(start_loc);
-            }
+            var start_loc = try doc.line_position.getPositionFromBytePosition(first.loc.start, encoding);
             const last = ast_context.tokens.items[tree.lastToken(symbol.node)];
-            var end_loc = try doc.line_position.getPositionFromBytePosition(last.loc.end);
-            if (encoding == .utf16) {
-                end_loc = try doc.line_position.utf8PositionToUtf16(end_loc);
-            }
+            var end_loc = try doc.line_position.getPositionFromBytePosition(last.loc.end, encoding);
 
             var range = lsp.Range{
                 .start = .{
@@ -260,7 +253,7 @@ config: *Config,
 zigenv: ZigEnv,
 workspace: Workspace = undefined,
 client_capabilities: ClientCapabilities = .{},
-offset_encoding: Line.Encoding = .utf16,
+encoding: Line.Encoding = .utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
     .signatureHelpProvider = .{
         .triggerCharacters = &.{"("},
@@ -335,7 +328,7 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
     const params = try lsp.fromDynamicTree(arena, lsp.initialize.InitializeParams, jsonParams.?);
     for (params.capabilities.offsetEncoding.value) |encoding| {
         if (std.mem.eql(u8, encoding, "utf-8")) {
-            self.offset_encoding = .utf8;
+            self.encoding = .utf8;
         }
     }
 
@@ -362,12 +355,12 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
 
     logger.info("zls initialized", .{});
     logger.info("{}", .{self.client_capabilities});
-    logger.info("Using offset encoding: {s}", .{@tagName(self.offset_encoding)});
+    logger.info("Using offset encoding: {s}", .{@tagName(self.encoding)});
 
     return lsp.Response{
         .id = id,
         .result = .{ .InitializeResult = .{
-            .offsetEncoding = self.offset_encoding.toString(),
+            .offsetEncoding = self.encoding.toString(),
             .serverInfo = .{
                 .name = "zls",
                 .version = "0.1.0",
@@ -396,7 +389,7 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    try doc.applyChanges(params.contentChanges.Array, self.offset_encoding, self.zigenv);
+    try doc.applyChanges(params.contentChanges.Array, self.encoding, self.zigenv);
     // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}
@@ -426,7 +419,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 
     var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
-        .range = try documentRange(doc.utf8_buffer.text, self.offset_encoding),
+        .range = try documentRange(doc.utf8_buffer.text, self.encoding),
         .newText = stdout_bytes,
     };
     return lsp.Response{
@@ -444,7 +437,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     var symbol_tree = SymbolTree.init(arena.allocator(), doc.tree);
     try symbol_tree.traverse(0);
     logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
-    const symbols = try to_symbols(arena.allocator(), doc, self.offset_encoding, symbol_tree.symbols.items, 0);
+    const symbols = try to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
     return lsp.Response{
         .id = id,
         .result = .{
@@ -466,39 +459,41 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, doc);
-    if (self.offset_encoding == .utf16) {
-        var i: u32 = 0;
-        while (i < token_array.len) : (i += 5) {
-            // { line: 2, startChar:  5, length: 3, tokenType: 0, tokenModifiers: 3 },
-            const line = token_array[i];
-            const start_char = token_array[i + 1];
-            const end_char = start_char + token_array[i + 2];
-            const start = try doc.line_position.utf8PositionToUtf16(.{ .line = line, .x = start_char });
-            const end = try doc.line_position.utf8PositionToUtf16(.{ .line = line, .x = end_char });
-
-            token_array[i + 1] = @intCast(u32, start.x);
-            token_array[i + 2] = @intCast(u32, end.x - start.x);
-        }
+    var array = try std.ArrayList(u32).initCapacity(arena.allocator(), token_array.len * 5);
+    for(token_array)|token|
+    {
+        const start = try doc.line_position.getPositionFromBytePosition(token.start, self.encoding);
+        const end = try doc.line_position.getPositionFromBytePosition(token.end-1, self.encoding);        
+        std.debug.assert(start.line==end.line);
+        try array.appendSlice(&.{
+            start.line,
+            start.x,
+            @truncate(u32, end.x - start.x+1),
+            @enumToInt(token.token_type),
+            token.token_modifiers.toInt(),
+        });
     }
     // convert to delta
+    var data = array.items;
     {
         var prev_line: u32 = 0;
         var prev_character: u32 = 0;
         var i: u32 = 0;
-        while (i < token_array.len) : (i += 5) {
-            const current_line = token_array[i];
-            const current_character = token_array[i + 1];
+        while (i < data.len) : (i += 5) {
+            const current_line = data[i];
+            const current_character = data[i + 1];
 
-            token_array[i] = current_line - prev_line;
-            token_array[i + 1] = current_character - if (current_line == prev_line) prev_character else 0;
+            data[i] = current_line - prev_line;
+            data[i + 1] = current_character - if (current_line == prev_line) prev_character else 0;
 
             prev_line = current_line;
             prev_character = current_character;
         }
     }
+    logger.debug("semantic tokens: {}", .{data.len});
     return lsp.Response{
         .id = id,
-        .result = .{ .SemanticTokensFull = .{ .data = token_array } },
+        .result = .{ .SemanticTokensFull = .{ .data = data } },
     };
 }
 
@@ -508,7 +503,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (hover_util.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities)) |hover_or_null| {
         if (hover_or_null) |hover_contents| {
@@ -543,11 +538,11 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try self.workspace.gotoHandler(arena, doc, @intCast(u32, byte_position), true)) |location| {
         var goto = lsp.Position{ .line = location.row, .character = location.col };
-        if (self.offset_encoding == .utf16) {
+        if (self.encoding == .utf16) {
             goto = try utf8PositionToUtf16(doc.line_position, goto);
         }
         return lsp.Response{
@@ -579,7 +574,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     return completion_util.process(
         arena,
@@ -604,12 +599,8 @@ const RefHandlerContext = struct {
         else
             std.ArrayList(lsp.TextEdit).init(context.allocator);
 
-        var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start);
-        var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end);
-        if (encoding == .utf16) {
-            start = try doc.line_position.utf8PositionToUtf16(start);
-            end = try doc.line_position.utf8PositionToUtf16(end);
-        }
+        var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start, encoding);
+        var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end, encoding);
 
         (try text_edits.addOne()).* = .{
             .range = .{
@@ -627,7 +618,7 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try rename_util.process(arena, &self.workspace, doc, byte_position)) |locations| {
         var changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator());
@@ -637,7 +628,7 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             .new_name = params.newName,
         };
         for (locations) |location| {
-            try context.refHandler(try self.workspace.getDocument(location.uri), location, self.offset_encoding);
+            try context.refHandler(try self.workspace.getDocument(location.uri), location, self.encoding);
         }
 
         return lsp.Response{
@@ -655,7 +646,7 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try references_util.process(
         arena,
@@ -667,9 +658,9 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     )) |src| {
         var locations = std.ArrayList(lsp.Location).init(arena.allocator());
         for (src) |loc| {
-            var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start);
-            var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end);
-            if (self.offset_encoding == .utf16) {
+            var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start, self.encoding);
+            var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end, self.encoding);
+            if (self.encoding == .utf16) {
                 start = try doc.line_position.utf8PositionToUtf16(start);
                 end = try doc.line_position.utf8PositionToUtf16(end);
             }
@@ -705,7 +696,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const doc = try self.workspace.getDocument(params.textDocument.uri);
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.offset_encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try getSignatureInfo(
         arena,

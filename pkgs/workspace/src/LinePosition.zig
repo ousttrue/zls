@@ -92,17 +92,19 @@ pub const LineX = struct {
     x: u32,
 };
 
-pub fn getPositionFromBytePosition(self: Self, byte_position: usize) !LineX {
+pub fn getPositionFromBytePosition(self: Self, byte_position: usize, encoding: Line.Encoding) !LineX {
     const line = try self.getLineIndexFromBytePosition(byte_position);
-    const begin = self.line_heads.items[line];
-    var i: u32 = begin;
+    var i: u32 = self.line_heads.items[line];
     var x: u32 = 0;
     while (i < byte_position) {
         const len: u32 = try std.unicode.utf8ByteSequenceLength(self.text[i]);
         i += len;
-        x += len;
+        x += switch (encoding) {
+            .utf8 => len,
+            .utf16 => 1,
+        };
     }
-    return LineX{ .line = @intCast(u32, line), .x = x };
+    return LineX{ .line =@intCast(u32, line), .x = x };
 }
 
 pub fn utf8PositionToUtf16(self: Self, src: LineX) !LineX {
@@ -129,11 +131,11 @@ test "LinePosition" {
     const ls = try Self.init(std.testing.allocator, text);
     defer ls.deinit();
     std.debug.print("\n", .{});
-    try std.testing.expect((try ls.getLineIndexFromBytePosition(0)) == @as(usize, 0));
-    try std.testing.expect((try ls.getLineIndexFromBytePosition(2)) == @as(usize, 1));
-    try std.testing.expect((try ls.getLineIndexFromBytePosition(6)) == @as(usize, 3));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(0, .utf8)) == @as(usize, 0));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(2, .utf8)) == @as(usize, 1));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(6, .utf8)) == @as(usize, 3));
     std.debug.print("\n", .{});
 
-    try std.testing.expectEqual((try ls.getPositionFromBytePosition(0)), .{ .line = 0, .x = 0 });
-    try std.testing.expectEqual((try ls.getPositionFromBytePosition(7)), .{ .line = 3, .x = 1 });
+    try std.testing.expectEqual((try ls.getPositionFromBytePosition(0, .utf8)), .{ .line = 0, .x = 0 });
+    try std.testing.expectEqual((try ls.getPositionFromBytePosition(7, .utf8)), .{ .line = 3, .x = 1 });
 }

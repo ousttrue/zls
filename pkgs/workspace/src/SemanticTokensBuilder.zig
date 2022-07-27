@@ -3,15 +3,22 @@ const semantic_tokens = @import("./semantic_tokens.zig");
 const SemanticTokenType = semantic_tokens.SemanticTokenType;
 const SemanticTokenModifiers = semantic_tokens.SemanticTokenModifiers;
 const Document = @import("./Document.zig");
-
+const logger = std.log.scoped(.SemanticTokens);
 const Self = @This();
 
-array: std.ArrayList(u32),
+pub const SemanticToken = struct {
+    start: usize,
+    end: usize,
+    token_type: SemanticTokenType,
+    token_modifiers: SemanticTokenModifiers,
+};
+
+array: std.ArrayList(SemanticToken),
 document: *Document,
 
 fn init(allocator: std.mem.Allocator, document: *Document) Self {
     return Self{
-        .array = std.ArrayList(u32).init(allocator),
+        .array = std.ArrayList(SemanticToken).init(allocator),
         .document = document,
     };
 }
@@ -352,24 +359,56 @@ fn push_semantic_token(
     self: *Self,
     loc: std.zig.Token.Loc,
     token_type: SemanticTokenType,
-    modifier: SemanticTokenModifiers,
+    modifiers: SemanticTokenModifiers,
 ) !void {
-    const pos_x = try self.document.line_position.getPositionFromBytePosition(loc.start);
-    try self.array.appendSlice(&.{
-        pos_x.line,
-        pos_x.x,
-        @truncate(u32, loc.end - loc.start),
-        @enumToInt(token_type),
-        modifier.toInt(),
+    if (self.array.items.len > 0) {
+        std.debug.assert(loc.start > self.array.items[self.array.items.len - 1].start);
+    }
+    try self.array.append(SemanticToken{
+        .start = loc.start,
+        .end = loc.end,
+        .token_type = token_type,
+        .token_modifiers = modifiers,
     });
 }
 
-pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Document) ![]u32 {
+pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Document) ![]SemanticToken {
     const allocator = arena.allocator();
 
+    var text = document.utf8_buffer.text;
+    _ = text;
     var self = init(allocator, document);
     for (document.ast_context.tokens.items) |token, i| {
         try self.push(@intCast(u32, i), token);
+
+        // var j = token.loc.end + 1;
+        // var in_comment: ?usize = null;
+        // while (j < text.len) {
+        //     if (in_comment) |comment_start| {
+        //         if (text[j] == '\n') {
+        //             logger.debug("push comment: {} = {}", .{comment_start, j});
+        //             try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
+        //             in_comment = null;
+        //         }
+        //     } else {
+        //         if (std.ascii.isSpace(text[j])) {
+        //             // skip
+        //         } else if (text[j] == '/' and text[j + 1] == '/') {
+        //             // line comment to eol
+        //             in_comment = j;
+        //         } else {
+        //             // next token
+        //             break;
+        //         }
+        //     }
+
+        //     const len = try std.unicode.utf8CodepointSequenceLength(text[j]);
+        //     j += len;
+        // }
+        // if (in_comment) |comment_start| {
+        //     try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
+        //     in_comment = null;
+        // }
     }
 
     return self.array.items;
