@@ -7,7 +7,6 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const log = std.log.scoped(.references);
 const ast = @import("./ast.zig");
-const TokenLocation = @import("./TokenLocation.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");
 
 fn tokenReference(document: *Document, token_idx: Ast.TokenIndex) UriBytePosition {
