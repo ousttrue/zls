@@ -30,15 +30,3 @@ const Held = struct {
         self.document.mem[self.end_index] = self.popped;
     }
 };
-
-pub fn borrowNullTerminatedSlice(self: *const Self, start_idx: usize, end_idx: usize) Held {
-    std.debug.assert(end_idx >= start_idx);
-    const popped_char = self.mem[end_idx];
-    self.mem[end_idx] = 0;
-    return .{
-        .document = self,
-        .popped = popped_char,
-        .start_index = start_idx,
-        .end_index = end_idx,
-    };
-}

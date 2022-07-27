@@ -80,12 +80,12 @@ fn fnProtoToSignatureInfo(
 pub fn getSignatureInfo(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
-    absolute_index: usize,
+    doc: *Document,
+    byte_position: usize,
     builtins: []const Builtin,
 ) !?lsp.SignatureInformation {
-    const innermost_block = handle.innermostBlockScope(absolute_index);
-    const tree = handle.tree;
+    const innermost_block = doc.innermostBlockScope(byte_position);
+    const tree = doc.tree;
     const token_tags = tree.tokens.items(.tag);
     const token_starts = tree.tokens.items(.start);
 
@@ -94,12 +94,12 @@ pub fn getSignatureInfo(
     const first_token = tree.firstToken(innermost_block);
     // We start by finding the token that includes the current cursor position
     const last_token = blk: {
-        if (token_starts[0] >= absolute_index)
+        if (token_starts[0] >= byte_position)
             return null;
 
         var i: u32 = 1;
         while (i < token_tags.len) : (i += 1) {
-            if (token_starts[i] >= absolute_index) {
+            if (token_starts[i] >= byte_position) {
                 break :blk i - 1;
             }
         }
@@ -267,15 +267,16 @@ pub fn getSignatureInfo(
                 const last_token_slice = tree.tokenSlice(expr_last_token);
                 const expr_end = token_starts[expr_last_token] + last_token_slice.len;
 
-                var held_expr = handle.utf8_buffer.borrowNullTerminatedSlice(expr_start, expr_end);
-                defer held_expr.release();
+                const allocator = arena.allocator();
+                var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[expr_start..expr_end]);
+                defer allocator.free(copy);
+                var tokenizer = std.zig.Tokenizer.init(copy);
 
                 // Resolve the expression.
-                var tokenizer = std.zig.Tokenizer.init(held_expr.data());
                 if (try FieldAccessReturn.getFieldAccessType(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     expr_start,
                     &tokenizer,
                 )) |result| {
@@ -301,7 +302,7 @@ pub fn getSignatureInfo(
                         );
                     }
 
-                    const name = handle.identifierFromPosition(expr_end - 1) orelse {
+                    const name = doc.identifierFromPosition(expr_end - 1) orelse {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;
                     };

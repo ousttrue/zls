@@ -2,7 +2,6 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
-const DocumentPosition = @import("./DocumentPosition.zig");
 const Scope = @import("./Scope.zig");
 const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
@@ -722,22 +721,20 @@ fn completeFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     id: i64,
-    handle: *Document,
-    position: DocumentPosition,
+    doc: *Document,
+    byte_position: u32,
     range: std.zig.Token.Loc,
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) !lsp.Response {
+    const allocator = arena.allocator();
+    var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
+    defer allocator.free(copy);
+    var tokenizer = std.zig.Tokenizer.init(copy);
+
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
-
-    const line_mem_start = @ptrToInt(position.line.ptr) - @ptrToInt(handle.utf8_buffer.mem.ptr);
-    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(line_mem_start + range.start, line_mem_start + range.end);
-    errdefer held_range.release();
-    var tokenizer = std.zig.Tokenizer.init(held_range.data());
-
-    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, position.absolute_index, &tokenizer)) |result| {
-        held_range.release();
-        try typeToCompletion(arena, workspace, &completions, result, handle, config, client_capabilities);
+    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, byte_position, &tokenizer)) |result| {
+        try typeToCompletion(arena, workspace, &completions, result, doc, config, client_capabilities);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
 
@@ -788,11 +785,11 @@ pub fn process(
     workspace: *Workspace,
     id: i64,
     doc: *Document,
-    doc_position: DocumentPosition,
+    byte_position: u32,
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) !lsp.Response {
-    const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    const pos_context = doc.getPositionContext(byte_position);
     switch (pos_context) {
         .builtin => {
             logger.debug("[completion][builtin]", .{});
@@ -800,11 +797,11 @@ pub fn process(
         },
         .var_access, .empty => {
             logger.debug("[completion][global]", .{});
-            return try completeGlobal(arena, workspace, id, doc_position.absolute_index, doc, config, client_capabilities);
+            return try completeGlobal(arena, workspace, id, byte_position, doc, config, client_capabilities);
         },
         .field_access => |range| {
             logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, id, doc, doc_position, range, config, client_capabilities);
+            return try completeFieldAccess(arena, workspace, id, doc, byte_position, range, config, client_capabilities);
         },
         .global_error_set => {
             logger.debug("[completion][global_error_set]", .{});
@@ -816,7 +813,7 @@ pub fn process(
         },
         .label => {
             logger.debug("[completion][label]", .{});
-            return try completeLabel(arena, workspace, id, doc_position.absolute_index, doc, config, client_capabilities);
+            return try completeLabel(arena, workspace, id, byte_position, doc, config, client_capabilities);
         },
         else => {
             logger.debug("[completion][{s}]", .{@tagName(pos_context)});

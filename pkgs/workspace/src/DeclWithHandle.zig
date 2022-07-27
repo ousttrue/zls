@@ -357,23 +357,23 @@ pub fn resolveVarDeclAlias(
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
+    doc: *Document,
     byte_position: usize,
     range: std.zig.Token.Loc,
 ) !Self {
-    const name = handle.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
-    var held_range = handle.utf8_buffer.borrowNullTerminatedSlice(byte_position + range.start, byte_position + range.end);
-    var tokenizer = std.zig.Tokenizer.init(held_range.data());
+    const name = doc.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
 
-    errdefer held_range.release();
+    const allocator = arena.allocator();
+    var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
+    defer allocator.free(copy);
+    var tokenizer = std.zig.Tokenizer.init(copy);
     const result = (try FieldAccessReturn.getFieldAccessType(
         arena,
         workspace,
-        handle,
+        doc,
         byte_position,
         &tokenizer,
     )) orelse return error.NoFieldAccessType;
-    held_range.release();
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {
         .other => |n| n,

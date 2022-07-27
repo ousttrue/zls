@@ -552,7 +552,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try self.workspace.gotoHandler(arena, doc, doc_position, true)) |location| {
+    if (try self.workspace.gotoHandler(arena, doc, doc_position.byte_position, true)) |location| {
         var goto = lsp.Position{ .line = location.row, .character = location.col };
         if (self.offset_encoding == .utf16) {
             goto = try utf8PositionToUtf16(doc.line_position, goto);
@@ -594,7 +594,15 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    return completion_util.process(arena, &self.workspace, id, doc, doc_position, self.config, &self.client_capabilities);
+    return completion_util.process(
+        arena,
+        &self.workspace,
+        id,
+        doc,
+        @intCast(u32, doc_position.absolute_index),
+        self.config,
+        &self.client_capabilities,
+    );
 }
 
 // TODO Use a map to array lists and collect at the end instead?
@@ -660,20 +668,6 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
         return lsp.Response.createNull(id);
     }
 }
-
-// const loc = try TokenLocation.tokenRelativeLocation(document.tree, 0, );
-// return lsp.Location{
-//     .range = .{
-//         .start = .{
-//             .line = @intCast(i64, loc.line),
-//             .character = @intCast(i64, loc.column),
-//         },
-//         .end = .{
-//             .line = @intCast(i64, loc.line),
-//             .character = @intCast(i64, loc.column + ast.tokenLength(document.tree, tok)),
-//         },
-//     },
-// };
 
 pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);

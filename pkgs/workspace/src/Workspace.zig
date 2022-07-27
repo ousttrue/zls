@@ -6,7 +6,6 @@ const Document = @import("./Document.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const BuildFile = @import("./BuildFile.zig");
 const Location = @import("./Location.zig");
-const DocumentPosition = @import("./DocumentPosition.zig");
 const position_context = @import("./position_context.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const ast = @import("./ast.zig");
@@ -331,28 +330,27 @@ pub fn gotoHandler(
     self: *Self,
     arena: *std.heap.ArenaAllocator,
     doc: *Document,
-    doc_position: DocumentPosition,
+    byte_position: u32,
     resolve_alias: bool,
 ) !?Location {
-    // const pos_context = position_context.documentPositionContext(arena, doc_position);
-    const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    const pos_context = doc.getPositionContext(byte_position);
     switch (pos_context) {
         .var_access => {
-            if (try self.getSymbolGlobal(arena, doc, doc_position.absolute_index)) |decl| {
+            if (try self.getSymbolGlobal(arena, doc, byte_position)) |decl| {
                 return self.gotoDefinitionSymbol(arena, decl, resolve_alias);
             } else {
                 return null;
             }
         },
         .field_access => |range| {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, self, doc, doc_position.absolute_index, range);
+            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, self, doc, byte_position, range);
             return self.gotoDefinitionSymbol(arena, decl, resolve_alias);
         },
         .string_literal => {
-            return doc.gotoDefinitionString(arena, doc_position.absolute_index, self.zigenv);
+            return doc.gotoDefinitionString(arena, byte_position, self.zigenv);
         },
         .label => {
-            return self.gotoDefinitionLabel(arena, doc, doc_position.absolute_index);
+            return self.gotoDefinitionLabel(arena, doc, byte_position);
         },
         else => {
             logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
