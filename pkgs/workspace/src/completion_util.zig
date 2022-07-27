@@ -2,6 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
+const DocumentScope = @import("./DocumentScope.zig");
 const Scope = @import("./Scope.zig");
 const Config = @import("./Config.zig");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
@@ -748,11 +749,43 @@ fn completeFieldAccess(
     };
 }
 
-fn completeError(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, handle: *Document, config: *Config) !lsp.Response {
-    const completions = try workspace.errorCompletionItems(arena, handle);
+pub fn tagStoreCompletionItems(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    base: *Document,
+    comptime name: []const u8,
+) ![]lsp.CompletionItem {
+    // TODO Better solution for deciding what tags to include
+    var max_len: usize = @field(base.document_scope, name).count();
+    for (base.imports_used.items) |uri| {
+        max_len += @field(workspace.handles.get(uri).?.document_scope, name).count();
+    }
+
+    var result_set = DocumentScope.CompletionSet{};
+    try result_set.ensureTotalCapacity(arena.allocator(), max_len);
+    for (@field(base.document_scope, name).entries.items(.key)) |completion| {
+        result_set.putAssumeCapacityNoClobber(completion, {});
+    }
+
+    for (base.imports_used.items) |uri| {
+        const curr_set = &@field(workspace.handles.get(uri).?.document_scope, name);
+        for (curr_set.entries.items(.key)) |completion| {
+            result_set.putAssumeCapacity(completion, {});
+        }
+    }
+    return result_set.entries.items(.key);
+}
+
+fn completeError(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    id: i64,
+    doc: *Document,
+    config: *Config,
+) !lsp.Response {
+    const completions = try tagStoreCompletionItems(arena, workspace, doc, "error_completions");
     builtin_completions.truncateCompletions(completions, config.max_detail_length);
     logger.debug("Completing error:", .{});
-
     return lsp.Response{
         .id = id,
         .result = .{
@@ -764,8 +797,14 @@ fn completeError(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64
     };
 }
 
-fn completeDot(arena: *std.heap.ArenaAllocator, workspace: *Workspace, id: i64, handle: *Document, config: *Config) !lsp.Response {
-    var completions = try workspace.enumCompletionItems(arena, handle);
+fn completeDot(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    id: i64,
+    doc: *Document,
+    config: *Config,
+) !lsp.Response {
+    var completions = try tagStoreCompletionItems(arena, workspace, doc, "enum_completions");
     builtin_completions.truncateCompletions(completions, config.max_detail_length);
 
     return lsp.Response{

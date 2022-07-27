@@ -7,6 +7,7 @@ const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
 const UriBytePosition = ws.UriBytePosition;
+const DeclWithHandle = ws.DeclWithHandle;
 const LinePosition = ws.LinePosition;
 const Line = ws.Line;
 const ast = ws.ast;
@@ -537,6 +538,44 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     }
 }
 
+pub fn gotoHandler(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    doc: *Document,
+    byte_position: u32,
+    resolve_alias: bool,
+) !?UriBytePosition {
+    const pos_context = doc.getPositionContext(byte_position);
+    switch (pos_context) {
+        .var_access => {
+            if (try DeclWithHandle.getSymbolGlobal(arena, workspace, doc, byte_position)) |decl| {
+                return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
+            } else {
+                return null;
+            }
+        },
+        .field_access => |range| {
+            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
+            return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
+        },
+        .string_literal => {
+            return doc.gotoDefinitionString(arena, byte_position, workspace.zigenv);
+        },
+        .label => {
+            // return self.gotoDefinitionLabel(arena, doc, byte_position);
+            if (try doc.getLabelGlobal(byte_position)) |decl| {
+                return decl.gotoDefinitionSymbol(workspace, arena, false);
+            } else {
+                return null;
+            }
+        },
+        else => {
+            logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
+            return null;
+        },
+    }
+}
+
 /// document position request
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
@@ -546,7 +585,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    if (try self.workspace.gotoHandler(arena, doc, @intCast(u32, byte_position), true)) |location| {
+    if (try gotoHandler(arena, &self.workspace, doc, @intCast(u32, byte_position), true)) |location| {
         const goto_doc = try self.workspace.getDocument(location.uri);
         const goto = try goto_doc.line_position.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line=goto.line, .character=goto.x };

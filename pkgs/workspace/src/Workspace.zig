@@ -1,15 +1,9 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const URI = @import("./uri.zig");
-const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Document = @import("./Document.zig");
-const DocumentScope = @import("./DocumentScope.zig");
 const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
-const ast = @import("./ast.zig");
 const logger = std.log.scoped(.Workspace);
-const UriBytePosition = @import("./UriBytePosition.zig");
-
 const Self = @This();
 
 allocator: std.mem.Allocator,
@@ -169,41 +163,6 @@ pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
     return try self.newDocument(duped_uri, duped_text);
 }
 
-// fn decrementCount(self: *Self, uri: []const u8) void {
-//     if (self.handles.getEntry(uri)) |entry| {
-//         const handle = entry.value_ptr.*;
-//         if (handle.count > 0) {
-//             if (handle.associated_build_file) |build_file| {
-//                 self.decrementCount(build_file.uri);
-//                 // Remove the build file from the array list
-//                 _ = self.build_files.swapRemove(std.mem.indexOfScalar(*BuildFile, self.build_files.items, build_file).?);
-//             }
-
-//             if (handle.is_build_file) |build_file| {
-//                 self.decrementCount(build_file.uri);
-//                 // Remove the build file from the array list
-//                 _ = self.build_files.swapRemove(std.mem.indexOfScalar(*BuildFile, self.build_files.items, build_file).?);
-//             }
-
-//             for (handle.imports_used.items) |import_uri| {
-//                 self.decrementCount(import_uri);
-//             }
-
-//             if (handle.decrement() == 0) {
-//                 logger.debug("Freeing document: {s}", .{uri});
-//             }
-
-//             const uri_key = entry.key_ptr.*;
-//             std.debug.assert(self.handles.remove(uri));
-//             self.allocator.free(uri_key);
-//         }
-//     }
-// }
-
-// pub fn closeDocument(self: *Self, uri: []const u8) void {
-//     self.decrementCount(uri);
-// }
-
 pub fn getDocument(self: *Self, uri: []const u8) !*Document {
     if (self.handles.getEntry(uri)) |entry| {
         var doc = entry.value_ptr.*;
@@ -291,73 +250,5 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
         const duped_final_uri = try allocator.dupe(u8, final_uri);
         errdefer allocator.free(duped_final_uri);
         return try self.newDocument(duped_final_uri, file_contents);
-    }
-}
-
-fn tagStoreCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document, comptime name: []const u8) ![]lsp.CompletionItem {
-    // TODO Better solution for deciding what tags to include
-    var max_len: usize = @field(base.document_scope, name).count();
-    for (base.imports_used.items) |uri| {
-        max_len += @field(self.handles.get(uri).?.document_scope, name).count();
-    }
-
-    var result_set = DocumentScope.CompletionSet{};
-    try result_set.ensureTotalCapacity(arena.allocator(), max_len);
-    for (@field(base.document_scope, name).entries.items(.key)) |completion| {
-        result_set.putAssumeCapacityNoClobber(completion, {});
-    }
-
-    for (base.imports_used.items) |uri| {
-        const curr_set = &@field(self.handles.get(uri).?.document_scope, name);
-        for (curr_set.entries.items(.key)) |completion| {
-            result_set.putAssumeCapacity(completion, {});
-        }
-    }
-    return result_set.entries.items(.key);
-}
-
-pub fn errorCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document) ![]lsp.CompletionItem {
-    return try self.tagStoreCompletionItems(arena, base, "error_completions");
-}
-
-pub fn enumCompletionItems(self: Self, arena: *std.heap.ArenaAllocator, base: *Self.Document) ![]lsp.CompletionItem {
-    return try self.tagStoreCompletionItems(arena, base, "enum_completions");
-}
-
-pub fn gotoHandler(
-    self: *Self,
-    arena: *std.heap.ArenaAllocator,
-    doc: *Document,
-    byte_position: u32,
-    resolve_alias: bool,
-) !?UriBytePosition {
-    const pos_context = doc.getPositionContext(byte_position);
-    switch (pos_context) {
-        .var_access => {
-            if (try DeclWithHandle.getSymbolGlobal(arena, self, doc, byte_position)) |decl| {
-                return decl.gotoDefinitionSymbol(self, arena, resolve_alias);
-            } else {
-                return null;
-            }
-        },
-        .field_access => |range| {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, self, doc, byte_position, range);
-            return decl.gotoDefinitionSymbol(self, arena, resolve_alias);
-        },
-        .string_literal => {
-            return doc.gotoDefinitionString(arena, byte_position, self.zigenv);
-        },
-        .label => {
-            // return self.gotoDefinitionLabel(arena, doc, byte_position);
-            if (try doc.getLabelGlobal(byte_position)) |decl| {
-                return decl.gotoDefinitionSymbol(self, arena, false);
-            } else {
-                return null;
-            }
-        },
-        else => {
-            logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
-            return null;
-        },
     }
 }
