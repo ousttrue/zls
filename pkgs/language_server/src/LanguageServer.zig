@@ -1,17 +1,12 @@
+//! A LanguageServer frontend, registered to a JsonRPC dispatcher.
 const std = @import("std");
 const lsp = @import("lsp");
-const Ast = std.zig.Ast;
 const ws = @import("workspace");
 const Config = ws.Config;
 const ZigEnv = ws.ZigEnv;
 const Workspace = ws.Workspace;
-const Document = ws.Document;
-const UriBytePosition = ws.UriBytePosition;
-const DeclWithHandle = ws.DeclWithHandle;
-const TypeWithHandle = ws.TypeWithHandle;
 const LinePosition = ws.LinePosition;
 const Line = ws.Line;
-const ast = ws.ast;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
@@ -25,57 +20,11 @@ const getSignatureInfo = ws.signature_help.getSignatureInfo;
 
 const textdocument_symbol = @import("./textdocument_symbol.zig");
 const textdocument_diagnostics = @import("./textdocument_diagnostics.zig");
+const textdocument_goto = @import("./textdocument_goto.zig");
 
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 const Self = @This();
-
-pub fn documentRange(text: []const u8, encoding: Line.Encoding) !lsp.Range {
-    var line_idx: i64 = 0;
-    var curr_line: []const u8 = text;
-
-    var split_iterator = std.mem.split(u8, text, "\n");
-    while (split_iterator.next()) |line| : (line_idx += 1) {
-        curr_line = line;
-    }
-
-    if (encoding == .utf8) {
-        return lsp.Range{
-            .start = .{
-                .line = 0,
-                .character = 0,
-            },
-            .end = .{
-                .line = line_idx,
-                .character = @intCast(i64, curr_line.len),
-            },
-        };
-    } else {
-        var utf16_len: usize = 0;
-        var line_utf8_idx: usize = 0;
-        while (line_utf8_idx < curr_line.len) {
-            const n = try std.unicode.utf8ByteSequenceLength(curr_line[line_utf8_idx]);
-            const codepoint = try std.unicode.utf8Decode(curr_line[line_utf8_idx .. line_utf8_idx + n]);
-            if (codepoint < 0x10000) {
-                utf16_len += 1;
-            } else {
-                utf16_len += 2;
-            }
-            line_utf8_idx += n;
-        }
-        return lsp.Range{
-            .start = .{
-                .line = 0,
-                .character = 0,
-            },
-            .end = .{
-                .line = line_idx,
-                .character = @intCast(i64, utf16_len),
-            },
-        };
-    }
-}
-
 
 config: *Config,
 zigenv: ZigEnv,
@@ -155,6 +104,16 @@ pub fn deinit(self: *Self) void {
     self.workspace.deinit();
 }
 
+/// # base protocol
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest
+pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    _ = self;
+    _ = arena;
+    _ = jsonParams;
+}
+
+/// # lifecycle
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize
 pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.initialize.InitializeParams, jsonParams.?);
     for (params.capabilities.offsetEncoding.value) |encoding| {
@@ -184,9 +143,9 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
         }
     }
 
-    logger.info("zls initialized", .{});
-    logger.info("{}", .{self.client_capabilities});
-    logger.info("Using offset encoding: {s}", .{@tagName(self.encoding)});
+    // logger.info("zls initialized", .{});
+    // logger.info("{}", .{self.client_capabilities});
+    // logger.info("Using offset encoding: {s}", .{@tagName(self.encoding)});
 
     return lsp.Response{
         .id = id,
@@ -201,12 +160,16 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
     };
 }
 
+/// # lifecycle
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialized
 pub fn initialized(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     _ = self;
     _ = arena;
     _ = jsonParams;
 }
 
+/// # lifecycle
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#shutdown
 pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     _ = self;
     _ = arena;
@@ -215,12 +178,8 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
     return lsp.Response.createNull(id);
 }
 
-pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    _ = self;
-    _ = arena;
-    _ = jsonParams;
-}
-
+/// # document sync
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didOpen
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     const doc = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
@@ -231,6 +190,8 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
     }
 }
 
+/// # document sync
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didChange
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -242,18 +203,25 @@ pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, j
     }
 }
 
+/// # document sync
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave
 pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SaveDocument, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     try doc.applySave(self.zigenv);
 }
 
+/// # document sync
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didClose
 pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.CloseDocument, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     _ = doc;
 }
 
+/// # language feature
+/// ## document request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_formatting
 pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -264,9 +232,22 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
+    const end = doc.utf8_buffer.text.len;
+    const position = try doc.line_position.getPositionFromBytePosition(end, self.encoding);
+    const range = lsp.Range{
+        .start = .{
+            .line = 0,
+            .character = 0,
+        },
+        .end = .{
+            .line = position.line,
+            .character = position.x,
+        },
+    };
+
     var edits = try arena.allocator().alloc(lsp.TextEdit, 1);
     edits[0] = .{
-        .range = try documentRange(doc.utf8_buffer.text, self.encoding),
+        .range = range,
         .newText = stdout_bytes,
     };
     return lsp.Response{
@@ -277,7 +258,9 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
     };
 }
 
-/// document request
+/// # language feature
+/// ## document request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -293,7 +276,9 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     };
 }
 
-/// document request
+/// # language feature
+/// ## document request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens
 pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     if (!self.config.enable_semantic_tokens) {
         return lsp.Response{
@@ -343,7 +328,9 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     };
 }
 
-/// document position request
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover
 pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -377,45 +364,9 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     }
 }
 
-pub fn gotoHandler(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    doc: *Document,
-    byte_position: u32,
-    resolve_alias: bool,
-) !?UriBytePosition {
-    const pos_context = doc.getPositionContext(byte_position);
-    switch (pos_context) {
-        .var_access => {
-            if (try DeclWithHandle.getSymbolGlobal(arena, workspace, doc, byte_position)) |decl| {
-                return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
-            } else {
-                return null;
-            }
-        },
-        .field_access => |range| {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
-            return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
-        },
-        .string_literal => {
-            return doc.gotoDefinitionString(arena, byte_position, workspace.zigenv);
-        },
-        .label => {
-            // return self.gotoDefinitionLabel(arena, doc, byte_position);
-            if (try doc.getLabelGlobal(byte_position)) |decl| {
-                return decl.gotoDefinitionSymbol(workspace, arena, false);
-            } else {
-                return null;
-            }
-        },
-        else => {
-            logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
-            return null;
-        },
-    }
-}
-
-/// document position request
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
@@ -424,7 +375,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    if (try gotoHandler(arena, &self.workspace, doc, @intCast(u32, byte_position), true)) |location| {
+    if (try textdocument_goto.gotoHandler(arena, &self.workspace, doc, @intCast(u32, byte_position), true)) |location| {
         const goto_doc = self.workspace.getDocument(location.uri) orelse return error.DocumentNotFound;
         const goto = try goto_doc.line_position.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
@@ -446,7 +397,9 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     }
 }
 
-/// document position request
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     var tmp = std.ArrayList(u8).init(arena.allocator());
     try jsonParams.?.jsonStringify(.{}, tmp.writer());
@@ -480,32 +433,9 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     };
 }
 
-// TODO Use a map to array lists and collect at the end instead?
-const RefHandlerContext = struct {
-    edits: *std.StringHashMap([]lsp.TextEdit),
-    allocator: std.mem.Allocator,
-    new_name: []const u8,
-
-    fn refHandler(context: *RefHandlerContext, doc: *Document, loc: UriBytePosition, encoding: Line.Encoding) !void {
-        var text_edits = if (context.edits.get(loc.uri)) |slice|
-            std.ArrayList(lsp.TextEdit).fromOwnedSlice(context.allocator, slice)
-        else
-            std.ArrayList(lsp.TextEdit).init(context.allocator);
-
-        var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start, encoding);
-        var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end, encoding);
-
-        (try text_edits.addOne()).* = .{
-            .range = .{
-                .start = .{ .line = start.line, .character = start.x },
-                .end = .{ .line = end.line, .character = end.x },
-            },
-            .newText = context.new_name,
-        };
-        try context.edits.put(loc.uri, text_edits.toOwnedSlice());
-    }
-};
-
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_rename
 pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -515,13 +445,24 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
 
     if (try rename_util.process(arena, &self.workspace, doc, byte_position)) |locations| {
         var changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator());
-        var context = RefHandlerContext{
-            .edits = &changes,
-            .allocator = arena.allocator(),
-            .new_name = params.newName,
-        };
-        for (locations) |location| {
-            try context.refHandler(self.workspace.getDocument(location.uri) orelse return error.DocumentNotFound, location, self.encoding);
+        const allocator = arena.allocator();
+        for (locations) |loc| {
+            var text_edits = if (changes.get(loc.uri)) |slice|
+                std.ArrayList(lsp.TextEdit).fromOwnedSlice(allocator, slice)
+            else
+                std.ArrayList(lsp.TextEdit).init(allocator);
+
+            var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start, self.encoding);
+            var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end, self.encoding);
+
+            (try text_edits.addOne()).* = .{
+                .range = .{
+                    .start = .{ .line = start.line, .character = start.x },
+                    .end = .{ .line = end.line, .character = end.x },
+                },
+                .newText = params.newName,
+            };
+            try changes.put(loc.uri, text_edits.toOwnedSlice());
         }
 
         return lsp.Response{
@@ -533,7 +474,9 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     }
 }
 
-/// document position request
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references
 pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -575,15 +518,9 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     }
 }
 
-const no_signatures_response = lsp.ResponseParams{
-    .SignatureHelp = .{
-        .signatures = &.{},
-        .activeSignature = null,
-        .activeParameter = null,
-    },
-};
-
-/// document position request
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp
 pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SignatureHelp, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
@@ -610,5 +547,11 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
         };
     }
 
-    return lsp.Response{ .id = id, .result = no_signatures_response };
+    return lsp.Response{ .id = id, .result = lsp.ResponseParams{
+        .SignatureHelp = .{
+            .signatures = &.{},
+            .activeSignature = null,
+            .activeParameter = null,
+        },
+    } };
 }
