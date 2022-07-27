@@ -9,13 +9,26 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
-const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
 const Location = @import("./Location.zig");
 const LinePosition = @import("./LinePosition.zig");
-const Self = @This();
 const logger = std.log.scoped(.Document);
 
+pub const PositionContext = union(enum) {
+    builtin: std.zig.Token.Loc,
+    string_literal: std.zig.Token.Loc,
+    field_access: std.zig.Token.Loc,
+    var_access: std.zig.Token.Loc,
+    global_error_set,
+    enum_literal,
+    // pre_label,
+    label: bool,
+    // other,
+    keyword,
+    empty,
+};
+
+const Self = @This();
 allocator: std.mem.Allocator,
 utf8_buffer: Utf8Buffer,
 count: usize,
