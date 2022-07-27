@@ -9,7 +9,6 @@ const ast = @import("./ast.zig");
 const Self = @This();
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, TypeWithHandle);
-const TokenLocation = @import("./TokenLocation.zig");
 
 decl: *Declaration,
 handle: *Document,
@@ -32,11 +31,6 @@ pub fn nameToken(self: Self) Ast.TokenIndex {
         .switch_payload => |sp| sp.node,
         .label_decl => |ld| ld,
     };
-}
-
-pub fn location(self: Self) !TokenLocation {
-    const tree = self.handle.tree;
-    return try TokenLocation.tokenRelativeLocation(tree, 0, tree.tokens.items(.start)[self.nameToken()]);
 }
 
 pub fn bytePosition(self: Self) usize{

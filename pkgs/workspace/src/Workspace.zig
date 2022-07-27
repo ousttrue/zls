@@ -8,7 +8,6 @@ const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const ast = @import("./ast.zig");
 const logger = std.log.scoped(.Workspace);
-const TokenLocation = @import("./TokenLocation.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");
 
 const Self = @This();

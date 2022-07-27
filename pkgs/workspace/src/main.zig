@@ -11,7 +11,6 @@ pub const Builtin = @import("./Builtin.zig");
 pub const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
-pub const TokenLocation = @import("./TokenLocation.zig");
 pub const SymbolTree = @import("./SymbolTree.zig");
 pub const hover_util = @import("./hover_util.zig");
 pub const completion_util = @import("./completion_util.zig");
