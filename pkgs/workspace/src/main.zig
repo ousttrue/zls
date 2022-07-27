@@ -3,7 +3,6 @@ pub const Workspace = @import("./Workspace.zig");
 pub const Document = @import("./Document.zig");
 pub const Line = @import("./Line.zig");
 pub const LinePosition = @import("./LinePosition.zig");
-pub const DocumentPosition = @import("./DocumentPosition.zig");
 pub const UriBytePosition = @import("./UriBytePosition.zig");
 pub const position_context = @import("./position_context.zig");
 pub const Config = @import("./Config.zig");
