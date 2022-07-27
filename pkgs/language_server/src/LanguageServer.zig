@@ -443,7 +443,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     var symbol_tree = SymbolTree.init(arena.allocator(), doc.tree);
     try symbol_tree.traverse(0);
-    logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
+    // logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
     const symbols = try to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
     return lsp.Response{
         .id = id,
@@ -497,7 +497,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
             prev_character = current_character;
         }
     }
-    logger.debug("semantic tokens: {}", .{data.len});
+    // logger.debug("semantic tokens: {}", .{data.len});
     return lsp.Response{
         .id = id,
         .result = .{ .SemanticTokensFull = .{ .data = data } },
