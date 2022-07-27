@@ -1,6 +1,5 @@
 const std = @import("std");
 const Self = @This();
-const PositionContext = @import("./position_context.zig").PositionContext;
 const AstGetChildren = @import("./AstGetChildren.zig");
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {

@@ -6,7 +6,6 @@ const Document = @import("./Document.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const BuildFile = @import("./BuildFile.zig");
 const Location = @import("./Location.zig");
-const position_context = @import("./position_context.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const ast = @import("./ast.zig");
 const logger = std.log.scoped(.Workspace);

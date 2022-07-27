@@ -1,6 +1,5 @@
 const std = @import("std");
 const ws = @import("workspace");
-const position_context = ws.position_context;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
 const DeclWithHandle = ws.DeclWithHandle;

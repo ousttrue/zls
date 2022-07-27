@@ -1,7 +1,6 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const ws = @import("workspace");
-const position_context = ws.position_context;
 const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const offsets = ws.offsets;

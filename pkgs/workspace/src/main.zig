@@ -4,7 +4,6 @@ pub const Document = @import("./Document.zig");
 pub const Line = @import("./Line.zig");
 pub const LinePosition = @import("./LinePosition.zig");
 pub const UriBytePosition = @import("./UriBytePosition.zig");
-pub const position_context = @import("./position_context.zig");
 pub const Config = @import("./Config.zig");
 pub const ZigEnv = @import("./ZigEnv.zig");
 pub const Stdio = @import("./Stdio.zig");
