@@ -376,6 +376,12 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
     };
 }
 
+pub fn initialized(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    _ = self;
+    _ = arena;
+    _ = jsonParams;
+}
+
 pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     _ = self;
     _ = arena;
@@ -618,7 +624,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
 /// document position request
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     var tmp = std.ArrayList(u8).init(arena.allocator());
-    try jsonParams.?.jsonStringify(.{}, tmp.writer());   
+    try jsonParams.?.jsonStringify(.{}, tmp.writer());
     logger.debug("{s}", .{tmp.items});
 
     const params = try lsp.fromDynamicTree(arena, lsp.completion.Completion, jsonParams.?);

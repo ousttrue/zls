@@ -178,6 +178,7 @@ pub fn main() anyerror!void {
     defer language_server.deinit();
 
     dispatcher.registerRequest(&language_server, "initialize");
+    dispatcher.registerNotify(&language_server, "initialized");
     dispatcher.registerRequest(&language_server, "shutdown");
     dispatcher.registerNotify(&language_server, "textDocument/didOpen");
     dispatcher.registerNotify(&language_server, "textDocument/didChange");
