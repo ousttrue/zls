@@ -570,7 +570,7 @@ pub fn symbolReferences(
                 blk: while (i < imports.items.len) : (i += 1) {
                     const import = imports.items[i];
                     for (import.imports_used.items) |uri| {
-                        const h = workspace.getDocument(uri) catch break;
+                        const h = workspace.getDocument(uri) orelse break;
 
                         if (h == curr_handle) {
                             // entry does import curr_handle

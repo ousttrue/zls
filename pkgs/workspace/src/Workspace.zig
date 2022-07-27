@@ -1,3 +1,7 @@
+///
+/// * Workspace
+///    * uri: Document
+///
 const std = @import("std");
 const URI = @import("./uri.zig");
 const Document = @import("./Document.zig");
@@ -9,7 +13,7 @@ const Self = @This();
 allocator: std.mem.Allocator,
 zigenv: ZigEnv,
 handles: std.StringHashMap(*Document),
-build_files: std.ArrayListUnmanaged(*BuildFile),
+build_files: std.ArrayList(*BuildFile),
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -19,7 +23,7 @@ pub fn init(
         .allocator = allocator,
         .zigenv = zigenv,
         .handles = std.StringHashMap(*Document).init(allocator),
-        .build_files = .{},
+        .build_files = std.ArrayList(*BuildFile).init(allocator),
     };
 }
 
@@ -34,7 +38,7 @@ pub fn deinit(self: *Self) void {
     for (self.build_files.items) |build_file| {
         build_file.delete();
     }
-    self.build_files.deinit(self.allocator);
+    self.build_files.deinit();
 }
 
 fn findBuildFile(self: *Self, uri: []const u8) !?*BuildFile {
@@ -50,9 +54,6 @@ fn findBuildFile(self: *Self, uri: []const u8) !?*BuildFile {
                 candidate = build_file;
             }
         }
-        // if (candidate) |build_file| {
-        //     logger.debug("Found a candidate associated build file: `{s}`", .{build_file.uri});
-        // }
     }
 
     // Then, try to find the closest build file.
@@ -123,79 +124,71 @@ fn findBuildFile(self: *Self, uri: []const u8) !?*BuildFile {
 fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     const doc = try Document.new(self.allocator, uri, text);
     errdefer doc.delete();
+    doc.import_uris = try doc.collectImportUris(self.zigenv);
 
     // TODO: Better logic for detecting std or subdirectories?
     if (std.mem.indexOf(u8, uri, "/std/") != null) {
         // in std
     } else if (std.mem.endsWith(u8, uri, "/build.zig")) {
         var build_file = try BuildFile.extractPackages(self.allocator, uri, self.zigenv);
-        try self.build_files.append(self.allocator, build_file);
+        try self.build_files.append(build_file);
         doc.is_build_file = build_file;
     } else {
         if (try self.findBuildFile(uri)) |build_file| {
             build_file.refs += 1;
             doc.associated_build_file = build_file;
-            // logger.debug("Associated build file `{s}` to document `{s}`", .{ build_file.uri, handle.uri() });
         }
     }
 
-    doc.import_uris = try doc.collectImportUris(self.zigenv);
     try self.handles.putNoClobber(uri, doc);
     return doc;
 }
 
 pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
     if (self.handles.getEntry(uri)) |entry| {
-        // logger.debug("Document already open: {s}, incrementing count", .{uri});
+        try entry.value_ptr.*.refreshDocument(self.zigenv);
         entry.value_ptr.*.count += 1;
         if (entry.value_ptr.*.is_build_file) |build_file| {
             build_file.refs += 1;
         }
-        // logger.debug("New count: {}", .{entry.value_ptr.*.count});
+        return entry.value_ptr.*;
+    } else {
+        const duped_text = try self.allocator.dupeZ(u8, text);
+        errdefer self.allocator.free(duped_text);
+        const duped_uri = try self.allocator.dupeZ(u8, uri);
+        errdefer self.allocator.free(duped_uri);
+        return try self.newDocument(duped_uri, duped_text);
+    }
+}
+
+pub fn getDocument(self: *Self, uri: []const u8) ?*Document {
+    if (self.handles.getEntry(uri)) |entry| {
         return entry.value_ptr.*;
     }
-
-    const duped_text = try self.allocator.dupeZ(u8, text);
-    errdefer self.allocator.free(duped_text);
-    const duped_uri = try self.allocator.dupeZ(u8, uri);
-    errdefer self.allocator.free(duped_uri);
-
-    return try self.newDocument(duped_uri, duped_text);
+    return null;
 }
 
-pub fn getDocument(self: *Self, uri: []const u8) !*Document {
-    if (self.handles.getEntry(uri)) |entry| {
-        var doc = entry.value_ptr.*;
-        if (doc.count == 0) {
-            // remove entry
-            const uri_key = entry.key_ptr.*;
-            std.debug.assert(self.handles.remove(uri));
-            self.allocator.free(uri_key);
-        } else {
-            return doc;
-        }
-    }
-    return error.NoDocument;
-}
-
-pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*Document {
+pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Document {
     const allocator = self.allocator;
-    const final_uri = (try handle.uriFromImportStrAlloc(allocator, import_str, self.zigenv)) orelse return null;
+    const final_uri = (try doc.uriFromImportStrAlloc(allocator, import_str, self.zigenv)) orelse return null;
     defer allocator.free(final_uri);
 
-    for (handle.imports_used.items) |uri| {
+    for (doc.imports_used.items) |uri| {
         if (std.mem.eql(u8, uri, final_uri)) {
-            return self.getDocument(final_uri);
+            if (self.getDocument(final_uri)) |found| {
+                return found;
+            }
         }
     }
+
     // The URI must be somewhere in the import_uris or the package uris
     const handle_uri = find_uri: {
-        for (handle.import_uris) |uri| {
+        for (doc.import_uris) |uri| {
             if (std.mem.eql(u8, uri, final_uri)) {
                 break :find_uri uri;
             }
         }
-        if (handle.associated_build_file) |bf| {
+        if (doc.associated_build_file) |bf| {
             for (bf.packages.items) |pkg| {
                 if (std.mem.eql(u8, pkg.uri, final_uri)) {
                     break :find_uri pkg.uri;
@@ -210,11 +203,9 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
     if (self.getDocument(final_uri)) |new_handle| {
         // If it is, append it to our imports, increment the count, set our new handle
         // and return the parsed tree root node.
-        try handle.imports_used.append(self.allocator, handle_uri);
+        try doc.imports_used.append(self.allocator, handle_uri);
         new_handle.count += 1;
         return new_handle;
-    } else |_| {
-        //
     }
 
     // New document, read the file then call into openDocument.
@@ -244,7 +235,7 @@ pub fn resolveImport(self: *Self, handle: *Document, import_str: []const u8) !?*
         errdefer allocator.free(file_contents);
 
         // Add to import table of current handle.
-        try handle.imports_used.append(self.allocator, handle_uri);
+        try doc.imports_used.append(self.allocator, handle_uri);
         // Swap handles.
         // This takes ownership of the passed uri and text.
         const duped_final_uri = try allocator.dupe(u8, final_uri);
