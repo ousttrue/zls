@@ -8,6 +8,7 @@ const Workspace = ws.Workspace;
 const Document = ws.Document;
 const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
+const TypeWithHandle = ws.TypeWithHandle;
 const LinePosition = ws.LinePosition;
 const Line = ws.Line;
 const ast = ws.ast;
@@ -61,8 +62,8 @@ fn astLocationToRange(loc: Ast.Location) lsp.Range {
     };
 }
 
-fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Document, config: *Config) !lsp.Notification {
-    const tree = handle.tree;
+fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Document, config: *Config) !lsp.Notification {
+    const tree = doc.tree;
 
     var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
 
@@ -102,7 +103,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
                         if (func.name_token) |name_token| {
                             const loc = tree.tokenLocation(0, name_token);
 
-                            const is_type_function = ast.isTypeFunction(tree, func);
+                            const is_type_function = TypeWithHandle.isTypeFunction(tree, func);
 
                             const func_name = tree.tokenSlice(name_token);
                             if (!is_type_function and !ast.isCamelCase(func_name)) {
@@ -134,7 +135,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, handle: *const Docum
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .PublishDiagnostics = .{
-                .uri = handle.document.uri,
+                .uri = doc.utf8_buffer.uri,
                 .diagnostics = diagnostics.items,
             },
         },
@@ -312,16 +313,19 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
         },
     },
 },
+notification_queue: std.ArrayList(lsp.Notification),
 
 pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self {
     return Self{
         .config = config,
         .zigenv = zigenv,
         .workspace = Workspace.init(allocator, zigenv),
+        .notification_queue = std.ArrayList(lsp.Notification).init(allocator),
     };
 }
 
 pub fn deinit(self: *Self) void {
+    self.notification_queue.deinit();
     self.workspace.deinit();
 }
 
@@ -387,19 +391,23 @@ pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonPara
 
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
-    _ = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
-    // if (createNotifyDiagnostics(self, doc)) |notification| {
-    //     self.transport.sendToJson(notification);
-    // } else |_| {}
+    const doc = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
+    if (createNotifyDiagnostics(arena, doc, self.config)) |notification| {
+        try self.notification_queue.append(notification);
+    } else |err| {
+        logger.err("createNotifyDiagnostics: {}", .{err});
+    }
 }
 
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     try doc.applyChanges(params.contentChanges.Array, self.encoding, self.zigenv);
-    // if (createNotifyDiagnostics(self, doc)) |notification| {
-    //     self.transport.sendToJson(notification);
-    // } else |_| {}
+    if (createNotifyDiagnostics(arena, doc, self.config)) |notification| {
+        try self.notification_queue.append(notification);
+    } else |err| {
+        logger.err("createNotifyDiagnostics: {}", .{err});
+    }
 }
 
 pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
@@ -467,15 +475,14 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, doc);
     var array = try std.ArrayList(u32).initCapacity(arena.allocator(), token_array.len * 5);
-    for(token_array)|token|
-    {
+    for (token_array) |token| {
         const start = try doc.line_position.getPositionFromBytePosition(token.start, self.encoding);
-        const end = try doc.line_position.getPositionFromBytePosition(token.end-1, self.encoding);        
-        std.debug.assert(start.line==end.line);
+        const end = try doc.line_position.getPositionFromBytePosition(token.end - 1, self.encoding);
+        std.debug.assert(start.line == end.line);
         try array.appendSlice(&.{
             start.line,
             start.x,
-            @truncate(u32, end.x - start.x+1),
+            @truncate(u32, end.x - start.x + 1),
             @enumToInt(token.token_type),
             token.token_modifiers.toInt(),
         });
@@ -588,7 +595,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     if (try gotoHandler(arena, &self.workspace, doc, @intCast(u32, byte_position), true)) |location| {
         const goto_doc = self.workspace.getDocument(location.uri) orelse return error.DocumentNotFound;
         const goto = try goto_doc.line_position.getPositionFromBytePosition(location.loc.start, self.encoding);
-        const goto_pos = lsp.Position{ .line=goto.line, .character=goto.x };
+        const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 
         return lsp.Response{
             .id = id,

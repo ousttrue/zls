@@ -1031,6 +1031,20 @@ pub fn callFull(tree: Ast, node: Ast.Node.Index, buf: *[1]Ast.Node.Index) ?Ast.f
     };
 }
 
+// STYLE
+
+pub fn isCamelCase(name: []const u8) bool {
+    return !std.ascii.isUpper(name[0]) and !isSnakeCase(name);
+}
+
+pub fn isPascalCase(name: []const u8) bool {
+    return std.ascii.isUpper(name[0]) and !isSnakeCase(name);
+}
+
+pub fn isSnakeCase(name: []const u8) bool {
+    return std.mem.indexOf(u8, name, "_") != null;
+}
+
 pub fn getDeclNameToken(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
     const tags = tree.nodes.items(.tag);
     const main_token = tree.nodes.items(.main_token)[node];

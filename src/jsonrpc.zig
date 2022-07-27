@@ -34,7 +34,7 @@ pub fn getParams(tree: std.json.ValueTree) ?std.json.Value {
     return tree.root.Object.get("params");
 }
 
-pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Dispatcher) void {
+pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Dispatcher, queue: *std.ArrayList(lsp.Notification)) void {
     // This JSON parser is passed to processJsonRpc and reset.
     var json_parser = std.json.Parser.init(allocator, false);
     defer json_parser.deinit();
@@ -43,6 +43,11 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Di
 
     while (language_server.LanguageServer.keep_running) {
         if (transport.readNext()) |content| {
+            defer {
+                arena.deinit();
+                arena.state = .{};
+            }
+
             // parse
             json_parser.reset();
             var tree = json_parser.parse(content) catch |err| {
@@ -84,6 +89,12 @@ pub fn readloop(allocator: std.mem.Allocator, transport: *Stdio, dispatcher: *Di
                     transport.sendToJson(lsp.Response.createParseError());
                 }
             }
+
+            // dequeue and send notifications
+            for (queue.items) |notification| {
+                transport.sendToJson(notification);
+            }
+            queue.resize(0) catch unreachable;
         } else |err| {
             logger.err("{s}", .{@errorName(err)});
             language_server.LanguageServer.keep_running = false;

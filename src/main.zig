@@ -197,5 +197,5 @@ pub fn main() anyerror!void {
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
 
-    jsonrpc.readloop(allocator, &transport, &dispatcher);
+    jsonrpc.readloop(allocator, &transport, &dispatcher, &language_server.notification_queue);
 }
