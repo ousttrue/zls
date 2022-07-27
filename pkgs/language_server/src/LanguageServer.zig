@@ -397,7 +397,7 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = try self.workspace.getDocument(params.textDocument.uri);
-    try doc.applyChanges(params.contentChanges.Array, self.offset_encoding == .utf16, self.zigenv);
+    try doc.applyChanges(params.contentChanges.Array, self.offset_encoding, self.zigenv);
     // if (createNotifyDiagnostics(self, doc)) |notification| {
     //     self.transport.sendToJson(notification);
     // } else |_| {}
@@ -552,7 +552,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try self.workspace.gotoHandler(arena, doc, doc_position.byte_position, true)) |location| {
+    if (try self.workspace.gotoHandler(arena, doc, @intCast(u32, doc_position.absolute_index), true)) |location| {
         var goto = lsp.Position{ .line = location.row, .character = location.col };
         if (self.offset_encoding == .utf16) {
             goto = try utf8PositionToUtf16(doc.line_position, goto);

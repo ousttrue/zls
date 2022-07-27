@@ -4,11 +4,11 @@ const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
 const DocumentScope = @import("./DocumentScope.zig");
+const Line = @import("./Line.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
-const DocumentPosition = @import("./DocumentPosition.zig");
 const PositionContext = @import("./position_context.zig").PositionContext;
 const AstContext = @import("./AstContext.zig");
 const Location = @import("./Location.zig");
@@ -319,21 +319,7 @@ fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
     }
 }
 
-fn getPosition(text: []const u8, obj: std.json.Value, is_utf16: bool) !usize {
-    const pos = if (is_utf16)
-        try DocumentPosition.fromUtf16Pos(text, .{
-            .line = @intCast(u32, obj.Object.get("line").?.Integer),
-            .x = @intCast(u32, obj.Object.get("character").?.Integer),
-        })
-    else
-        try DocumentPosition.fromUtf8Pos(text, .{
-            .line = @intCast(u32, obj.Object.get("line").?.Integer),
-            .x = @intCast(u32, obj.Object.get("character").?.Integer),
-        });
-    return pos.absolute_index;
-}
-
-pub fn applyChanges(self: *Self, content_changes: std.json.Array, is_utf16: bool, zigenv: ZigEnv) !void {
+pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line.Encoding, zigenv: ZigEnv) !void {
     const document = &self.utf8_buffer;
 
     for (content_changes.items) |change| {
@@ -345,8 +331,10 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, is_utf16: bool
             const end_obj = range.Object.get("end").?;
 
             const change_text = change.Object.get("text").?.String;
-            const start_index = try getPosition(document.text, start_obj, is_utf16);
-            const end_index = try getPosition(document.text, end_obj, is_utf16);
+            const start_line = try self.line_position.getLine(@intCast(u32, start_obj.Object.get("line").?.Integer));
+            const start_index = try start_line.getBytePosition(@intCast(u32, start_obj.Object.get("character").?.Integer), encoding);
+            const end_line = try self.line_position.getLine(@intCast(u32, end_obj.Object.get("line").?.Integer));
+            const end_index = try end_line.getBytePosition(@intCast(u32, end_obj.Object.get("character").?.Integer), encoding);
 
             const old_len = document.text.len;
             const new_len = old_len - (end_index - start_index) + change_text.len;
