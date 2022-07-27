@@ -115,6 +115,9 @@ fn getPositionContextFromIdentifier(self: Self, token_idx: u32, node_idx: u32, n
             const last = self.ast_context.tokens.items[self.tree.lastToken(node_idx)];
             return .{ .field_access = .{ .start = first.loc.start, .end = last.loc.end } };
         },
+        .enum_literal => {
+            return .enum_literal;
+        },
         else => {
             const token = self.ast_context.tokens.items[token_idx];
             return .{ .var_access = token.loc };

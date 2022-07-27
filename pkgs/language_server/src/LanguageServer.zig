@@ -131,7 +131,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Document
         }
     }
 
-    logger.debug("[Diagnostics] {s}: {}", .{doc.utf8_buffer.uri, diagnostics.items.len});
+    logger.debug("[Diagnostics] {s}: {}", .{ doc.utf8_buffer.uri, diagnostics.items.len });
     return lsp.Notification{
         .method = "textDocument/publishDiagnostics",
         .params = .{
@@ -621,7 +621,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, if (position.character > 0) position.character - 1 else 0), self.encoding);
 
     const completions = try completion_util.process(
         arena,
