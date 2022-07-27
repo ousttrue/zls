@@ -22,126 +22,13 @@ const builtin_completions = ws.builtin_completions;
 const rename_util = @import("./rename_util.zig");
 const references_util = @import("./references_util.zig");
 const getSignatureInfo = ws.signature_help.getSignatureInfo;
+
+const textdocument_symbol = @import("./textdocument_symbol.zig");
+const textdocument_diagnostics = @import("./textdocument_diagnostics.zig");
+
 const logger = std.log.scoped(.LanguageServer);
-const Self = @This();
 pub var keep_running: bool = true;
-
-fn toLineX(src: lsp.Position) LinePosition.LineX {
-    return .{ .line = @intCast(u32, src.line), .x = @intCast(u32, src.character) };
-}
-
-fn fromLineX(src: LinePosition.LineX) lsp.Position {
-    return .{ .line = src.line, .character = src.x };
-}
-
-fn utf8PositionToUtf16(line_position: LinePosition, src: lsp.Position) !lsp.Position {
-    return fromLineX(try line_position.utf8PositionToUtf16(toLineX(src)));
-}
-
-fn symbolToUtf16(line_position: LinePosition, symbol: *lsp.DocumentSymbol) anyerror!void {
-    symbol.range.start = try utf8PositionToUtf16(line_position, symbol.range.start);
-    symbol.range.end = try utf8PositionToUtf16(line_position, symbol.range.end);
-    symbol.selectionRange.start = try utf8PositionToUtf16(line_position, symbol.selectionRange.start);
-    symbol.selectionRange.end = try utf8PositionToUtf16(line_position, symbol.selectionRange.end);
-    for (symbol.children) |*child| {
-        try symbolToUtf16(line_position, child);
-    }
-}
-
-// TODO: Is this correct or can we get a better end?
-fn astLocationToRange(loc: Ast.Location) lsp.Range {
-    return .{
-        .start = .{
-            .line = @intCast(i64, loc.line),
-            .character = @intCast(i64, loc.column),
-        },
-        .end = .{
-            .line = @intCast(i64, loc.line),
-            .character = @intCast(i64, loc.column),
-        },
-    };
-}
-
-fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Document, config: *Config) !lsp.Notification {
-    const tree = doc.tree;
-
-    var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
-
-    for (tree.errors) |err| {
-        const loc = tree.tokenLocation(0, err.token);
-
-        var mem_buffer: [256]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&mem_buffer);
-        try tree.renderError(err, fbs.writer());
-
-        try diagnostics.append(.{
-            .range = astLocationToRange(loc),
-            .severity = .Error,
-            .code = @tagName(err.tag),
-            .source = "zls",
-            .message = try arena.allocator().dupe(u8, fbs.getWritten()),
-            // .relatedInformation = undefined
-        });
-    }
-
-    // TODO: style warnings for types, values and declarations below root scope
-    if (tree.errors.len == 0) {
-        for (tree.rootDecls()) |decl_idx| {
-            const decl = tree.nodes.items(.tag)[decl_idx];
-            switch (decl) {
-                .fn_proto,
-                .fn_proto_multi,
-                .fn_proto_one,
-                .fn_proto_simple,
-                .fn_decl,
-                => blk: {
-                    var buf: [1]Ast.Node.Index = undefined;
-                    const func = ast.fnProto(tree, decl_idx, &buf).?;
-                    if (func.extern_export_inline_token != null) break :blk;
-
-                    if (config.warn_style) {
-                        if (func.name_token) |name_token| {
-                            const loc = tree.tokenLocation(0, name_token);
-
-                            const is_type_function = TypeWithHandle.isTypeFunction(tree, func);
-
-                            const func_name = tree.tokenSlice(name_token);
-                            if (!is_type_function and !ast.isCamelCase(func_name)) {
-                                try diagnostics.append(.{
-                                    .range = astLocationToRange(loc),
-                                    .severity = .Information,
-                                    .code = "BadStyle",
-                                    .source = "zls",
-                                    .message = "Functions should be camelCase",
-                                });
-                            } else if (is_type_function and !ast.isPascalCase(func_name)) {
-                                try diagnostics.append(.{
-                                    .range = astLocationToRange(loc),
-                                    .severity = .Information,
-                                    .code = "BadStyle",
-                                    .source = "zls",
-                                    .message = "Type functions should be PascalCase",
-                                });
-                            }
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-    }
-
-    logger.debug("[Diagnostics] {s}: {}", .{ doc.utf8_buffer.uri, diagnostics.items.len });
-    return lsp.Notification{
-        .method = "textDocument/publishDiagnostics",
-        .params = .{
-            .PublishDiagnostics = .{
-                .uri = doc.utf8_buffer.uri,
-                .diagnostics = diagnostics.items,
-            },
-        },
-    };
-}
+const Self = @This();
 
 pub fn documentRange(text: []const u8, encoding: Line.Encoding) !lsp.Range {
     var line_idx: i64 = 0;
@@ -189,68 +76,6 @@ pub fn documentRange(text: []const u8, encoding: Line.Encoding) !lsp.Range {
     }
 }
 
-fn node_tag_to_lsp_symbol_kind(node_tag: std.zig.Ast.Node.Tag) lsp.DocumentSymbol.Kind {
-    return switch (node_tag) {
-        .fn_proto,
-        .fn_proto_simple,
-        .fn_proto_multi,
-        .fn_proto_one,
-        .fn_decl,
-        => .Function,
-        .local_var_decl,
-        .global_var_decl,
-        .aligned_var_decl,
-        .simple_var_decl,
-        => .Variable,
-        .container_field,
-        .container_field_align,
-        .container_field_init,
-        .tagged_union_enum_tag,
-        .tagged_union_enum_tag_trailing,
-        .tagged_union,
-        .tagged_union_trailing,
-        .tagged_union_two,
-        .tagged_union_two_trailing,
-        => .Field,
-        else => .Variable,
-    };
-}
-
-fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: Line.Encoding, src: []const SymbolTree.Symbol, parent: u32) anyerror![]lsp.DocumentSymbol {
-    var dst = std.ArrayList(lsp.DocumentSymbol).init(allocator);
-    const tree = doc.tree;
-    const ast_context = doc.ast_context;
-    const tags = tree.nodes.items(.tag);
-    for (src) |symbol| {
-        if (symbol.parent == parent) {
-            const first = ast_context.tokens.items[tree.firstToken(symbol.node)];
-            var start_loc = try doc.line_position.getPositionFromBytePosition(first.loc.start, encoding);
-            const last = ast_context.tokens.items[tree.lastToken(symbol.node)];
-            var end_loc = try doc.line_position.getPositionFromBytePosition(last.loc.end, encoding);
-
-            var range = lsp.Range{
-                .start = .{
-                    .line = @intCast(i64, start_loc.line),
-                    .character = @intCast(i64, start_loc.x),
-                },
-                .end = .{
-                    .line = @intCast(i64, end_loc.line),
-                    .character = @intCast(i64, end_loc.x),
-                },
-            };
-
-            try dst.append(lsp.DocumentSymbol{
-                .name = symbol.name,
-                .kind = node_tag_to_lsp_symbol_kind(tags[symbol.node]),
-                .range = range,
-                .selectionRange = range,
-                .detail = "",
-                .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
-            });
-        }
-    }
-    return dst.items;
-}
 
 config: *Config,
 zigenv: ZigEnv,
@@ -399,7 +224,7 @@ pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonPara
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     const doc = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
-    if (createNotifyDiagnostics(arena, doc, self.config)) |notification| {
+    if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
         try self.notification_queue.append(notification);
     } else |err| {
         logger.err("createNotifyDiagnostics: {}", .{err});
@@ -410,7 +235,7 @@ pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, j
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     try doc.applyChanges(params.contentChanges.Array, self.encoding, self.zigenv);
-    if (createNotifyDiagnostics(arena, doc, self.config)) |notification| {
+    if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
         try self.notification_queue.append(notification);
     } else |err| {
         logger.err("createNotifyDiagnostics: {}", .{err});
@@ -459,7 +284,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     var symbol_tree = SymbolTree.init(arena.allocator(), doc.tree);
     try symbol_tree.traverse(0);
     // logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
-    const symbols = try to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
+    const symbols = try textdocument_symbol.to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
     return lsp.Response{
         .id = id,
         .result = .{
