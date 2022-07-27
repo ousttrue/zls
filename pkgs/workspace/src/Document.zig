@@ -95,6 +95,21 @@ pub fn decrement(self: *Self) usize {
     return self.count;
 }
 
+fn getPositionContextFromIdentifier(self: Self, token_idx: u32, node_idx: u32, node_tag: Ast.Node.Tag) PositionContext {
+    _ = token_idx;
+    return switch (node_tag) {
+        .field_access => {
+            const first = self.ast_context.tokens.items[self.tree.firstToken(node_idx)];
+            const last = self.ast_context.tokens.items[self.tree.lastToken(node_idx)];
+            return .{ .field_access = .{ .start = first.loc.start, .end = last.loc.end } };
+        },
+        else => {
+            const token = self.ast_context.tokens.items[token_idx];
+            return .{ .var_access = token.loc };
+        },
+    };
+}
+
 pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
     const token_with_index = self.ast_context.tokenFromBytePos(byte_pos) orelse {
         return .empty;
@@ -110,8 +125,7 @@ pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
     return switch (token_with_index.token.tag) {
         .builtin => .{ .builtin = token.loc },
         .string_literal => .{ .string_literal = token.loc },
-        // field_access: SourceRange,
-        // var_access: SourceRange,
+        .identifier => self.getPositionContextFromIdentifier(token_index, node_index, node_tag),
         // global_error_set,
         // enum_literal,
         // // pre_label,

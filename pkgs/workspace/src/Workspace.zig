@@ -334,8 +334,8 @@ pub fn gotoHandler(
     doc_position: DocumentPosition,
     resolve_alias: bool,
 ) !?Location {
-    const pos_context = position_context.documentPositionContext(arena, doc_position);
-    // const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    // const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = doc.getPositionContext(doc_position.absolute_index);
     switch (pos_context) {
         .var_access => {
             if (try self.getSymbolGlobal(arena, doc, doc_position.absolute_index)) |decl| {

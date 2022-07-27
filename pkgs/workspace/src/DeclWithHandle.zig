@@ -353,8 +353,8 @@ pub fn resolveVarDeclAlias(
     return null;
 }
 
-/// Token location inside source
 
+/// Token location inside source
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -367,7 +367,13 @@ pub fn getSymbolFieldAccess(
     var tokenizer = std.zig.Tokenizer.init(held_range.data());
 
     errdefer held_range.release();
-    const result = (try FieldAccessReturn.getFieldAccessType(arena, workspace, handle, byte_position, &tokenizer)) orelse return error.NoFieldAccessType;
+    const result = (try FieldAccessReturn.getFieldAccessType(
+        arena,
+        workspace,
+        handle,
+        byte_position,
+        &tokenizer,
+    )) orelse return error.NoFieldAccessType;
     held_range.release();
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {
