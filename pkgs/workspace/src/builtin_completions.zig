@@ -58,16 +58,8 @@ pub fn deinit() void {
     g_allocator.free(g_builtin_completions);
 }
 
-pub fn completeBuiltin(id: i64) lsp.Response {
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = g_builtin_completions,
-            },
-        },
-    };
+pub fn completeBuiltin() []lsp.CompletionItem {
+    return g_builtin_completions;
 }
 
 pub fn find(name: []const u8) ?Builtin {

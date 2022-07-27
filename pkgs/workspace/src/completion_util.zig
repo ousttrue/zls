@@ -589,12 +589,11 @@ pub fn iterateLabels(
 fn completeLabel(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     pos_index: usize,
     handle: *Document,
     config: *Config,
     client_capabilities: *ClientCapabilities,
-) !lsp.Response {
+) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
     const context = DeclToCompletionContext{
@@ -605,16 +604,7 @@ fn completeLabel(
     };
     try iterateLabels(arena, workspace, handle, pos_index, declToCompletion, context, config, client_capabilities);
     builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = completions.items,
-            },
-        },
-    };
+    return completions.items;
 }
 
 fn iterateSymbolsGlobalInternal(
@@ -689,12 +679,11 @@ pub fn iterateSymbolsGlobal(
 fn completeGlobal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     pos_index: usize,
     handle: *Document,
     config: *Config,
     client_capabilities: *ClientCapabilities,
-) !lsp.Response {
+) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
     const context = DeclToCompletionContext{
@@ -705,28 +694,18 @@ fn completeGlobal(
     };
     try iterateSymbolsGlobal(arena, workspace, handle, pos_index, declToCompletion, context, config, client_capabilities);
     builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = completions.items,
-            },
-        },
-    };
+    return completions.items;
 }
 
 fn completeFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     doc: *Document,
     byte_position: u32,
     range: std.zig.Token.Loc,
     config: *Config,
     client_capabilities: *ClientCapabilities,
-) !lsp.Response {
+) ![]lsp.CompletionItem {
     const allocator = arena.allocator();
     var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
     defer allocator.free(copy);
@@ -737,16 +716,7 @@ fn completeFieldAccess(
         try typeToCompletion(arena, workspace, &completions, result, doc, config, client_capabilities);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = completions.items,
-            },
-        },
-    };
+    return completions.items;
 }
 
 pub fn tagStoreCompletionItems(
@@ -779,91 +749,62 @@ pub fn tagStoreCompletionItems(
 fn completeError(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     doc: *Document,
     config: *Config,
-) !lsp.Response {
+) ![]lsp.CompletionItem {
     const completions = try tagStoreCompletionItems(arena, workspace, doc, "error_completions");
     builtin_completions.truncateCompletions(completions, config.max_detail_length);
     logger.debug("Completing error:", .{});
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = completions,
-            },
-        },
-    };
+    return completions;
 }
 
 fn completeDot(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     doc: *Document,
     config: *Config,
-) !lsp.Response {
+) ![]lsp.CompletionItem {
     var completions = try tagStoreCompletionItems(arena, workspace, doc, "enum_completions");
     builtin_completions.truncateCompletions(completions, config.max_detail_length);
-
-    return lsp.Response{
-        .id = id,
-        .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = completions,
-            },
-        },
-    };
+    return completions;
 }
 
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    id: i64,
     doc: *Document,
     byte_position: u32,
     config: *Config,
     client_capabilities: *ClientCapabilities,
-) !lsp.Response {
+) ![]const lsp.CompletionItem {
     const pos_context = doc.getPositionContext(byte_position);
     switch (pos_context) {
         .builtin => {
             logger.debug("[completion][builtin]", .{});
-            return builtin_completions.completeBuiltin(id);
+            return builtin_completions.completeBuiltin();
         },
         .var_access, .empty => {
             logger.debug("[completion][global]", .{});
-            return try completeGlobal(arena, workspace, id, byte_position, doc, config, client_capabilities);
+            return try completeGlobal(arena, workspace, byte_position, doc, config, client_capabilities);
         },
         .field_access => |range| {
             logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, id, doc, byte_position, range, config, client_capabilities);
+            return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, client_capabilities);
         },
         .global_error_set => {
             logger.debug("[completion][global_error_set]", .{});
-            return try completeError(arena, workspace, id, doc, config);
+            return try completeError(arena, workspace, doc, config);
         },
         .enum_literal => {
             logger.debug("[completion][enum_literal]", .{});
-            return try completeDot(arena, workspace, id, doc, config);
+            return try completeDot(arena, workspace, doc, config);
         },
         .label => {
             logger.debug("[completion][label]", .{});
-            return try completeLabel(arena, workspace, id, byte_position, doc, config, client_capabilities);
+            return try completeLabel(arena, workspace, byte_position, doc, config, client_capabilities);
         },
         else => {
-            logger.debug("[completion][{s}]", .{@tagName(pos_context)});
-            return lsp.Response{
-                .id = id,
-                .result = lsp.ResponseParams{
-                    .CompletionList = .{
-                        .isIncomplete = false,
-                        .items = &.{},
-                    },
-                },
-            };
+            return &[_]lsp.CompletionItem{};
         },
     }
 }

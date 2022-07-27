@@ -16,7 +16,7 @@
             "type": "shell",
             "command": "zig test pkgs/workspace/src/LinePosition.zig",
             "problemMatcher": [
-                "$gcc"
+                // "$gcc"
             ]
         }
     ]

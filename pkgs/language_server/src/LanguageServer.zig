@@ -131,6 +131,7 @@ fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Document
         }
     }
 
+    logger.debug("[Diagnostics] {s}: {}", .{doc.utf8_buffer.uri, diagnostics.items.len});
     return lsp.Notification{
         .method = "textDocument/publishDiagnostics",
         .params = .{
@@ -622,15 +623,24 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    return completion_util.process(
+    const completions = try completion_util.process(
         arena,
         &self.workspace,
-        id,
         doc,
-        @intCast(u32, byte_position),
+        byte_position,
         self.config,
         &self.client_capabilities,
     );
+
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .CompletionList = .{
+                .isIncomplete = false,
+                .items = completions,
+            },
+        },
+    };
 }
 
 // TODO Use a map to array lists and collect at the end instead?
