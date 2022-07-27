@@ -64,7 +64,7 @@ pub fn process(
     include_decl: bool,
     config: *Config,
 ) !?[]UriBytePosition {
-    const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = doc.getPositionContext(doc_position.absolute_index);
     return switch (pos_context) {
         .var_access => try referencesDefinitionGlobal(arena, workspace, doc, doc_position.absolute_index, include_decl, config.skip_std_references),
         .field_access => |range| try referencesDefinitionFieldAccess(arena, workspace, doc, doc_position, range, include_decl, config),

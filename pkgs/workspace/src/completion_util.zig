@@ -787,12 +787,12 @@ pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     id: i64,
-    handle: *Document,
+    doc: *Document,
     doc_position: DocumentPosition,
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) !lsp.Response {
-    const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = doc.getPositionContext(doc_position.absolute_index);
     switch (pos_context) {
         .builtin => {
             logger.debug("[completion][builtin]", .{});
@@ -800,23 +800,23 @@ pub fn process(
         },
         .var_access, .empty => {
             logger.debug("[completion][global]", .{});
-            return try completeGlobal(arena, workspace, id, doc_position.absolute_index, handle, config, client_capabilities);
+            return try completeGlobal(arena, workspace, id, doc_position.absolute_index, doc, config, client_capabilities);
         },
         .field_access => |range| {
             logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, id, handle, doc_position, range, config, client_capabilities);
+            return try completeFieldAccess(arena, workspace, id, doc, doc_position, range, config, client_capabilities);
         },
         .global_error_set => {
             logger.debug("[completion][global_error_set]", .{});
-            return try completeError(arena, workspace, id, handle, config);
+            return try completeError(arena, workspace, id, doc, config);
         },
         .enum_literal => {
             logger.debug("[completion][enum_literal]", .{});
-            return try completeDot(arena, workspace, id, handle, config);
+            return try completeDot(arena, workspace, id, doc, config);
         },
         .label => {
             logger.debug("[completion][label]", .{});
-            return try completeLabel(arena, workspace, id, doc_position.absolute_index, handle, config, client_capabilities);
+            return try completeLabel(arena, workspace, id, doc_position.absolute_index, doc, config, client_capabilities);
         },
         else => {
             logger.debug("[completion][{s}]", .{@tagName(pos_context)});

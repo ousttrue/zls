@@ -50,14 +50,14 @@ fn renameDefinitionLabel(
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
+    doc: *Document,
     doc_position: DocumentPosition,
 ) !?[]const UriBytePosition {
-    const pos_context = position_context.documentPositionContext(arena, doc_position);
+    const pos_context = doc.getPositionContext(doc_position.absolute_index);
     return switch (pos_context) {
-        .var_access => try renameDefinitionGlobal(arena, workspace, handle, doc_position.absolute_index),
-        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, handle, doc_position, range),
-        .label => try renameDefinitionLabel(arena, handle, doc_position.absolute_index),
+        .var_access => try renameDefinitionGlobal(arena, workspace, doc, doc_position.absolute_index),
+        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, doc, doc_position, range),
+        .label => try renameDefinitionLabel(arena, doc, doc_position.absolute_index),
         else => null,
     };
 }
