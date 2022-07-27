@@ -339,6 +339,9 @@ fn push_identifier(self: *Self, token_idx: u32, loc: std.zig.Token.Loc) !void {
                 try self.push_semantic_token(loc, .variable, .{});
             }
         },
+        .while_simple, .for_simple => {
+            try self.push_semantic_token(loc, .variable, .{});
+        },
         else => {
             // try self.push_semantic_token(loc, .variable, .{});
         },
