@@ -376,39 +376,43 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
     const allocator = arena.allocator();
 
     var text = document.utf8_buffer.text;
-    _ = text;
     var self = init(allocator, document);
+    var last: usize = 0;
+    var in_comment: ?usize = null;
+    var j: usize = 0;
     for (document.ast_context.tokens.items) |token, i| {
+        j = last;
+        in_comment = null;
+        while (j < token.loc.start) {
+            if (in_comment) |comment_start| {
+                if (text[j] == '\n') {
+                    logger.debug("push comment: {} = {}", .{comment_start, j});
+                    try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
+                    in_comment = null;
+                }
+            } else {
+                if (std.ascii.isSpace(text[j])) {
+                    // skip
+                } else if (text[j] == '/' and text[j + 1] == '/') {
+                    // line comment to eol
+                    in_comment = j;
+                } else {
+                    // next token
+                    break;
+                }
+            }
+
+            const len = try std.unicode.utf8CodepointSequenceLength(text[j]);
+            j += len;
+        }
+
         try self.push(@intCast(u32, i), token);
-
-        // var j = token.loc.end + 1;
-        // var in_comment: ?usize = null;
-        // while (j < text.len) {
-        //     if (in_comment) |comment_start| {
-        //         if (text[j] == '\n') {
-        //             logger.debug("push comment: {} = {}", .{comment_start, j});
-        //             try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
-        //             in_comment = null;
-        //         }
-        //     } else {
-        //         if (std.ascii.isSpace(text[j])) {
-        //             // skip
-        //         } else if (text[j] == '/' and text[j + 1] == '/') {
-        //             // line comment to eol
-        //             in_comment = j;
-        //         } else {
-        //             // next token
-        //             break;
-        //         }
-        //     }
-
-        //     const len = try std.unicode.utf8CodepointSequenceLength(text[j]);
-        //     j += len;
-        // }
-        // if (in_comment) |comment_start| {
-        //     try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
-        //     in_comment = null;
-        // }
+        last  = token.loc.end + 1;
+    }
+    if (in_comment) |comment_start| {
+        logger.debug("push comment: {} = {}", .{comment_start, j});
+        try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
+        in_comment = null;
     }
 
     return self.array.items;
