@@ -346,7 +346,7 @@ fn push_identifier(self: *Self, token_idx: u32, loc: std.zig.Token.Loc) !void {
                 try self.push_semantic_token(loc, .variable, .{});
             }
         },
-        .while_simple, .for_simple => {
+        .while_simple, .for_simple, .if_simple, .@"if" => {
             try self.push_semantic_token(loc, .variable, .{});
         },
         else => {
@@ -386,7 +386,7 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
         while (j < token.loc.start) {
             if (in_comment) |comment_start| {
                 if (text[j] == '\n') {
-                    logger.debug("push comment: {} = {}", .{comment_start, j});
+                    // logger.debug("push comment: {} = {}", .{comment_start, j});
                     try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
                     in_comment = null;
                 }
@@ -410,7 +410,7 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
         last  = token.loc.end + 1;
     }
     if (in_comment) |comment_start| {
-        logger.debug("push comment: {} = {}", .{comment_start, j});
+        // logger.debug("push comment: {} = {}", .{comment_start, j});
         try self.push_semantic_token(.{ .start = @intCast(u32, comment_start), .end = @intCast(u32, j) }, .comment, .{});
         in_comment = null;
     }
