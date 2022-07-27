@@ -2,6 +2,7 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
+const UriBytePosition = @import("./UriBytePosition.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
@@ -270,8 +271,9 @@ fn resolveVarDeclAliasInternal(
 
     if (node_tags[node] == .identifier) {
         const token = main_tokens[node];
-        return try workspace.lookupSymbolGlobal(
+        return try lookupSymbolGlobal(
             arena,
+            workspace,
             handle,
             tree.tokenSlice(token),
             tree.tokens.items(.start)[token],
@@ -386,4 +388,75 @@ pub fn getSymbolFieldAccess(
         name,
         true,
     )) orelse return error.ContainerSymbolNotFound;
+}
+
+pub fn gotoDefinitionSymbol(
+    self: Self,
+    workspace: *Workspace,
+    arena: *std.heap.ArenaAllocator,
+    resolve_alias: bool,
+) !?UriBytePosition {
+    var handle = self.handle;
+
+    const byte_position = switch (self.decl.*) {
+        .ast_node => |node| block: {
+            if (resolve_alias) {
+                if (try resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+                    handle = result.handle;
+                    break :block result.bytePosition();
+                }
+            }
+
+            const name_token = ast.getDeclNameToken(handle.tree, node) orelse
+                return null;
+            break :block handle.tree.tokens.items(.start)[name_token];
+        },
+        else => self.bytePosition(),
+    };
+
+    return UriBytePosition{
+        .uri = handle.utf8_buffer.uri,
+        .loc = .{ .start = byte_position, .end = byte_position },
+    };
+}
+
+pub fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, doc: *Document, pos_index: usize) !?Self {
+    if (doc.identifierFromPosition(pos_index)) |name| {
+        return lookupSymbolGlobal(arena, workspace, doc, name, pos_index);
+    } else {
+        return null;
+    }
+}
+
+pub fn lookupSymbolGlobal(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    symbol: []const u8,
+    source_index: usize,
+) error{OutOfMemory}!?Self {
+    const innermost_scope_idx = handle.innermostBlockScopeIndex(source_index);
+
+    var curr = innermost_scope_idx;
+    while (curr >= 0) : (curr -= 1) {
+        const scope = &handle.document_scope.scopes[curr];
+        if (source_index >= scope.range.start and source_index <= scope.range.end) blk: {
+            if (scope.decls.getEntry(symbol)) |candidate| {
+                switch (candidate.value_ptr.*) {
+                    .ast_node => |node| {
+                        if (handle.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
+                    },
+                    .label_decl => break :blk,
+                    else => {},
+                }
+                return Self{
+                    .decl = candidate.value_ptr,
+                    .handle = handle,
+                };
+            }
+            if (try resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
+        }
+        if (curr == 0) break;
+    }
+    return null;
 }

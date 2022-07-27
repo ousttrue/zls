@@ -30,8 +30,9 @@ pub fn getFieldAccessType(
                 .unwrapped = try TypeWithHandle.resolveDerefType(arena, workspace, current_type, &bound_type_params),
             },
             .identifier => {
-                if (try workspace.lookupSymbolGlobal(
+                if (try DeclWithHandle.lookupSymbolGlobal(
                     arena,
+                    workspace,
                     current_type.handle,
                     tokenizer.buffer[tok.loc.start..tok.loc.end],
                     source_index,

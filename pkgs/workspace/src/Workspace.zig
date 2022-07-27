@@ -334,109 +334,30 @@ pub fn gotoHandler(
     const pos_context = doc.getPositionContext(byte_position);
     switch (pos_context) {
         .var_access => {
-            if (try self.getSymbolGlobal(arena, doc, byte_position)) |decl| {
-                return self.gotoDefinitionSymbol(arena, decl, resolve_alias);
+            if (try DeclWithHandle.getSymbolGlobal(arena, self, doc, byte_position)) |decl| {
+                return decl.gotoDefinitionSymbol(self, arena, resolve_alias);
             } else {
                 return null;
             }
         },
         .field_access => |range| {
             const decl = try DeclWithHandle.getSymbolFieldAccess(arena, self, doc, byte_position, range);
-            return self.gotoDefinitionSymbol(arena, decl, resolve_alias);
+            return decl.gotoDefinitionSymbol(self, arena, resolve_alias);
         },
         .string_literal => {
             return doc.gotoDefinitionString(arena, byte_position, self.zigenv);
         },
         .label => {
-            return self.gotoDefinitionLabel(arena, doc, byte_position);
+            // return self.gotoDefinitionLabel(arena, doc, byte_position);
+            if (try doc.getLabelGlobal(byte_position)) |decl| {
+                return decl.gotoDefinitionSymbol(self, arena, false);
+            } else {
+                return null;
+            }
         },
         else => {
             logger.debug("PositionContext.{s} is not implemented", .{@tagName(pos_context)});
             return null;
         },
-    }
-}
-
-pub fn lookupSymbolGlobal(
-    workspace: *Self,
-    arena: *std.heap.ArenaAllocator,
-    handle: *Document,
-    symbol: []const u8,
-    source_index: usize,
-) error{OutOfMemory}!?DeclWithHandle {
-    const innermost_scope_idx = handle.innermostBlockScopeIndex(source_index);
-
-    var curr = innermost_scope_idx;
-    while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.document_scope.scopes[curr];
-        if (source_index >= scope.range.start and source_index <= scope.range.end) blk: {
-            if (scope.decls.getEntry(symbol)) |candidate| {
-                switch (candidate.value_ptr.*) {
-                    .ast_node => |node| {
-                        if (handle.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
-                    },
-                    .label_decl => break :blk,
-                    else => {},
-                }
-                return DeclWithHandle{
-                    .decl = candidate.value_ptr,
-                    .handle = handle,
-                };
-            }
-            if (try DeclWithHandle.resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
-        }
-        if (curr == 0) break;
-    }
-    return null;
-}
-
-pub fn getSymbolGlobal(self: *Self, arena: *std.heap.ArenaAllocator, handle: *Document, pos_index: usize) !?DeclWithHandle {
-    if (handle.identifierFromPosition(pos_index)) |name| {
-        return self.lookupSymbolGlobal(arena, handle, name, pos_index);
-    } else {
-        return null;
-    }
-}
-
-fn gotoDefinitionSymbol(
-    workspace: *Self,
-    arena: *std.heap.ArenaAllocator,
-    decl_handle: DeclWithHandle,
-    resolve_alias: bool,
-) !?UriBytePosition {
-    var handle = decl_handle.handle;
-
-    const byte_position = switch (decl_handle.decl.*) {
-        .ast_node => |node| block: {
-            if (resolve_alias) {
-                if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
-                    handle = result.handle;
-                    break :block result.bytePosition();
-                }
-            }
-
-            const name_token = ast.getDeclNameToken(handle.tree, node) orelse
-                return null;
-            break :block handle.tree.tokens.items(.start)[name_token];
-        },
-        else => decl_handle.bytePosition(),
-    };
-
-    return UriBytePosition{
-        .uri = handle.utf8_buffer.uri,
-        .loc = .{ .start = byte_position, .end = byte_position },
-    };
-}
-
-fn gotoDefinitionLabel(
-    self: *Self,
-    arena: *std.heap.ArenaAllocator,
-    handle: *Document,
-    pos_index: usize,
-) !?UriBytePosition {
-    if (try handle.getLabelGlobal(pos_index)) |decl| {
-        return self.gotoDefinitionSymbol(arena, decl, false);
-    } else {
-        return null;
     }
 }

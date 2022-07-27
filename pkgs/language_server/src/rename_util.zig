@@ -15,7 +15,7 @@ fn renameDefinitionGlobal(
     handle: *Document,
     pos_index: usize,
 ) !?[]const UriBytePosition {
-    if (try workspace.getSymbolGlobal(arena, handle, pos_index)) |decl| {
+    if (try DeclWithHandle.getSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
         return try rename.renameSymbol(arena, workspace, decl);
     } else {
         return null;

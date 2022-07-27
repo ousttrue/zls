@@ -370,20 +370,20 @@ pub fn resolveFieldAccessLhsType(arena: *std.heap.ArenaAllocator, workspace: *Wo
 pub fn resolveTypeOfNodeInternal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
+    doc: *Document,
     node: Ast.Node.Index,
     bound_type_params: *BoundTypeParams,
 ) error{OutOfMemory}!?Self {
     // If we were asked to resolve this node before,
     // it is self-referential and we cannot resolve it.
     for (resolve_trail.items) |i| {
-        if (std.meta.eql(i, NodeWithHandle{ handle, node }))
+        if (std.meta.eql(i, NodeWithHandle{ doc, node }))
             return null;
     }
-    try resolve_trail.append(.{ handle, node });
+    try resolve_trail.append(.{ doc, node });
     defer _ = resolve_trail.pop();
 
-    const tree = handle.tree;
+    const tree = doc.tree;
 
     const main_tokens = tree.nodes.items(.main_token);
     const node_tags = tree.nodes.items(.tag);
@@ -402,7 +402,7 @@ pub fn resolveTypeOfNodeInternal(
                 if (try resolveTypeOfNodeInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     var_decl.ast.type_node,
                     bound_type_params,
                 )) |typ|
@@ -414,22 +414,23 @@ pub fn resolveTypeOfNodeInternal(
             return try resolveTypeOfNodeInternal(
                 arena,
                 workspace,
-                handle,
+                doc,
                 var_decl.ast.init_node,
                 bound_type_params,
             );
         },
         .identifier => {
-            if (isTypeIdent(handle.tree, main_tokens[node])) {
+            if (isTypeIdent(doc.tree, main_tokens[node])) {
                 return Self{
                     .type = .{ .data = .primitive, .is_type_val = true },
-                    .handle = handle,
+                    .handle = doc,
                 };
             }
 
-            if (try workspace.lookupSymbolGlobal(
+            if (try DeclWithHandle.lookupSymbolGlobal(
                 arena,
-                handle,
+                workspace,
+                doc,
                 tree.getNodeSource(node),
                 starts[main_tokens[node]],
             )) |child| {
@@ -459,7 +460,7 @@ pub fn resolveTypeOfNodeInternal(
             var params: [1]Ast.Node.Index = undefined;
             const call = ast.callFull(tree, node, &params) orelse unreachable;
 
-            const decl = (try resolveTypeOfNodeInternal(arena, workspace, handle, call.ast.fn_expr, bound_type_params)) orelse
+            const decl = (try resolveTypeOfNodeInternal(arena, workspace, doc, call.ast.fn_expr, bound_type_params)) orelse
                 return null;
 
             if (decl.type.is_type_val) return null;
@@ -493,7 +494,7 @@ pub fn resolveTypeOfNodeInternal(
                     const argument_type = (try resolveTypeOfNodeInternal(
                         arena,
                         workspace,
-                        handle,
+                        doc,
                         call.ast.params[i],
                         bound_type_params,
                     )) orelse
@@ -530,7 +531,7 @@ pub fn resolveTypeOfNodeInternal(
         .@"try",
         .address_of,
         => {
-            const base_type = (try resolveTypeOfNodeInternal(arena, workspace, handle, datas[node].lhs, bound_type_params)) orelse
+            const base_type = (try resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, bound_type_params)) orelse
                 return null;
             return switch (node_tags[node]) {
                 .@"comptime",
@@ -575,7 +576,7 @@ pub fn resolveTypeOfNodeInternal(
             const left_type = try resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try resolveTypeOfNodeInternal(arena, workspace, handle, datas[node].lhs, bound_type_params)) orelse return null,
+                (try resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, bound_type_params)) orelse return null,
                 bound_type_params,
             );
 
@@ -614,7 +615,7 @@ pub fn resolveTypeOfNodeInternal(
         .tagged_union_two_trailing,
         .tagged_union_enum_tag,
         .tagged_union_enum_tag_trailing,
-        => return Self.typeVal(handle, node),
+        => return Self.typeVal(doc, node),
         .builtin_call,
         .builtin_call_comma,
         .builtin_call_two,
@@ -635,7 +636,7 @@ pub fn resolveTypeOfNodeInternal(
             const call_name = tree.tokenSlice(main_tokens[node]);
             if (std.mem.eql(u8, call_name, "@This")) {
                 if (params.len != 0) return null;
-                return innermostContainer(handle, starts[tree.firstToken(node)]);
+                return innermostContainer(doc, starts[tree.firstToken(node)]);
             }
 
             const cast_map = std.ComptimeStringMap(void, .{
@@ -653,14 +654,14 @@ pub fn resolveTypeOfNodeInternal(
             });
             if (cast_map.has(call_name)) {
                 if (params.len < 1) return null;
-                return ((try resolveTypeOfNodeInternal(arena, workspace, handle, params[0], bound_type_params)) orelse return null).instanceTypeVal();
+                return ((try resolveTypeOfNodeInternal(arena, workspace, doc, params[0], bound_type_params)) orelse return null).instanceTypeVal();
             }
 
             // Almost the same as the above, return a type value though.
             // TODO Do peer type resolution, we just keep the first for now.
             if (std.mem.eql(u8, call_name, "@TypeOf")) {
                 if (params.len < 1) return null;
-                var resolved_type = (try resolveTypeOfNodeInternal(arena, workspace, handle, params[0], bound_type_params)) orelse return null;
+                var resolved_type = (try resolveTypeOfNodeInternal(arena, workspace, doc, params[0], bound_type_params)) orelse return null;
 
                 if (resolved_type.type.is_type_val) return null;
                 resolved_type.type.is_type_val = true;
@@ -674,7 +675,7 @@ pub fn resolveTypeOfNodeInternal(
             if (node_tags[import_param] != .string_literal) return null;
 
             const import_str = tree.tokenSlice(main_tokens[import_param]);
-            const new_handle = (workspace.resolveImport(handle, import_str[1 .. import_str.len - 1]) catch |err| {
+            const new_handle = (workspace.resolveImport(doc, import_str[1 .. import_str.len - 1]) catch |err| {
                 logger.debug("Error {} while processing import {s}", .{ err, import_str });
                 return null;
             }) orelse return null;
@@ -691,19 +692,19 @@ pub fn resolveTypeOfNodeInternal(
             var buf: [1]Ast.Node.Index = undefined;
             // This is a function type
             if (ast.fnProto(tree, node, &buf).?.name_token == null) {
-                return Self.typeVal(handle, node);
+                return Self.typeVal(doc, node);
             }
 
             return Self{
                 .type = .{ .data = .{ .other = node }, .is_type_val = false },
-                .handle = handle,
+                .handle = doc,
             };
         },
         .multiline_string_literal,
         .string_literal,
         => return Self{
             .type = .{ .data = .{ .other = node }, .is_type_val = false },
-            .handle = handle,
+            .handle = doc,
         },
         else => {},
     }

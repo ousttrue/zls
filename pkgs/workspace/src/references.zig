@@ -50,12 +50,12 @@ pub fn labelReferences(decl: DeclWithHandle, include_decl: bool, locations: *std
 fn symbolReferencesInternal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
+    doc: *Document,
     node: Ast.Node.Index,
     decl: DeclWithHandle,
     locations: *std.ArrayList(UriBytePosition),
 ) error{OutOfMemory}!void {
-    const tree = handle.tree;
+    const tree = doc.tree;
     if (node > tree.nodes.len) return;
     const node_tags = tree.nodes.items(.tag);
     const datas = tree.nodes.items(.data);
@@ -82,7 +82,7 @@ fn symbolReferencesInternal(
                 try symbolReferencesInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     stmt,
                     decl,
                     locations,
@@ -108,7 +108,7 @@ fn symbolReferencesInternal(
                 try symbolReferencesInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     member,
                     decl,
                     locations,
@@ -124,7 +124,7 @@ fn symbolReferencesInternal(
                 try symbolReferencesInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     var_decl.ast.type_node,
                     decl,
                     locations,
@@ -134,7 +134,7 @@ fn symbolReferencesInternal(
                 try symbolReferencesInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     var_decl.ast.init_node,
                     decl,
                     locations,
@@ -145,7 +145,7 @@ fn symbolReferencesInternal(
             try symbolReferencesInternal(
                 arena,
                 workspace,
-                handle,
+                doc,
                 datas[node].lhs,
                 decl,
                 locations,
@@ -160,7 +160,7 @@ fn symbolReferencesInternal(
                 try symbolReferencesInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     field.ast.type_expr,
                     decl,
                     locations,
@@ -170,7 +170,7 @@ fn symbolReferencesInternal(
                 try symbolReferencesInternal(
                     arena,
                     workspace,
-                    handle,
+                    doc,
                     field.ast.value_expr,
                     decl,
                     locations,
@@ -178,9 +178,9 @@ fn symbolReferencesInternal(
             }
         },
         .identifier => {
-            if (try workspace.lookupSymbolGlobal(arena, handle, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
+            if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, doc, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
                 if (std.meta.eql(decl, child)) {
-                    try locations.append(tokenReference(handle, main_tokens[node]));
+                    try locations.append(tokenReference(doc, main_tokens[node]));
                 }
             }
         },
@@ -195,61 +195,61 @@ fn symbolReferencesInternal(
             var it = fn_proto.iterate(&tree);
             while (it.next()) |param| {
                 if (param.type_expr != 0)
-                    try symbolReferencesInternal(arena, workspace, handle, param.type_expr, decl, locations);
+                    try symbolReferencesInternal(arena, workspace, doc, param.type_expr, decl, locations);
             }
 
             if (fn_proto.ast.return_type != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.return_type, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, fn_proto.ast.return_type, decl, locations);
             }
             if (fn_proto.ast.align_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.align_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, fn_proto.ast.align_expr, decl, locations);
             }
             if (fn_proto.ast.section_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.section_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, fn_proto.ast.section_expr, decl, locations);
             }
             if (fn_proto.ast.callconv_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, fn_proto.ast.callconv_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, fn_proto.ast.callconv_expr, decl, locations);
             }
             if (node_tags[node] == .fn_decl) {
-                try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
             }
         },
         .anyframe_type => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
         },
         .@"defer" => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
         },
         .@"comptime" => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
         },
         .@"nosuspend" => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
         },
         .@"switch",
         .switch_comma,
         => {
             // TODO When renaming a union(enum) field, also rename switch items that refer to it.
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
             const extra = tree.extraData(datas[node].rhs, Ast.Node.SubRange);
             const cases = tree.extra_data[extra.start..extra.end];
             for (cases) |case| {
-                try symbolReferencesInternal(arena, workspace, handle, case, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, case, decl, locations);
             }
         },
         .switch_case_one => {
             const case_one = tree.switchCaseOne(node);
             if (case_one.ast.target_expr != 0)
-                try symbolReferencesInternal(arena, workspace, handle, case_one.ast.target_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, case_one.ast.target_expr, decl, locations);
             for (case_one.ast.values) |val|
-                try symbolReferencesInternal(arena, workspace, handle, val, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, val, decl, locations);
         },
         .switch_case => {
             const case = tree.switchCase(node);
             if (case.ast.target_expr != 0)
-                try symbolReferencesInternal(arena, workspace, handle, case.ast.target_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, case.ast.target_expr, decl, locations);
             for (case.ast.values) |val|
-                try symbolReferencesInternal(arena, workspace, handle, val, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, val, decl, locations);
         },
         .@"while",
         .while_simple,
@@ -258,13 +258,13 @@ fn symbolReferencesInternal(
         .@"for",
         => {
             const loop = ast.whileAst(tree, node).?;
-            try symbolReferencesInternal(arena, workspace, handle, loop.ast.cond_expr, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, loop.ast.cond_expr, decl, locations);
             if (loop.ast.cont_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, loop.ast.cont_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, loop.ast.cont_expr, decl, locations);
             }
-            try symbolReferencesInternal(arena, workspace, handle, loop.ast.then_expr, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, loop.ast.then_expr, decl, locations);
             if (loop.ast.else_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, loop.ast.else_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, loop.ast.else_expr, decl, locations);
             }
         },
         .@"if",
@@ -272,17 +272,17 @@ fn symbolReferencesInternal(
         => {
             const if_node = ast.ifFull(tree, node);
 
-            try symbolReferencesInternal(arena, workspace, handle, if_node.ast.cond_expr, decl, locations);
-            try symbolReferencesInternal(arena, workspace, handle, if_node.ast.then_expr, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, if_node.ast.cond_expr, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, if_node.ast.then_expr, decl, locations);
             if (if_node.ast.else_expr != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, if_node.ast.else_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, if_node.ast.else_expr, decl, locations);
             }
         },
         .array_type,
         .array_type_sentinel,
         => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
         },
         .ptr_type,
         .ptr_type_aligned,
@@ -292,20 +292,20 @@ fn symbolReferencesInternal(
             const ptr_type = ast.ptrType(tree, node).?;
 
             if (ptr_type.ast.align_node != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.align_node, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, ptr_type.ast.align_node, decl, locations);
                 if (node_tags[node] == .ptr_type_bit_range) {
-                    try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.bit_range_start, decl, locations);
-                    try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.bit_range_end, decl, locations);
+                    try symbolReferencesInternal(arena, workspace, doc, ptr_type.ast.bit_range_start, decl, locations);
+                    try symbolReferencesInternal(arena, workspace, doc, ptr_type.ast.bit_range_end, decl, locations);
                 }
             }
             if (ptr_type.ast.sentinel != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.sentinel, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, ptr_type.ast.sentinel, decl, locations);
             }
 
-            try symbolReferencesInternal(arena, workspace, handle, ptr_type.ast.child_type, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, ptr_type.ast.child_type, decl, locations);
         },
         .address_of, .@"await", .bit_not, .bool_not, .optional_type, .negation, .negation_wrap, .@"resume", .@"try" => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
         },
         .array_init,
         .array_init_comma,
@@ -325,9 +325,9 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             if (array_init.ast.type_expr != 0)
-                try symbolReferencesInternal(arena, workspace, handle, array_init.ast.type_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, array_init.ast.type_expr, decl, locations);
             for (array_init.ast.elements) |e|
-                try symbolReferencesInternal(arena, workspace, handle, e, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, e, decl, locations);
         },
         .struct_init,
         .struct_init_comma,
@@ -347,9 +347,9 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             if (struct_init.ast.type_expr != 0)
-                try symbolReferencesInternal(arena, workspace, handle, struct_init.ast.type_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, struct_init.ast.type_expr, decl, locations);
             for (struct_init.ast.fields) |field|
-                try symbolReferencesInternal(arena, workspace, handle, field, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, field, decl, locations);
         },
         .call,
         .call_comma,
@@ -367,10 +367,10 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
             if (call.ast.fn_expr != 0)
-                try symbolReferencesInternal(arena, workspace, handle, call.ast.fn_expr, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, call.ast.fn_expr, decl, locations);
 
             for (call.ast.params) |param| {
-                try symbolReferencesInternal(arena, workspace, handle, param, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, param, decl, locations);
             }
         },
         .slice,
@@ -384,36 +384,36 @@ fn symbolReferencesInternal(
                 else => unreachable,
             };
 
-            try symbolReferencesInternal(arena, workspace, handle, slice.ast.sliced, decl, locations);
-            try symbolReferencesInternal(arena, workspace, handle, slice.ast.start, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, slice.ast.sliced, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, slice.ast.start, decl, locations);
             if (slice.ast.end != 0)
-                try symbolReferencesInternal(arena, workspace, handle, slice.ast.end, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, slice.ast.end, decl, locations);
             if (slice.ast.sentinel != 0)
-                try symbolReferencesInternal(arena, workspace, handle, slice.ast.sentinel, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, slice.ast.sentinel, decl, locations);
         },
         .array_access => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
         },
         .deref,
         .unwrap_optional,
         => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
         },
         .grouped_expression => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
         },
         .@"return",
         .@"break",
         .@"continue",
         => {
             if (datas[node].lhs != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
             }
         },
         .@"suspend" => {
             if (datas[node].lhs != 0) {
-                try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
             }
         },
         .builtin_call,
@@ -434,33 +434,33 @@ fn symbolReferencesInternal(
             };
 
             for (params) |param|
-                try symbolReferencesInternal(arena, workspace, handle, param, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, param, decl, locations);
         },
         .@"asm",
         .asm_simple,
         => |a| {
             const _asm: Ast.full.Asm = if (a == .@"asm") tree.asmFull(node) else tree.asmSimple(node);
             if (_asm.ast.items.len == 0)
-                try symbolReferencesInternal(arena, workspace, handle, _asm.ast.template, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, _asm.ast.template, decl, locations);
 
             for (_asm.inputs) |input|
-                try symbolReferencesInternal(arena, workspace, handle, input, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, input, decl, locations);
 
             for (_asm.outputs) |output|
-                try symbolReferencesInternal(arena, workspace, handle, output, decl, locations);
+                try symbolReferencesInternal(arena, workspace, doc, output, decl, locations);
         },
         .test_decl => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
         },
         .field_access => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
 
             const rhs_str = tree.tokenSlice(datas[node].rhs);
             var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
             const left_type = try TypeWithHandle.resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, handle, datas[node].lhs, &bound_type_params)) orelse return,
+                (try TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, &bound_type_params)) orelse return,
                 &bound_type_params,
             );
 
@@ -478,7 +478,7 @@ fn symbolReferencesInternal(
                 !left_type.type.is_type_val,
             )) |child| {
                 if (std.meta.eql(child, decl)) {
-                    try locations.append(tokenReference(handle, datas[node].rhs));
+                    try locations.append(tokenReference(doc, datas[node].rhs));
                 }
             }
         },
@@ -523,8 +523,8 @@ fn symbolReferencesInternal(
         .sub_wrap,
         .@"orelse",
         => {
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].lhs, decl, locations);
-            try symbolReferencesInternal(arena, workspace, handle, datas[node].rhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].lhs, decl, locations);
+            try symbolReferencesInternal(arena, workspace, doc, datas[node].rhs, decl, locations);
         },
         else => {},
     }
