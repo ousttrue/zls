@@ -1,5 +1,4 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const Workspace = @import("./Workspace.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");

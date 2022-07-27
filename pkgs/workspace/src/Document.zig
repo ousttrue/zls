@@ -1,5 +1,4 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;

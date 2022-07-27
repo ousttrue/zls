@@ -1,5 +1,4 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const ast = @import("./ast.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;

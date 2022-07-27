@@ -1,5 +1,4 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const Document = @import("./Document.zig");
 const Workspace = @import("./Workspace.zig");

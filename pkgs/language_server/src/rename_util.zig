@@ -1,5 +1,4 @@
 const std = @import("std");
-const lsp = @import("lsp");
 const ws = @import("workspace");
 const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
