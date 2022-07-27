@@ -3,7 +3,6 @@ const ws = @import("workspace");
 const position_context = ws.position_context;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
-const DocumentPosition = ws.DocumentPosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const UriBytePosition = ws.UriBytePosition;
 const references = ws.references;
@@ -29,13 +28,13 @@ fn referencesDefinitionGlobal(
 fn referencesDefinitionFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
-    position: DocumentPosition,
+    doc: *Document,
+    byte_position: u32,
     range: std.zig.Token.Loc,
     include_decl: bool,
     config: *Config,
 ) ![]UriBytePosition {
-    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position.absolute_index, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
     var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
     try references.symbolReferences(arena, workspace, decl, include_decl, &locs, config.skip_std_references);
     return locs.items;
@@ -60,15 +59,15 @@ pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    doc_position: DocumentPosition,
+    byte_position: u32,
     include_decl: bool,
     config: *Config,
 ) !?[]UriBytePosition {
-    const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    const pos_context = doc.getPositionContext(byte_position);
     return switch (pos_context) {
-        .var_access => try referencesDefinitionGlobal(arena, workspace, doc, doc_position.absolute_index, include_decl, config.skip_std_references),
-        .field_access => |range| try referencesDefinitionFieldAccess(arena, workspace, doc, doc_position, range, include_decl, config),
-        .label => try referencesDefinitionLabel(arena, doc, doc_position.absolute_index, include_decl),
+        .var_access => try referencesDefinitionGlobal(arena, workspace, doc, byte_position, include_decl, config.skip_std_references),
+        .field_access => |range| try referencesDefinitionFieldAccess(arena, workspace, doc, byte_position, range, include_decl, config),
+        .label => try referencesDefinitionLabel(arena, doc, byte_position, include_decl),
         else => return null,
     };
 }

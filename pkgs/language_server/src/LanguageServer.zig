@@ -641,7 +641,7 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try rename_util.process(arena, &self.workspace, doc, doc_position)) |locations| {
+    if (try rename_util.process(arena, &self.workspace, doc, @intCast(u32, doc_position.absolute_index))) |locations| {
         var changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator());
         var context = RefHandlerContext{
             .edits = &changes,
@@ -689,7 +689,14 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .x = @intCast(u32, position.character),
         }),
     };
-    if (try references_util.process(arena, &self.workspace, doc, doc_position, params.context.includeDeclaration, self.config)) |src| {
+    if (try references_util.process(
+        arena,
+        &self.workspace,
+        doc,
+        @intCast(u32, doc_position.absolute_index),
+        params.context.includeDeclaration,
+        self.config,
+    )) |src| {
         var locations = std.ArrayList(lsp.Location).init(arena.allocator());
         for (src) |loc| {
             var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start);

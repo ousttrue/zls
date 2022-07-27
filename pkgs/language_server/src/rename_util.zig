@@ -2,7 +2,6 @@ const std = @import("std");
 const lsp = @import("lsp");
 const ws = @import("workspace");
 const position_context = ws.position_context;
-const DocumentPosition = ws.DocumentPosition;
 const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const offsets = ws.offsets;
@@ -27,11 +26,11 @@ fn renameDefinitionGlobal(
 fn renameDefinitionFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
-    position: DocumentPosition,
+    doc: *Document,
+    byte_position: u32,
     range: std.zig.Token.Loc,
 ) ![]const UriBytePosition {
-    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, handle, position.absolute_index, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
     return try rename.renameSymbol(arena, workspace, decl);
 }
 
@@ -51,13 +50,13 @@ pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    doc_position: DocumentPosition,
+    byte_position: u32,
 ) !?[]const UriBytePosition {
-    const pos_context = doc.getPositionContext(doc_position.absolute_index);
+    const pos_context = doc.getPositionContext(byte_position);
     return switch (pos_context) {
-        .var_access => try renameDefinitionGlobal(arena, workspace, doc, doc_position.absolute_index),
-        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, doc, doc_position, range),
-        .label => try renameDefinitionLabel(arena, doc, doc_position.absolute_index),
+        .var_access => try renameDefinitionGlobal(arena, workspace, doc, byte_position),
+        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, doc, byte_position, range),
+        .label => try renameDefinitionLabel(arena, doc, byte_position),
         else => null,
     };
 }

@@ -2,7 +2,6 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
-const DocumentPosition = @import("./DocumentPosition.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
