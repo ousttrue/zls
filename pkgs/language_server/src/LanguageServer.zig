@@ -378,6 +378,12 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
     return lsp.Response.createNull(id);
 }
 
+pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
+    _ = self;
+    _ = arena;
+    _ = jsonParams;
+}
+
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     _ = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
@@ -541,18 +547,18 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try self.workspace.gotoHandler(arena, doc, @intCast(u32, byte_position), true)) |location| {
-        var goto = lsp.Position{ .line = location.row, .character = location.col };
-        if (self.encoding == .utf16) {
-            goto = try utf8PositionToUtf16(doc.line_position, goto);
-        }
+        const goto_doc = try self.workspace.getDocument(location.uri);
+        const goto = try goto_doc.line_position.getPositionFromBytePosition(location.loc.start, self.encoding);
+        const goto_pos = lsp.Position{ .line=goto.line, .character=goto.x };
+
         return lsp.Response{
             .id = id,
             .result = .{
                 .Location = .{
                     .uri = location.uri,
                     .range = .{
-                        .start = goto,
-                        .end = goto,
+                        .start = goto_pos,
+                        .end = goto_pos,
                     },
                 },
             },
@@ -560,12 +566,6 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     } else {
         return lsp.Response.createNull(id);
     }
-}
-
-pub fn @"$/cancelRequest"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    _ = self;
-    _ = arena;
-    _ = jsonParams;
 }
 
 /// document position request

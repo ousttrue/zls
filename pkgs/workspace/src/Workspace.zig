@@ -5,11 +5,11 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Document = @import("./Document.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const BuildFile = @import("./BuildFile.zig");
-const Location = @import("./Location.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const ast = @import("./ast.zig");
 const logger = std.log.scoped(.Workspace);
 const TokenLocation = @import("./TokenLocation.zig");
+const UriBytePosition = @import("./UriBytePosition.zig");
 
 const Self = @This();
 
@@ -331,7 +331,7 @@ pub fn gotoHandler(
     doc: *Document,
     byte_position: u32,
     resolve_alias: bool,
-) !?Location {
+) !?UriBytePosition {
     const pos_context = doc.getPositionContext(byte_position);
     switch (pos_context) {
         .var_access => {
@@ -404,30 +404,29 @@ fn gotoDefinitionSymbol(
     arena: *std.heap.ArenaAllocator,
     decl_handle: DeclWithHandle,
     resolve_alias: bool,
-) !?Location {
+) !?UriBytePosition {
     var handle = decl_handle.handle;
 
-    const location = switch (decl_handle.decl.*) {
+    const byte_position = switch (decl_handle.decl.*) {
         .ast_node => |node| block: {
             if (resolve_alias) {
                 if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
-                    break :block try result.location();
+                    break :block result.bytePosition();
                 }
             }
 
             const name_token = ast.getDeclNameToken(handle.tree, node) orelse
                 return null;
-            break :block try TokenLocation.tokenRelativeLocation(handle.tree, 0, handle.tree.tokens.items(.start)[name_token]);
+            break :block handle.tree.tokens.items(.start)[name_token];
         },
-        else => try decl_handle.location(),
+        else => decl_handle.bytePosition(),
     };
 
-    return Location.init(
-        arena.allocator(),
-        handle.utf8_buffer.uri,
-        .{ .row = @intCast(u32, location.line), .col = @intCast(u32, location.column) },
-    );
+    return UriBytePosition{
+        .uri = handle.utf8_buffer.uri,
+        .loc = .{ .start = byte_position, .end = byte_position },
+    };
 }
 
 fn gotoDefinitionLabel(
@@ -435,7 +434,7 @@ fn gotoDefinitionLabel(
     arena: *std.heap.ArenaAllocator,
     handle: *Document,
     pos_index: usize,
-) !?Location {
+) !?UriBytePosition {
     if (try handle.getLabelGlobal(pos_index)) |decl| {
         return self.gotoDefinitionSymbol(arena, decl, false);
     } else {

@@ -10,8 +10,8 @@ const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
 const AstContext = @import("./AstContext.zig");
-const Location = @import("./Location.zig");
 const LinePosition = @import("./LinePosition.zig");
+const UriBytePosition = @import("./UriBytePosition.zig");
 const logger = std.log.scoped(.Document);
 
 pub const PositionContext = union(enum) {
@@ -520,14 +520,14 @@ pub fn gotoDefinitionString(
     arena: *std.heap.ArenaAllocator,
     pos_index: usize,
     zigenv: ZigEnv,
-) !?Location {
+) !?UriBytePosition {
     var it = ImportStrIterator.init(handle.tree);
     while (it.next()) |node| {
         if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
             if (importStr(handle.tree, node)) |import_str| {
                 if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
                     logger.debug("gotoDefinitionString: {s}", .{uri});
-                    return Location.init(arena.allocator(), uri, .{});
+                    return UriBytePosition{ .uri = uri, .loc = .{ .start=0, .end=0 } };
                 }
             }
         }

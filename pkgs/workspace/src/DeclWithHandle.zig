@@ -39,6 +39,11 @@ pub fn location(self: Self) !TokenLocation {
     return try TokenLocation.tokenRelativeLocation(tree, 0, tree.tokens.items(.start)[self.nameToken()]);
 }
 
+pub fn bytePosition(self: Self) usize{
+    const tree = self.handle.tree;
+    return tree.tokens.items(.start)[self.nameToken()];
+}
+
 pub fn isNodePublic(tree: Ast, node: Ast.Node.Index) bool {
     var buf: [1]Ast.Node.Index = undefined;
     return switch (tree.nodes.items(.tag)[node]) {
