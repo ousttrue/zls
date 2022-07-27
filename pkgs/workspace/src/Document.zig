@@ -621,3 +621,12 @@ pub fn innermostBlockScopeIndex(handle: Self, source_index: usize) usize {
 pub fn innermostBlockScope(self: Self, source_index: usize) Ast.Node.Index {
     return self.document_scope.scopes[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
 }
+
+pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
+    const token = self.ast_context.tokens.items[token_idx];
+    return UriBytePosition
+    {
+        .uri = self.utf8_buffer.uri,
+        .loc = token.loc,
+    };
+}

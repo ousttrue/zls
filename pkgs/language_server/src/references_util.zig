@@ -4,7 +4,6 @@ const Workspace = ws.Workspace;
 const Document = ws.Document;
 const DeclWithHandle = ws.DeclWithHandle;
 const UriBytePosition = ws.UriBytePosition;
-const references = ws.references;
 const Config = ws.Config;
 
 fn referencesDefinitionGlobal(
@@ -17,7 +16,7 @@ fn referencesDefinitionGlobal(
 ) !?[]UriBytePosition {
     if (try DeclWithHandle.getSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
         var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-        try references.symbolReferences(arena, workspace, decl, include_decl, &locs, skip_std_references);
+        try decl.symbolReferences(arena, workspace, include_decl, &locs, skip_std_references);
         return locs.items;
     } else {
         return null;
@@ -35,7 +34,7 @@ fn referencesDefinitionFieldAccess(
 ) ![]UriBytePosition {
     const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
     var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-    try references.symbolReferences(arena, workspace, decl, include_decl, &locs, config.skip_std_references);
+    try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
     return locs.items;
 }
 
@@ -47,7 +46,7 @@ fn referencesDefinitionLabel(
 ) !?[]UriBytePosition {
     if ((try handle.getLabelGlobal(pos_index))) |decl| {
         var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-        try references.labelReferences(decl, include_decl, &locs);
+        try decl.labelReferences(include_decl, &locs);
         return locs.items;
     } else {
         return null;

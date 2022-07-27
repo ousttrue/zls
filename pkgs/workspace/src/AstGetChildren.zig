@@ -165,6 +165,12 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
             }
             self.append(switch_case.ast.target_expr);
         },
+        .while_cont => {
+            self.append(node_data.lhs);
+            const extra = tree.extraData(node_data.rhs, std.zig.Ast.Node.WhileCont);
+            self.append(extra.cont_expr);
+            self.append(extra.then_expr);
+        },
         .struct_init_dot_comma => {
             const struct_init = tree.structInitDot(idx);
             self.append(struct_init.ast.type_expr);

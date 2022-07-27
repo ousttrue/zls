@@ -5,7 +5,6 @@ const DeclWithHandle = ws.DeclWithHandle;
 const offsets = ws.offsets;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
-const rename = ws.rename;
 const analysis = ws.analysis;
 
 fn renameDefinitionGlobal(
@@ -15,7 +14,7 @@ fn renameDefinitionGlobal(
     pos_index: usize,
 ) !?[]const UriBytePosition {
     if (try DeclWithHandle.getSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
-        return try rename.renameSymbol(arena, workspace, decl);
+        return try decl.renameSymbol(arena, workspace);
     } else {
         return null;
     }
@@ -29,7 +28,7 @@ fn renameDefinitionFieldAccess(
     range: std.zig.Token.Loc,
 ) ![]const UriBytePosition {
     const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
-    return try rename.renameSymbol(arena, workspace, decl);
+    return try decl.renameSymbol(arena, workspace);
 }
 
 fn renameDefinitionLabel(
@@ -38,7 +37,7 @@ fn renameDefinitionLabel(
     pos_index: usize,
 ) !?[]const UriBytePosition {
     if (try handle.getLabelGlobal(pos_index)) |decl| {
-        return try rename.renameLabel(arena, decl);
+        return try decl.renameLabel(arena);
     } else {
         return null;
     }
