@@ -617,16 +617,22 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
 
 /// document position request
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    const params = try lsp.fromDynamicTree(arena, lsp.requests.Completion, jsonParams.?);
+    var tmp = std.ArrayList(u8).init(arena.allocator());
+    try jsonParams.?.jsonStringify(.{}, tmp.writer());   
+    logger.debug("{s}", .{tmp.items});
+
+    const params = try lsp.fromDynamicTree(arena, lsp.completion.Completion, jsonParams.?);
+
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, if (position.character > 0) position.character - 1 else 0), self.encoding);
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     const completions = try completion_util.process(
         arena,
         &self.workspace,
         doc,
+        params.context.triggerCharacter,
         byte_position,
         self.config,
         &self.client_capabilities,

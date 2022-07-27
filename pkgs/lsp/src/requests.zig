@@ -39,7 +39,7 @@ pub const OpenDocument = struct {
     },
 };
 
-const TextDocumentIdentifier = struct {
+pub const TextDocumentIdentifier = struct {
     uri: []const u8,
 };
 
@@ -76,7 +76,6 @@ pub const SignatureHelp = struct {
     },
 };
 
-pub const Completion = TextDocumentIdentifierPositionRequest;
 pub const GotoDefinition = TextDocumentIdentifierPositionRequest;
 pub const GotoDeclaration = TextDocumentIdentifierPositionRequest;
 pub const Hover = TextDocumentIdentifierPositionRequest;

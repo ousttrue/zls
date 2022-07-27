@@ -24,7 +24,7 @@ fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayLis
 pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
     const tree = context.tree;
     const idx = stack.items[stack.items.len - 1];
-    std.debug.assert(stack.items.len>1);
+    std.debug.assert(stack.items.len > 1);
     const parent_idx = stack.items[stack.items.len - 2];
     context.nodes_parent[idx] = parent_idx;
     const token_start = tree.firstToken(idx);
@@ -37,11 +37,10 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
     var children = AstGetChildren.init(context.allocator);
     defer children.deinit();
     for (children.getChildren(context.tree, idx)) |child| {
-        if(child>=context.nodes_parent.len)
-        {
+        if (child >= context.nodes_parent.len) {
             const tags = tree.nodes.items(.tag);
             const node_tag = tags[idx];
-            std.log.err("{}: {}>=nodes_parent.len", .{node_tag, child});
+            std.log.err("{}: {}>=nodes_parent.len", .{ node_tag, child });
             unreachable;
         }
         stack.append(child) catch unreachable;
@@ -96,7 +95,7 @@ pub fn delete(self: *Self) void {
     self.allocator.destroy(self);
 }
 
-pub fn getText(self: Self, loc: std.zig.Token.Loc) []const u8{
+pub fn getText(self: Self, loc: std.zig.Token.Loc) []const u8 {
     return self.tree.source[loc.start..loc.end];
 }
 
@@ -168,4 +167,41 @@ pub fn tokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
         }
     }
     return null;
+}
+
+fn writePath(self: Self, buffer: *std.ArrayList(u8), node_idx: u32) anyerror!void {
+    const parent = self.nodes_parent[node_idx];
+    const w = buffer.writer();
+    if (parent != 0) {
+        try self.writePath(buffer, parent);
+        try w.print("/", .{});
+    } else {
+    }
+    const tag = self.tree.nodes.items(.tag);
+    const node_tag = tag[node_idx];
+    try w.print("{s}", .{@tagName(node_tag)});
+}
+
+///
+/// AST: a/b/c/d => TAG: TAG_TEXT
+///
+pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx: usize) ![]const u8 {
+    var buffer = std.ArrayList(u8).init(allocator);
+
+    // ast path
+    const w = buffer.writer();
+    try w.print("", .{});
+    const node_idx = self.tokens_node[token_idx];
+    try self.writePath(&buffer, node_idx);
+    try w.print(" => ", .{});
+
+    // token
+    const token = self.tokens.items[token_idx];
+    const name = self.getTokenText(token);
+    try w.print("{s}: {s}", .{
+        @tagName(token.tag),
+        name,
+    });
+
+    return buffer.items;
 }

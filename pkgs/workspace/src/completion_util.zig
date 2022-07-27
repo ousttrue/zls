@@ -773,10 +773,28 @@ pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
+    trigger_character: ?[]const u8,
     byte_position: u32,
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) ![]const lsp.CompletionItem {
+    if (trigger_character) |trigger| {
+        logger.debug("trigger '{s}'", .{trigger});
+        if (std.mem.eql(u8, trigger, ".")) {
+            if (doc.ast_context.tokenFromBytePos(byte_position - 1)) |token_with_index| {
+                const range = token_with_index.token.loc;
+                return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, client_capabilities);
+            }
+        }
+    }
+
+    if (doc.ast_context.tokenFromBytePos(byte_position)) |token_with_index| {
+        const context = try doc.ast_context.getTokenIndexContext(arena.allocator(), token_with_index.index);
+        logger.debug("{s}", .{context});
+    } else {
+        logger.debug("no token: {}", .{doc.utf8_buffer.text[byte_position]});
+    }
+
     const pos_context = doc.getPositionContext(byte_position);
     switch (pos_context) {
         .builtin => {
