@@ -141,6 +141,7 @@ pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
         .builtin => .{ .builtin = token.loc },
         .string_literal => .{ .string_literal = token.loc },
         .identifier => self.getPositionContextFromIdentifier(token_index, node_index, node_tag),
+        .period => .{ .field_access = token.loc },
         // global_error_set,
         // enum_literal,
         // // pre_label,
@@ -529,7 +530,7 @@ pub fn gotoDefinitionString(
             if (importStr(handle.tree, node)) |import_str| {
                 if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
                     logger.debug("gotoDefinitionString: {s}", .{uri});
-                    return UriBytePosition{ .uri = uri, .loc = .{ .start=0, .end=0 } };
+                    return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
                 }
             }
         }
