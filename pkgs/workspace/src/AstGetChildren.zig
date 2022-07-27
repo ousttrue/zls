@@ -87,6 +87,16 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .array_type, .array_type_sentinel, .ptr_type_aligned, .ptr_type_sentinel, .ptr_type, .ptr_type_bit_range => {
             self.nodeData(node_data);
         },
+        .slice => {
+            const s = tree.slice(idx);
+            self.append(s.ast.sliced);
+            self.append(s.ast.start);
+            self.append(s.ast.end);
+            self.append(s.ast.sentinel);
+        },
+        .array_access, .array_init_one, .array_init_one_comma, .array_init_dot_two, .array_init_dot_two_comma => {
+            self.nodeData(node_data);
+        },
         .struct_init_one, .struct_init_one_comma, .struct_init_dot_two, .struct_init_dot_two_comma => {
             self.nodeData(node_data);
         },
@@ -102,7 +112,6 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .for_simple,
         .@"for",
         .container_field_init,
-        .array_access,
         .container_decl_two,
         .container_decl_two_trailing,
         => {
@@ -216,6 +225,12 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
             for (decl.ast.members) |child| {
                 self.append(child);
             }
+        },
+        .grouped_expression => {
+            self.append(node_data.lhs);
+        },
+        .error_union => {
+            self.nodeData(node_data);
         },
         else => {
             // std.debug.print("unknown node: {s}\n", .{@tagName(node_tag)});

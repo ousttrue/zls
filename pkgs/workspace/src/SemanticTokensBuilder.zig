@@ -285,7 +285,7 @@ fn push_identifier(self: *Self, token_idx: u32, loc: std.zig.Token.Loc) !void {
     // const parent_tag = tag[parent_idx];
     const name = ast_context.getText(loc);
     switch (node_tag) {
-        .enum_literal => {
+        .enum_literal, .error_value => {
             try self.push_semantic_token(loc, .enumMember, .{});
         },
         .identifier, .field_access => {
