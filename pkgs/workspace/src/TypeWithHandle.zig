@@ -163,10 +163,26 @@ type: Type,
 handle: *Document,
 
 pub fn typeVal(handle: *Document, node: Ast.Node.Index) Self {
+    const tree = handle.tree;
+    std.debug.assert(node < tree.nodes.len);
+
     return .{
         .type = .{
             .data = .{ .other = node },
             .is_type_val = true,
+        },
+        .handle = handle,
+    };
+}
+
+pub fn notTypeVal(handle: *Document, node: Ast.Node.Index) Self {
+    const tree = handle.tree;
+    std.debug.assert(node < tree.nodes.len);
+
+    return .{
+        .type = .{
+            .data = .{ .other = node },
+            .is_type_val = false,
         },
         .handle = handle,
     };
@@ -692,20 +708,14 @@ pub fn resolveTypeOfNodeInternal(
             var buf: [1]Ast.Node.Index = undefined;
             // This is a function type
             if (ast.fnProto(tree, node, &buf).?.name_token == null) {
-                return Self.typeVal(doc, node);
+                return typeVal(doc, node);
             }
 
-            return Self{
-                .type = .{ .data = .{ .other = node }, .is_type_val = false },
-                .handle = doc,
-            };
+            return notTypeVal(doc, node);
         },
         .multiline_string_literal,
         .string_literal,
-        => return Self{
-            .type = .{ .data = .{ .other = node }, .is_type_val = false },
-            .handle = doc,
-        },
+        => return notTypeVal(doc, node),
         else => {},
     }
     return null;
@@ -720,13 +730,7 @@ pub fn resolveDerefType(
 ) !?Self {
     const deref_node = switch (deref.type.data) {
         .other => |n| n,
-        .pointer => |n| return Self{
-            .type = .{
-                .is_type_val = false,
-                .data = .{ .other = n },
-            },
-            .handle = deref.handle,
-        },
+        .pointer => |n| return notTypeVal(deref.handle, n),
         else => return null,
     };
     const tree = deref.handle.tree;

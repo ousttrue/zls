@@ -528,30 +528,34 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    if (try getSignatureInfo(
+    const sig_info = (try getSignatureInfo(
         arena,
         &self.workspace,
         doc,
         byte_position,
         builtin_completions.data(),
-    )) |sig_info| {
+    )) orelse {
+        logger.warn("no signature info", .{});
         return lsp.Response{
             .id = id,
             .result = .{
                 .SignatureHelp = .{
-                    .signatures = &[1]lsp.SignatureInformation{sig_info},
-                    .activeSignature = 0,
-                    .activeParameter = sig_info.activeParameter,
+                    .signatures = &.{},
+                    .activeSignature = null,
+                    .activeParameter = null,
                 },
             },
         };
-    }
+    };
 
-    return lsp.Response{ .id = id, .result = lsp.ResponseParams{
-        .SignatureHelp = .{
-            .signatures = &.{},
-            .activeSignature = null,
-            .activeParameter = null,
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .SignatureHelp = .{
+                .signatures = &[1]lsp.SignatureInformation{sig_info},
+                .activeSignature = 0,
+                .activeParameter = sig_info.activeParameter,
+            },
         },
-    } };
+    };
 }

@@ -18,7 +18,7 @@ pub fn getFieldAccessType(
     source_index: usize,
     tokenizer: *std.zig.Tokenizer,
 ) !?Self {
-    var current_type = TypeWithHandle.typeVal(handle, undefined);
+    var current_type = TypeWithHandle.typeVal(handle, 0);
 
     var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
 
