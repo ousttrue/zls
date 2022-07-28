@@ -65,32 +65,6 @@ pub fn delete(self: *Self) void {
     self.allocator.destroy(self);
 }
 
-pub fn decrement(self: *Self) usize {
-    self.count -= 1;
-    if (self.count == 0) {
-        if (self.associated_build_file) |build_file| {
-            build_file.decrement();
-        }
-
-        if (self.is_build_file) |build_file| {
-            build_file.decrement();
-        }
-
-        self.tree.deinit(self.allocator);
-        self.allocator.free(self.utf8_buffer.mem);
-
-        for (self.import_uris) |import_uri| {
-            self.allocator.free(import_uri);
-        }
-
-        self.document_scope.deinit(self.allocator);
-        self.imports_used.deinit(self.allocator);
-        self.allocator.free(self.import_uris);
-        self.allocator.destroy(self);
-    }
-    return self.count;
-}
-
 pub fn uriFromImportStrAlloc(self: *Self, allocator: std.mem.Allocator, import_str: []const u8, zigenv: ZigEnv) !?[]const u8 {
     if (std.mem.eql(u8, import_str, "std")) {
         return try allocator.dupe(u8, zigenv.std_uri);

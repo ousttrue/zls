@@ -183,11 +183,12 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     const doc = try self.workspace.openDocument(params.textDocument.uri, params.textDocument.text);
-    if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
-        try self.notification_queue.append(notification);
-    } else |err| {
-        logger.err("createNotifyDiagnostics: {}", .{err});
-    }
+    _ = doc;
+    // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
+    //     try self.notification_queue.append(notification);
+    // } else |err| {
+    //     logger.err("createNotifyDiagnostics: {}", .{err});
+    // }
 }
 
 /// # document sync
@@ -196,11 +197,11 @@ pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, j
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     try doc.applyChanges(params.contentChanges.Array, self.encoding, self.zigenv);
-    if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
-        try self.notification_queue.append(notification);
-    } else |err| {
-        logger.err("createNotifyDiagnostics: {}", .{err});
-    }
+    // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
+    //     try self.notification_queue.append(notification);
+    // } else |err| {
+    //     logger.err("createNotifyDiagnostics: {}", .{err});
+    // }
 }
 
 /// # document sync
