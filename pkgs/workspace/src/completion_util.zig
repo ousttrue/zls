@@ -779,12 +779,17 @@ pub fn process(
     client_capabilities: *ClientCapabilities,
 ) ![]const lsp.CompletionItem {
     if (trigger_character) |trigger| {
-        logger.debug("trigger '{s}'", .{trigger});
         if (std.mem.eql(u8, trigger, ".")) {
+            logger.debug("trigger '.' => field_access", .{});
             if (doc.ast_context.tokenFromBytePos(byte_position - 1)) |token_with_index| {
                 const range = token_with_index.token.loc;
                 return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, client_capabilities);
             }
+        } else if (std.mem.eql(u8, trigger, "@")) {
+            logger.debug("trigger '@' => builtin", .{});
+            return builtin_completions.completeBuiltin();
+        } else {
+            logger.debug("trigger '{s}'", .{trigger});
         }
     }
 

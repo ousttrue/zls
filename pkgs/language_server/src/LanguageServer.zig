@@ -401,9 +401,9 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
 /// ## document position request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var tmp = std.ArrayList(u8).init(arena.allocator());
-    try jsonParams.?.jsonStringify(.{}, tmp.writer());
-    logger.debug("{s}", .{tmp.items});
+    // var tmp = std.ArrayList(u8).init(arena.allocator());
+    // try jsonParams.?.jsonStringify(.{}, tmp.writer());
+    // logger.debug("{s}", .{tmp.items});
 
     const params = try lsp.fromDynamicTree(arena, lsp.completion.Completion, jsonParams.?);
 
@@ -421,6 +421,8 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         self.config,
         &self.client_capabilities,
     );
+    logger.debug("{} completions", .{completions.len});
+    logger.debug("{s}", .{completions[0]});
 
     return lsp.Response{
         .id = id,
