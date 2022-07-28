@@ -17,13 +17,13 @@ handle: *Document,
 
 fn isContainerDecl(self: Self) bool {
     return switch (self.decl.*) {
-        .ast_node => |inner_node| ast.isContainer(self.handle.tree.nodes.items(.tag)[inner_node]),
+        .ast_node => |inner_node| ast.isContainer(self.handle.ast_context.tree.nodes.items(.tag)[inner_node]),
         else => false,
     };
 }
 
 pub fn nameToken(self: Self) Ast.TokenIndex {
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     return switch (self.decl.*) {
         .ast_node => |n| ast.getDeclNameToken(tree, n).?,
         .param_decl => |p| p.name_token.?,
@@ -36,7 +36,7 @@ pub fn nameToken(self: Self) Ast.TokenIndex {
 }
 
 pub fn bytePosition(self: Self) usize {
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     return tree.tokens.items(.start)[self.nameToken()];
 }
 
@@ -60,13 +60,13 @@ pub fn isNodePublic(tree: Ast, node: Ast.Node.Index) bool {
 
 pub fn isPublic(self: Self) bool {
     return switch (self.decl.*) {
-        .ast_node => |node| isNodePublic(self.handle.tree, node),
+        .ast_node => |node| isNodePublic(self.handle.ast_context.tree, node),
         else => true,
     };
 }
 
 pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Workspace, bound_type_params: *BoundTypeParams) !?TypeWithHandle {
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const main_tokens = tree.nodes.items(.main_token);
     return switch (self.decl.*) {
@@ -78,7 +78,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
             bound_type_params,
         ),
         .param_decl => |param_decl| {
-            if (TypeWithHandle.isMetaType(self.handle.tree, param_decl.type_expr)) {
+            if (TypeWithHandle.isMetaType(self.handle.ast_context.tree, param_decl.type_expr)) {
                 var bound_param_it = bound_type_params.iterator();
                 while (bound_param_it.next()) |entry| {
                     if (std.meta.eql(entry.key_ptr.*, param_decl)) return entry.value_ptr.*;
@@ -140,7 +140,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
                 if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
                     switch (candidate.value_ptr.*) {
                         .ast_node => |node| {
-                            if (ast.containerField(switch_expr_type.handle.tree, node)) |container_field| {
+                            if (ast.containerField(switch_expr_type.handle.ast_context.tree, node)) |container_field| {
                                 if (container_field.ast.type_expr != 0) {
                                     return ((try TypeWithHandle.resolveTypeOfNodeInternal(
                                         arena,
@@ -187,13 +187,13 @@ pub fn resolveUse(
     for (uses) |use| {
         const index = use.*;
 
-        if (handle.tree.nodes.items(.data).len <= index) continue;
+        if (handle.ast_context.tree.nodes.items(.data).len <= index) continue;
 
         const expr_type_node = (try TypeWithHandle.resolveTypeOfNode(
             arena,
             workspace,
             handle,
-            handle.tree.nodes.items(.data)[index].lhs,
+            handle.ast_context.tree.nodes.items(.data)[index].lhs,
         )) orelse
             continue;
 
@@ -228,7 +228,7 @@ pub fn lookupSymbolContainer(
     /// of an instance of the type, otherwise as a field access of the type value itself.
     instance_access: bool,
 ) error{OutOfMemory}!?Self {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
     const main_token = tree.nodes.items(.main_token)[container];
@@ -265,7 +265,7 @@ fn resolveVarDeclAliasInternal(
     root: bool,
 ) error{OutOfMemory}!?Self {
     _ = root;
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const main_tokens = tree.nodes.items(.main_token);
     const datas = tree.nodes.items(.data);
@@ -302,7 +302,7 @@ fn resolveVarDeclAliasInternal(
                 .other => |n| n,
                 else => return null,
             };
-            if (!ast.isContainer(resolved.handle.tree, resolved_node)) return null;
+            if (!ast.isContainer(resolved.handle.ast_context.tree, resolved_node)) return null;
             container_handle = resolved.handle;
             container_node = resolved_node;
         } else {
@@ -333,11 +333,11 @@ pub fn resolveVarDeclAlias(
     handle: *Document,
     decl: Ast.Node.Index,
 ) !?Self {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const token_tags = tree.tokens.items(.tag);
     const node_tags = tree.nodes.items(.tag);
 
-    if (ast.varDecl(handle.tree, decl)) |var_decl| {
+    if (ast.varDecl(handle.ast_context.tree, decl)) |var_decl| {
         if (var_decl.ast.init_node == 0) return null;
         const base_exp = var_decl.ast.init_node;
         if (token_tags[var_decl.ast.mut_token] != .keyword_const) return null;
@@ -363,10 +363,10 @@ pub fn getSymbolFieldAccess(
 ) !Self {
     const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse return error.NoToken;
     const idx = doc.ast_context.tokens_node[token_with_index.index];
-    const tag = doc.tree.nodes.items(.tag);
+    const tag = doc.ast_context.tree.nodes.items(.tag);
     std.debug.assert(tag[idx] == .field_access);
-    const first = doc.ast_context.tokens.items[doc.tree.firstToken(idx)];
-    const last = doc.ast_context.tokens.items[doc.tree.lastToken(idx)];
+    const first = doc.ast_context.tokens.items[doc.ast_context.tree.firstToken(idx)];
+    const last = doc.ast_context.tokens.items[doc.ast_context.tree.lastToken(idx)];
     const range = std.zig.Token.Loc{ .start = first.loc.start, .end = last.loc.end };
 
     const allocator = arena.allocator();
@@ -413,9 +413,9 @@ pub fn gotoDefinitionSymbol(
                 }
             }
 
-            const name_token = ast.getDeclNameToken(handle.tree, node) orelse
+            const name_token = ast.getDeclNameToken(handle.ast_context.tree, node) orelse
                 return null;
-            break :block handle.tree.tokens.items(.start)[name_token];
+            break :block handle.ast_context.tree.tokens.items(.start)[name_token];
         },
         else => self.bytePosition(),
     };
@@ -450,7 +450,7 @@ pub fn lookupSymbolGlobal(
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {
                     .ast_node => |node| {
-                        if (handle.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
+                        if (handle.ast_context.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
                     },
                     .label_decl => break :blk,
                     else => {},
@@ -491,7 +491,7 @@ pub fn renameLabel(
 pub fn labelReferences(decl: Self, include_decl: bool, locations: *std.ArrayList(UriBytePosition)) !void {
     std.debug.assert(decl.decl.* == .label_decl);
     const handle = decl.handle;
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const token_tags = tree.tokens.items(.tag);
 
     // Find while / for / block from label -> iterate over children nodes, find break and continues, change their labels if they match.
@@ -525,7 +525,7 @@ fn symbolReferencesInternal(
     node: Ast.Node.Index,
     locations: *std.ArrayList(UriBytePosition),
 ) error{OutOfMemory}!void {
-    const tree = doc.tree;
+    const tree = doc.ast_context.tree;
     if (node > tree.nodes.len) return;
     const node_tags = tree.nodes.items(.tag);
     const datas = tree.nodes.items(.data);
@@ -1066,16 +1066,16 @@ pub fn symbolReferences(
                 switch (scope.data) {
                     .function => |proto| {
                         var buf: [1]Ast.Node.Index = undefined;
-                        const fn_proto = ast.fnProto(curr_handle.tree, proto, &buf).?;
-                        var it = fn_proto.iterate(&curr_handle.tree);
+                        const fn_proto = ast.fnProto(curr_handle.ast_context.tree, proto, &buf).?;
+                        var it = fn_proto.iterate(&curr_handle.ast_context.tree);
                         while (it.next()) |candidate| {
                             if (std.meta.eql(candidate, param)) {
-                                if (curr_handle.tree.nodes.items(.tag)[proto] == .fn_decl) {
+                                if (curr_handle.ast_context.tree.nodes.items(.tag)[proto] == .fn_decl) {
                                     try self.symbolReferencesInternal(
                                         arena,
                                         workspace,
                                         curr_handle,
-                                        curr_handle.tree.nodes.items(.data)[proto].rhs,
+                                        curr_handle.ast_context.tree.nodes.items(.data)[proto].rhs,
                                         locations,
                                     );
                                 }
@@ -1105,7 +1105,7 @@ pub fn hoverSymbol(
     hover_kind: ast.MarkupFormat,
 ) (std.os.WriteError || error{OutOfMemory})!?[]const u8 {
     const handle = self.handle;
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     var doc_str: ?[]const u8 = null;
 
     const def_str = switch (self.decl.*) {
@@ -1132,7 +1132,7 @@ pub fn hoverSymbol(
         },
         .param_decl => |param| def: {
             if (param.first_doc_comment) |doc_comments| {
-                doc_str = try ast.collectDocComments(arena.allocator(), handle.tree, doc_comments, hover_kind, false);
+                doc_str = try ast.collectDocComments(arena.allocator(), handle.ast_context.tree, doc_comments, hover_kind, false);
             }
 
             const first_token = param.first_doc_comment orelse
@@ -1146,8 +1146,8 @@ pub fn hoverSymbol(
             break :def tree.source[start..end];
         },
         .pointer_payload => |payload| tree.tokenSlice(payload.name),
-        .array_payload => |payload| handle.tree.tokenSlice(payload.identifier),
-        .array_index => |payload| handle.tree.tokenSlice(payload),
+        .array_payload => |payload| handle.ast_context.tree.tokenSlice(payload.identifier),
+        .array_index => |payload| handle.ast_context.tree.tokenSlice(payload),
         .switch_payload => |payload| tree.tokenSlice(payload.node),
         .label_decl => |label_decl| tree.tokenSlice(label_decl),
     };

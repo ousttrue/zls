@@ -42,7 +42,7 @@ uses: []const *const Ast.Node.Index = &.{},
 data: Data,
 
 pub fn findContainerScope(handle: *Document, container: Ast.Node.Index) ?*Self {
-    if (!ast.isContainer(handle.tree, container)) return null;
+    if (!ast.isContainer(handle.ast_context.tree, container)) return null;
 
     // Find the container scope.
     return for (handle.document_scope.scopes) |*scope| {

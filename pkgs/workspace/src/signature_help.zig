@@ -21,7 +21,7 @@ fn fnProtoToSignatureInfo(
 ) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
 
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const token_starts = tree.tokens.items(.start);
     const alloc = arena.allocator();
     const label = ast.getFunctionSignature(tree, proto);
@@ -85,7 +85,7 @@ pub fn getSignatureInfo(
     builtins: []const Builtin,
 ) !?lsp.SignatureInformation {
     const innermost_block = doc.document_scope.innermostBlockScope(byte_position);
-    const tree = doc.tree;
+    const tree = doc.ast_context.tree;
     const token_tags = tree.tokens.items(.tag);
     const token_starts = tree.tokens.items(.start);
 
@@ -290,7 +290,7 @@ pub fn getSignatureInfo(
                     };
 
                     var buf: [1]Ast.Node.Index = undefined;
-                    if (ast.fnProto(type_handle.handle.tree, node, &buf)) |proto| {
+                    if (ast.fnProto(type_handle.handle.ast_context.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
                             arena,
                             paren_commas,
@@ -343,7 +343,7 @@ pub fn getSignatureInfo(
                         }
                     }
 
-                    if (ast.fnProto(res_handle.tree, node, &buf)) |proto| {
+                    if (ast.fnProto(res_handle.ast_context.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
                             arena,
                             paren_commas,

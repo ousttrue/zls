@@ -118,7 +118,7 @@ pub fn getFieldAccessType(
 
                 // Can't call a function type, we need a function type instance.
                 if (current_type.type.is_type_val) return null;
-                const cur_tree = current_type.handle.tree;
+                const cur_tree = current_type.handle.ast_context.tree;
                 var buf: [1]Ast.Node.Index = undefined;
                 if (ast.fnProto(cur_tree, current_type_node, &buf)) |func| {
                     // Check if the function has a body and if so, pass it

@@ -163,7 +163,7 @@ type: Type,
 handle: *Document,
 
 pub fn typeVal(handle: *Document, node: Ast.Node.Index) Self {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     std.debug.assert(node < tree.nodes.len);
 
     return .{
@@ -176,7 +176,7 @@ pub fn typeVal(handle: *Document, node: Ast.Node.Index) Self {
 }
 
 pub fn notTypeVal(handle: *Document, node: Ast.Node.Index) Self {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     std.debug.assert(node < tree.nodes.len);
 
     return .{
@@ -231,7 +231,7 @@ pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, hand
     if (func.name_token == null) return false;
     if (func.ast.params.len == 0) return false;
 
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     var it = func.iterate(&tree);
     const param = it.next().?;
     if (param.type_expr == 0) return false;
@@ -260,7 +260,7 @@ pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, hand
 }
 
 pub fn resolveReturnType(arena: *std.heap.ArenaAllocator, workspace: *Workspace, fn_decl: Ast.full.FnProto, handle: *Document, bound_type_params: *BoundTypeParams, fn_body: ?Ast.Node.Index) !?Self {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     if (Self.isTypeFunction(tree, fn_decl) and fn_body != null) {
         // If this is a type function and it only contains a single return statement that returns
         // a container declaration, we will return that declaration.
@@ -298,7 +298,7 @@ pub fn resolveBracketAccessType(arena: *std.heap.ArenaAllocator, workspace: *Wor
         else => return null,
     };
 
-    const tree = lhs.handle.tree;
+    const tree = lhs.handle.ast_context.tree;
     const tags = tree.nodes.items(.tag);
     const tag = tags[lhs_node];
     const data = tree.nodes.items(.data)[lhs_node];
@@ -341,12 +341,12 @@ pub fn resolveUnwrapOptionalType(arena: *std.heap.ArenaAllocator, workspace: *Wo
         else => return null,
     };
 
-    if (opt.handle.tree.nodes.items(.tag)[opt_node] == .optional_type) {
+    if (opt.handle.ast_context.tree.nodes.items(.tag)[opt_node] == .optional_type) {
         return ((try resolveTypeOfNodeInternal(
             arena,
             workspace,
             opt.handle,
-            opt.handle.tree.nodes.items(.data)[opt_node].lhs,
+            opt.handle.ast_context.tree.nodes.items(.data)[opt_node].lhs,
             bound_type_params,
         )) orelse return null).instanceTypeVal();
     }
@@ -364,12 +364,12 @@ pub fn resolveUnwrapErrorType(arena: *std.heap.ArenaAllocator, workspace: *Works
         .primitive, .slice, .pointer => return null,
     };
 
-    if (rhs.handle.tree.nodes.items(.tag)[rhs_node] == .error_union) {
+    if (rhs.handle.ast_context.tree.nodes.items(.tag)[rhs_node] == .error_union) {
         return ((try resolveTypeOfNodeInternal(
             arena,
             workspace,
             rhs.handle,
-            rhs.handle.tree.nodes.items(.data)[rhs_node].rhs,
+            rhs.handle.ast_context.tree.nodes.items(.data)[rhs_node].rhs,
             bound_type_params,
         )) orelse return null).instanceTypeVal();
     }
@@ -399,7 +399,7 @@ pub fn resolveTypeOfNodeInternal(
     try resolve_trail.append(.{ doc, node });
     defer _ = resolve_trail.pop();
 
-    const tree = doc.tree;
+    const tree = doc.ast_context.tree;
 
     const main_tokens = tree.nodes.items(.main_token);
     const node_tags = tree.nodes.items(.tag);
@@ -436,7 +436,7 @@ pub fn resolveTypeOfNodeInternal(
             );
         },
         .identifier => {
-            if (isTypeIdent(doc.tree, main_tokens[node])) {
+            if (isTypeIdent(doc.ast_context.tree, main_tokens[node])) {
                 return Self{
                     .type = .{ .data = .primitive, .is_type_val = true },
                     .handle = doc,
@@ -453,7 +453,7 @@ pub fn resolveTypeOfNodeInternal(
                 switch (child.decl.*) {
                     .ast_node => |n| {
                         if (n == node) return null;
-                        if (ast.varDecl(child.handle.tree, n)) |var_decl| {
+                        if (ast.varDecl(child.handle.ast_context.tree, n)) |var_decl| {
                             if (var_decl.ast.init_node == node)
                                 return null;
                         }
@@ -485,13 +485,13 @@ pub fn resolveTypeOfNodeInternal(
                 else => return null,
             };
             var buf: [1]Ast.Node.Index = undefined;
-            const func_maybe = ast.fnProto(decl.handle.tree, decl_node, &buf);
+            const func_maybe = ast.fnProto(decl.handle.ast_context.tree, decl_node, &buf);
 
             if (func_maybe) |fn_decl| {
                 var expected_params = fn_decl.ast.params.len;
                 // If we call as method, the first parameter should be skipped
                 // TODO: Back-parse to extract the self argument?
-                var it = fn_decl.iterate(&decl.handle.tree);
+                var it = fn_decl.iterate(&decl.handle.ast_context.tree);
                 if (token_tags[call.ast.lparen - 2] == .period) {
                     if (try hasSelfParam(arena, workspace, decl.handle, fn_decl)) {
                         _ = it.next();
@@ -504,7 +504,7 @@ pub fn resolveTypeOfNodeInternal(
                 var i: usize = 0;
                 while (it.next()) |decl_param| : (i += 1) {
                     if (i >= param_len) break;
-                    if (!Self.isMetaType(decl.handle.tree, decl_param.type_expr))
+                    if (!Self.isMetaType(decl.handle.ast_context.tree, decl_param.type_expr))
                         continue;
 
                     const argument_type = (try resolveTypeOfNodeInternal(
@@ -520,8 +520,8 @@ pub fn resolveTypeOfNodeInternal(
                     _ = try bound_type_params.put(decl_param, argument_type);
                 }
 
-                const has_body = decl.handle.tree.nodes.items(.tag)[decl_node] == .fn_decl;
-                const body = decl.handle.tree.nodes.items(.data)[decl_node].rhs;
+                const has_body = decl.handle.ast_context.tree.nodes.items(.tag)[decl_node] == .fn_decl;
+                const body = decl.handle.ast_context.tree.nodes.items(.data)[decl_node].rhs;
                 return try resolveReturnType(arena, workspace, fn_decl, decl.handle, bound_type_params, if (has_body) body else null);
             }
             return null;
@@ -733,7 +733,7 @@ pub fn resolveDerefType(
         .pointer => |n| return notTypeVal(deref.handle, n),
         else => return null,
     };
-    const tree = deref.handle.tree;
+    const tree = deref.handle.ast_context.tree;
     const main_token = tree.nodes.items(.main_token)[deref_node];
     const token_tag = tree.tokens.items(.tag)[main_token];
 
@@ -765,7 +765,7 @@ fn isRoot(self: Self) bool {
 }
 
 fn isContainerKind(self: Self, container_kind_tok: std.zig.Token.Tag) bool {
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     const main_tokens = tree.nodes.items(.main_token);
     const tags = tree.tokens.items(.tag);
     switch (self.type.data) {
@@ -780,7 +780,7 @@ pub fn isStructType(self: Self) bool {
 
 pub fn isNamespace(self: Self) bool {
     if (!self.isStructType()) return false;
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     const node = self.type.data.other;
     const tags = tree.nodes.items(.tag);
     if (ast.isContainer(tree, node)) {
@@ -806,7 +806,7 @@ pub fn isOpaqueType(self: Self) bool {
 
 pub fn isTypeFunc(self: Self) bool {
     var buf: [1]Ast.Node.Index = undefined;
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     return switch (self.type.data) {
         .other => |n| if (ast.fnProto(tree, n, &buf)) |fn_proto| blk: {
             break :blk isTypeFunction(tree, fn_proto);
@@ -817,7 +817,7 @@ pub fn isTypeFunc(self: Self) bool {
 
 pub fn isGenericFunc(self: Self) bool {
     var buf: [1]Ast.Node.Index = undefined;
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     return switch (self.type.data) {
         .other => |n| if (ast.fnProto(tree, n, &buf)) |fn_proto| blk: {
             break :blk isGenericFunction(tree, fn_proto);
@@ -827,7 +827,7 @@ pub fn isGenericFunc(self: Self) bool {
 }
 
 pub fn isFunc(self: Self) bool {
-    const tree = self.handle.tree;
+    const tree = self.handle.ast_context.tree;
     const tags = tree.nodes.items(.tag);
     return switch (self.type.data) {
         .other => |n| switch (tags[n]) {

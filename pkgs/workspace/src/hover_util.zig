@@ -45,7 +45,7 @@ fn processInternal(
             }
         },
         else => {
-            const tag = doc.tree.nodes.items(.tag);
+            const tag = doc.ast_context.tree.nodes.items(.tag);
             const idx = doc.ast_context.tokens_node[token_with_index.index];
             const node_tag = tag[idx];
             switch (node_tag) {
@@ -66,7 +66,7 @@ fn processInternal(
                     }
                 },
                 // .fn_proto_multi => {
-                //     const signature = ast.getFunctionSignature(doc.tree, doc.tree.fnProtoMulti(idx));
+                //     const signature = ast.getFunctionSignature(doc.ast_context.tree, doc.ast_context.tree.fnProtoMulti(idx));
                 //     return try std.fmt.allocPrint(
                 //         allocator,
                 //         "# function: {s}\n\n```zig\n{s}\n```",

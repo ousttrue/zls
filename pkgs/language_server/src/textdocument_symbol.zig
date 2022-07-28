@@ -35,7 +35,7 @@ fn node_tag_to_lsp_symbol_kind(node_tag: std.zig.Ast.Node.Tag) lsp.DocumentSymbo
 
 pub fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: Line.Encoding, src: []const SymbolTree.Symbol, parent: u32) anyerror![]lsp.DocumentSymbol {
     var dst = std.ArrayList(lsp.DocumentSymbol).init(allocator);
-    const tree = doc.tree;
+    const tree = doc.ast_context.tree;
     const ast_context = doc.ast_context;
     const tags = tree.nodes.items(.tag);
     for (src) |symbol| {

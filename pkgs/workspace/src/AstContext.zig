@@ -40,7 +40,7 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
 
     var children = AstGetChildren.init(context.allocator);
     defer children.deinit();
-    for (children.getChildren(context.tree, idx)) |child| {
+    for (children.getChildren(&context.tree, idx)) |child| {
         if (child >= context.nodes_parent.len) {
             const tags = tree.nodes.items(.tag);
             const node_tag = tags[idx];
@@ -56,13 +56,13 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
 pub const AstPath = struct {};
 
 allocator: std.mem.Allocator,
-tree: *const std.zig.Ast,
+tree: std.zig.Ast,
 nodes_parent: []u32,
 tokens: std.ArrayList(std.zig.Token),
 tokens_node: []u32,
 
-pub fn new(allocator: std.mem.Allocator, tree: *const std.zig.Ast) *Self {
-    // const tree: std.zig.Ast = std.zig.parse(allocator, src) catch unreachable;
+pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) *Self {
+    const tree = std.zig.parse(allocator, text) catch unreachable;
     var self = allocator.create(Self) catch unreachable;
     self.* = Self{
         .allocator = allocator,
@@ -96,6 +96,7 @@ pub fn new(allocator: std.mem.Allocator, tree: *const std.zig.Ast) *Self {
 pub fn delete(self: *Self) void {
     self.allocator.free(self.tokens_node);
     self.allocator.free(self.nodes_parent);
+    self.tree.deinit(self.allocator);
     self.allocator.destroy(self);
 }
 
@@ -352,4 +353,30 @@ test "identifierFromPosition" {
     try std.testing.expectEqualStrings("abc", try identifierFromPosition(1, " abc cde"));
     try std.testing.expectEqualStrings("abc", try identifierFromPosition(2, " abc cde"));
     // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
+}
+
+/// Collects all imports we can find into a slice of import paths (without quotes).
+pub fn collectImports(self: Self, import_arr: *std.ArrayList([]const u8)) !void {
+    const tags = self.tree.tokens.items(.tag);
+
+    var i: usize = 0;
+    while (i < tags.len) : (i += 1) {
+        if (tags[i] != .builtin)
+            continue;
+        const text = self.tree.tokenSlice(@intCast(u32, i));
+
+        if (std.mem.eql(u8, text, "@import")) {
+            if (i + 3 >= tags.len)
+                break;
+            if (tags[i + 1] != .l_paren)
+                continue;
+            if (tags[i + 2] != .string_literal)
+                continue;
+            if (tags[i + 3] != .r_paren)
+                continue;
+
+            const str = self.tree.tokenSlice(@intCast(u32, i + 2));
+            try import_arr.append(str[1 .. str.len - 1]);
+        }
+    }
 }

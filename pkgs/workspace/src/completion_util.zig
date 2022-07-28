@@ -165,7 +165,7 @@ pub fn iterateSymbolsContainerInternal(
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) error{OutOfMemory}!void {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
     const main_token = tree.nodes.items(.main_token)[container];
@@ -269,7 +269,7 @@ fn nodeToCompletion(
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) error{OutOfMemory}!void {
-    const tree = handle.tree;
+    const tree = handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
 
@@ -280,7 +280,7 @@ fn nodeToCompletion(
 
     const doc = if (try ast.getDocComments(
         list.allocator,
-        handle.tree,
+        handle.ast_context.tree,
         node,
         doc_kind,
     )) |doc_comments|
@@ -288,7 +288,7 @@ fn nodeToCompletion(
     else
         null;
 
-    if (ast.isContainer(handle.tree, node)) {
+    if (ast.isContainer(handle.ast_context.tree, node)) {
         const context = DeclToCompletionContext{
             .completions = list,
             .config = config,
@@ -329,13 +329,13 @@ fn nodeToCompletion(
                     break :blk try getFunctionSnippet(arena.allocator(), tree, func, skip_self_param);
                 } else tree.tokenSlice(func.name_token.?);
 
-                const is_type_function = TypeWithHandle.isTypeFunction(handle.tree, func);
+                const is_type_function = TypeWithHandle.isTypeFunction(handle.ast_context.tree, func);
 
                 try list.append(.{
-                    .label = handle.tree.tokenSlice(name_token),
+                    .label = handle.ast_context.tree.tokenSlice(name_token),
                     .kind = if (is_type_function) .Struct else .Function,
                     .documentation = doc,
-                    .detail = ast.getFunctionSignature(handle.tree, func),
+                    .detail = ast.getFunctionSignature(handle.ast_context.tree, func),
                     .insertText = insert_text,
                     .insertTextFormat = if (use_snippets) .Snippet else .PlainText,
                 });
@@ -360,7 +360,7 @@ fn nodeToCompletion(
             }
 
             try list.append(.{
-                .label = handle.tree.tokenSlice(var_decl.ast.mut_token + 1),
+                .label = handle.ast_context.tree.tokenSlice(var_decl.ast.mut_token + 1),
                 .kind = if (is_const) .Constant else .Variable,
                 .documentation = doc,
                 .detail = ast.getVariableSignature(tree, var_decl),
@@ -374,10 +374,10 @@ fn nodeToCompletion(
         => {
             const field = ast.containerField(tree, node).?;
             try list.append(.{
-                .label = handle.tree.tokenSlice(field.ast.name_token),
+                .label = handle.ast_context.tree.tokenSlice(field.ast.name_token),
                 .kind = .Field,
                 .documentation = doc,
-                .detail = ast.getContainerFieldSignature(handle.tree, field),
+                .detail = ast.getContainerFieldSignature(handle.ast_context.tree, field),
                 .insertText = tree.tokenSlice(field.ast.name_token),
                 .insertTextFormat = .PlainText,
             });
@@ -478,7 +478,7 @@ fn declToCompletion(
     config: *Config,
     client_capabilities: *ClientCapabilities,
 ) !void {
-    const tree = decl_handle.handle.tree;
+    const tree = decl_handle.handle.ast_context.tree;
     switch (decl_handle.decl.*) {
         .ast_node => |node| try nodeToCompletion(
             arena,
@@ -623,7 +623,7 @@ fn iterateSymbolsGlobalInternal(
             var decl_it = scope.decls.iterator();
             while (decl_it.next()) |entry| {
                 if (entry.value_ptr.* == .ast_node and
-                    handle.tree.nodes.items(.tag)[entry.value_ptr.*.ast_node].isContainerField()) continue;
+                    handle.ast_context.tree.nodes.items(.tag)[entry.value_ptr.*.ast_node].isContainerField()) continue;
                 if (entry.value_ptr.* == .label_decl) continue;
                 try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, client_capabilities);
             }
@@ -636,7 +636,7 @@ fn iterateSymbolsGlobalInternal(
                     arena,
                     workspace,
                     handle,
-                    handle.tree.nodes.items(.data)[use.*].lhs,
+                    handle.ast_context.tree.nodes.items(.data)[use.*].lhs,
                 )) orelse continue;
                 const use_expr_node = switch (use_expr.type.data) {
                     .other => |n| n,

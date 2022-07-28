@@ -21,7 +21,7 @@ count: usize,
 import_uris: []const []const u8,
 /// Items in this array list come from `import_uris`
 imports_used: std.ArrayListUnmanaged([]const u8),
-tree: Ast,
+
 ast_context: *AstContext,
 document_scope: DocumentScope,
 
@@ -32,8 +32,8 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     var self = try allocator.create(Self);
     errdefer allocator.destroy(self);
 
-    var tree = try std.zig.parse(allocator, text);
-    errdefer tree.deinit(allocator);
+    const ast_context = AstContext.new(allocator, text);
+    errdefer ast_context.delete();
 
     self.* = Self{
         .allocator = allocator,
@@ -42,9 +42,8 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .import_uris = &.{},
         .imports_used = .{},
         .utf8_buffer = try Utf8Buffer.init(allocator, text),
-        .tree = tree,
-        .ast_context = AstContext.new(allocator, &self.tree),
-        .document_scope = try DocumentScope.init(allocator, tree),
+        .ast_context = ast_context,
+        .document_scope = try DocumentScope.init(allocator, ast_context.tree),
         .associated_build_file = null,
         .is_build_file = null,
     };
@@ -60,7 +59,6 @@ pub fn delete(self: *Self) void {
     self.imports_used.deinit(self.allocator);
     self.document_scope.deinit(self.allocator);
     self.ast_context.delete();
-    self.tree.deinit(self.allocator);
     self.allocator.free(self.utf8_buffer.mem);
     self.allocator.destroy(self);
 }
@@ -98,32 +96,6 @@ pub fn uriFromImportStrAlloc(self: *Self, allocator: std.mem.Allocator, import_s
     }
 }
 
-/// Collects all imports we can find into a slice of import paths (without quotes).
-pub fn collectImports(import_arr: *std.ArrayList([]const u8), tree: Ast) !void {
-    const tags = tree.tokens.items(.tag);
-
-    var i: usize = 0;
-    while (i < tags.len) : (i += 1) {
-        if (tags[i] != .builtin)
-            continue;
-        const text = tree.tokenSlice(@intCast(u32, i));
-
-        if (std.mem.eql(u8, text, "@import")) {
-            if (i + 3 >= tags.len)
-                break;
-            if (tags[i + 1] != .l_paren)
-                continue;
-            if (tags[i + 2] != .string_literal)
-                continue;
-            if (tags[i + 3] != .r_paren)
-                continue;
-
-            const str = tree.tokenSlice(@intCast(u32, i + 2));
-            try import_arr.append(str[1 .. str.len - 1]);
-        }
-    }
-}
-
 pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
     var new_imports = std.ArrayList([]const u8).init(self.allocator);
     errdefer {
@@ -132,7 +104,7 @@ pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
         }
         new_imports.deinit();
     }
-    try collectImports(&new_imports, self.tree);
+    try self.ast_context.collectImports(&new_imports);
 
     // Convert to URIs
     var i: usize = 0;
@@ -149,15 +121,11 @@ pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
 }
 
 pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
-    // logger.debug("New text for document {s}", .{self.utf8_buffer.uri});
-    self.tree.deinit(self.allocator);
-    self.tree = try std.zig.parse(self.allocator, self.utf8_buffer.text);
-
     self.ast_context.delete();
-    self.ast_context = AstContext.new(self.allocator, &self.tree);
+    self.ast_context = AstContext.new(self.allocator, self.utf8_buffer.text);
 
     self.document_scope.deinit(self.allocator);
-    self.document_scope = try DocumentScope.init(self.allocator, self.tree);
+    self.document_scope = try DocumentScope.init(self.allocator, self.ast_context.tree);
 
     const new_imports = try self.collectImportUris(zigenv);
     errdefer {
@@ -323,17 +291,17 @@ fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
 }
 
 pub fn gotoDefinitionString(
-    handle: *Self,
+    self: *Self,
     arena: *std.heap.ArenaAllocator,
     pos_index: usize,
     zigenv: ZigEnv,
 ) !?UriBytePosition {
-    const tree = handle.ast_context.tree.*;
+    const tree = self.ast_context.tree;
     var it = ImportStrIterator.init(tree);
     while (it.next()) |node| {
         if (nodeContainsSourceIndex(tree, node, pos_index)) {
             if (importStr(tree, node)) |import_str| {
-                if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
+                if (try self.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
                     // logger.debug("gotoDefinitionString: {s}", .{uri});
                     return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
                 }
@@ -345,8 +313,7 @@ pub fn gotoDefinitionString(
 
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
     const token = self.ast_context.tokens.items[token_idx];
-    return UriBytePosition
-    {
+    return UriBytePosition{
         .uri = self.uri,
         .loc = token.loc,
     };

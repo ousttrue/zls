@@ -265,7 +265,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
-    var symbol_tree = SymbolTree.init(arena.allocator(), doc.tree);
+    var symbol_tree = SymbolTree.init(arena.allocator(), doc.ast_context.tree);
     try symbol_tree.traverse(0);
     // logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
     const symbols = try textdocument_symbol.to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
