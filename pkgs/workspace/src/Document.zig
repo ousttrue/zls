@@ -286,7 +286,7 @@ pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
 }
 
 pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
-    logger.debug("New text for document {s}", .{self.utf8_buffer.uri});
+    // logger.debug("New text for document {s}", .{self.utf8_buffer.uri});
     self.tree.deinit(self.allocator);
     self.tree = try std.zig.parse(self.allocator, self.utf8_buffer.text);
 

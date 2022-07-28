@@ -1092,3 +1092,72 @@ pub fn symbolReferences(
         .label_decl => unreachable,
     }
 }
+
+pub fn hoverSymbol(
+    self: Self,
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    hover_kind: ast.MarkupFormat,
+) (std.os.WriteError || error{OutOfMemory})!?[]const u8 {
+    const handle = self.handle;
+    const tree = handle.tree;
+    var doc_str: ?[]const u8 = null;
+
+    const def_str = switch (self.decl.*) {
+        .ast_node => |node| def: {
+            if (try Self.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+                return try result.hoverSymbol(arena, workspace, hover_kind);
+            }
+            doc_str = try ast.getDocComments(arena.allocator(), tree, node, hover_kind);
+
+            var buf: [1]Ast.Node.Index = undefined;
+
+            if (ast.varDecl(tree, node)) |var_decl| {
+                break :def ast.getVariableSignature(tree, var_decl);
+            } else if (ast.fnProto(tree, node, &buf)) |fn_proto| {
+                break :def ast.getFunctionSignature(tree, fn_proto);
+            } else if (ast.containerField(tree, node)) |field| {
+                break :def ast.getContainerFieldSignature(tree, field);
+            } else {
+                if (ast.nodeToString(tree, node)) |text| {
+                    break :def text;
+                }
+                return null;
+            }
+        },
+        .param_decl => |param| def: {
+            if (param.first_doc_comment) |doc_comments| {
+                doc_str = try ast.collectDocComments(arena.allocator(), handle.tree, doc_comments, hover_kind, false);
+            }
+
+            const first_token = param.first_doc_comment orelse
+                param.comptime_noalias orelse
+                param.name_token orelse
+                tree.firstToken(param.type_expr); // extern fn
+            const last_token = param.anytype_ellipsis3 orelse tree.lastToken(param.type_expr);
+
+            const start = ast.tokenLocation(tree, first_token).start;
+            const end = ast.tokenLocation(tree, last_token).end;
+            break :def tree.source[start..end];
+        },
+        .pointer_payload => |payload| tree.tokenSlice(payload.name),
+        .array_payload => |payload| handle.tree.tokenSlice(payload.identifier),
+        .array_index => |payload| handle.tree.tokenSlice(payload),
+        .switch_payload => |payload| tree.tokenSlice(payload.node),
+        .label_decl => |label_decl| tree.tokenSlice(label_decl),
+    };
+
+    var hover_text: []const u8 = undefined;
+    if (hover_kind == .Markdown) {
+        hover_text = if (doc_str) |doc|
+            try std.fmt.allocPrint(arena.allocator(), "```zig\n{s}\n```\n{s}", .{ def_str, doc })
+        else
+            try std.fmt.allocPrint(arena.allocator(), "```zig\n{s}\n```", .{def_str});
+    } else {
+        hover_text = if (doc_str) |doc|
+            try std.fmt.allocPrint(arena.allocator(), "{s}\n{s}", .{ def_str, doc })
+        else
+            def_str;
+    }
+    return hover_text;
+}
