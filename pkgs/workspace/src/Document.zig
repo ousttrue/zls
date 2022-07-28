@@ -9,7 +9,6 @@ const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
 const AstContext = @import("./AstContext.zig");
-const LinePosition = @import("./LinePosition.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");
 const logger = std.log.scoped(.Document);
 
@@ -29,6 +28,7 @@ pub const PositionContext = union(enum) {
 
 const Self = @This();
 allocator: std.mem.Allocator,
+uri: []const u8,
 utf8_buffer: Utf8Buffer,
 count: usize,
 /// Contains one entry for every import in the document
@@ -38,7 +38,6 @@ imports_used: std.ArrayListUnmanaged([]const u8),
 tree: Ast,
 ast_context: *AstContext,
 document_scope: DocumentScope,
-line_position: LinePosition,
 
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
@@ -52,23 +51,22 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
 
     self.* = Self{
         .allocator = allocator,
+        .uri = uri,
         .count = 1,
         .import_uris = &.{},
         .imports_used = .{},
-        .utf8_buffer = Utf8Buffer.init(uri, text),
+        .utf8_buffer = try Utf8Buffer.init(allocator, text),
         .tree = tree,
         .ast_context = AstContext.new(allocator, &self.tree),
         .document_scope = try DocumentScope.init(allocator, tree),
         .associated_build_file = null,
         .is_build_file = null,
-        .line_position = try LinePosition.init(allocator, text),
     };
 
     return self;
 }
 
 pub fn delete(self: *Self) void {
-    self.line_position.deinit();
     for (self.import_uris) |imp_uri| {
         self.allocator.free(imp_uri);
     }
@@ -222,7 +220,7 @@ pub fn uriFromImportStrAlloc(self: *Self, allocator: std.mem.Allocator, import_s
         }
         return null;
     } else {
-        const base = self.utf8_buffer.uri;
+        const base = self.uri;
         var base_len = base.len;
         while (base[base_len - 1] != '/' and base_len > 0) {
             base_len -= 1;
@@ -293,9 +291,6 @@ pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
     self.ast_context.delete();
     self.ast_context = AstContext.new(self.allocator, &self.tree);
 
-    self.line_position.deinit();
-    self.line_position = try LinePosition.init(self.allocator, self.utf8_buffer.text);
-
     self.document_scope.deinit(self.allocator);
     self.document_scope = try DocumentScope.init(self.allocator, self.tree);
 
@@ -336,63 +331,7 @@ pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
 }
 
 pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line.Encoding, zigenv: ZigEnv) !void {
-    const document = &self.utf8_buffer;
-
-    for (content_changes.items) |change| {
-        if (change.Object.get("range")) |range| {
-            std.debug.assert(@ptrCast([*]const u8, document.text.ptr) == document.mem.ptr);
-
-            // TODO: add tests and validate the JSON
-            const start_obj = range.Object.get("start").?;
-            const end_obj = range.Object.get("end").?;
-
-            const change_text = change.Object.get("text").?.String;
-            const start_line = try self.line_position.getLine(@intCast(u32, start_obj.Object.get("line").?.Integer));
-            const start_index = try start_line.getBytePosition(@intCast(u32, start_obj.Object.get("character").?.Integer), encoding);
-            const end_line = try self.line_position.getLine(@intCast(u32, end_obj.Object.get("line").?.Integer));
-            const end_index = try end_line.getBytePosition(@intCast(u32, end_obj.Object.get("character").?.Integer), encoding);
-
-            const old_len = document.text.len;
-            const new_len = old_len - (end_index - start_index) + change_text.len;
-            if (new_len >= document.mem.len) {
-                // We need to reallocate memory.
-                // We reallocate twice the current filesize or the new length, if it's more than that
-                // so that we can reduce the amount of realloc calls.
-                // We can tune this to find a better size if needed.
-                const realloc_len = std.math.max(2 * old_len, new_len + 1);
-                document.mem = try self.allocator.realloc(document.mem, realloc_len);
-            }
-
-            // The first part of the string, [0 .. start_index] need not be changed.
-            // We then copy the last part of the string, [end_index ..] to its
-            //    new position, [start_index + change_len .. ]
-            if (new_len < old_len) {
-                std.mem.copy(u8, document.mem[start_index + change_text.len ..][0 .. old_len - end_index], document.mem[end_index..old_len]);
-            } else {
-                std.mem.copyBackwards(u8, document.mem[start_index + change_text.len ..][0 .. old_len - end_index], document.mem[end_index..old_len]);
-            }
-            // Finally, we copy the changes over.
-            std.mem.copy(u8, document.mem[start_index..][0..change_text.len], change_text);
-
-            // Reset the text substring.
-            document.mem[new_len] = 0;
-            document.text = document.mem[0..new_len :0];
-        } else {
-            const change_text = change.Object.get("text").?.String;
-            const old_len = document.text.len;
-
-            if (change_text.len >= document.mem.len) {
-                // Like above.
-                const realloc_len = std.math.max(2 * old_len, change_text.len + 1);
-                document.mem = try self.allocator.realloc(document.mem, realloc_len);
-            }
-
-            std.mem.copy(u8, document.mem[0..change_text.len], change_text);
-            document.mem[change_text.len] = 0;
-            document.text = document.mem[0..change_text.len :0];
-        }
-    }
-
+    try self.utf8_buffer.applyChanges(content_changes, encoding);
     try self.refreshDocument(zigenv);
 }
 
@@ -626,7 +565,7 @@ pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
     const token = self.ast_context.tokens.items[token_idx];
     return UriBytePosition
     {
-        .uri = self.utf8_buffer.uri,
+        .uri = self.uri,
         .loc = token.loc,
     };
 }

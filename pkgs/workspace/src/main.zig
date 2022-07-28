@@ -2,7 +2,6 @@ const std = @import("std");
 pub const Workspace = @import("./Workspace.zig");
 pub const Document = @import("./Document.zig");
 pub const Line = @import("./Line.zig");
-pub const LinePosition = @import("./LinePosition.zig");
 pub const UriBytePosition = @import("./UriBytePosition.zig");
 pub const Config = @import("./Config.zig");
 pub const ZigEnv = @import("./ZigEnv.zig");

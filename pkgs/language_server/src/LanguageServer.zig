@@ -233,7 +233,7 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
     };
 
     const end = doc.utf8_buffer.text.len;
-    const position = try doc.line_position.getPositionFromBytePosition(end, self.encoding);
+    const position = try doc.utf8_buffer.getPositionFromBytePosition(end, self.encoding);
     const range = lsp.Range{
         .start = .{
             .line = 0,
@@ -293,8 +293,8 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, doc);
     var array = try std.ArrayList(u32).initCapacity(arena.allocator(), token_array.len * 5);
     for (token_array) |token| {
-        const start = try doc.line_position.getPositionFromBytePosition(token.start, self.encoding);
-        const end = try doc.line_position.getPositionFromBytePosition(token.end - 1, self.encoding);
+        const start = try doc.utf8_buffer.getPositionFromBytePosition(token.start, self.encoding);
+        const end = try doc.utf8_buffer.getPositionFromBytePosition(token.end - 1, self.encoding);
         std.debug.assert(start.line == end.line);
         try array.appendSlice(&.{
             start.line,
@@ -335,7 +335,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
-    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (hover_util.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities)) |text| {
@@ -360,12 +360,12 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
-    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try textdocument_goto.gotoHandler(arena, &self.workspace, doc, @intCast(u32, byte_position), true)) |location| {
         const goto_doc = self.workspace.getDocument(location.uri) orelse return error.DocumentNotFound;
-        const goto = try goto_doc.line_position.getPositionFromBytePosition(location.loc.start, self.encoding);
+        const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 
         return lsp.Response{
@@ -396,7 +396,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const params = try lsp.fromDynamicTree(arena, lsp.completion.Completion, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
-    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
     // _ = byte_position;
 
@@ -439,7 +439,7 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
-    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try rename_util.process(arena, &self.workspace, doc, byte_position)) |locations| {
@@ -451,8 +451,8 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
             else
                 std.ArrayList(lsp.TextEdit).init(allocator);
 
-            var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start, self.encoding);
-            var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end, self.encoding);
+            var start = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.start, self.encoding);
+            var end = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.end, self.encoding);
 
             (try text_edits.addOne()).* = .{
                 .range = .{
@@ -480,7 +480,7 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
-    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     if (try references_util.process(
@@ -493,11 +493,11 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     )) |src| {
         var locations = std.ArrayList(lsp.Location).init(arena.allocator());
         for (src) |loc| {
-            var start = try doc.line_position.getPositionFromBytePosition(loc.loc.start, self.encoding);
-            var end = try doc.line_position.getPositionFromBytePosition(loc.loc.end, self.encoding);
+            var start = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.start, self.encoding);
+            var end = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.end, self.encoding);
             if (self.encoding == .utf16) {
-                start = try doc.line_position.utf8PositionToUtf16(start);
-                end = try doc.line_position.utf8PositionToUtf16(end);
+                start = try doc.utf8_buffer.utf8PositionToUtf16(start);
+                end = try doc.utf8_buffer.utf8PositionToUtf16(end);
             }
             try locations.append(.{
                 .uri = loc.uri,
@@ -524,7 +524,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SignatureHelp, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
-    const line = try doc.line_position.getLine(@intCast(u32, position.line));
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
     const sig_info = (try getSignatureInfo(

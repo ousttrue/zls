@@ -95,7 +95,7 @@ pub fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Docu
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .PublishDiagnostics = .{
-                .uri = doc.utf8_buffer.uri,
+                .uri = doc.uri,
                 .diagnostics = diagnostics.items,
             },
         },

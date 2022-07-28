@@ -421,7 +421,7 @@ pub fn gotoDefinitionSymbol(
     };
 
     return UriBytePosition{
-        .uri = handle.utf8_buffer.uri,
+        .uri = handle.uri,
         .loc = .{ .start = byte_position, .end = byte_position },
     };
 }
