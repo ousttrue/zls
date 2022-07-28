@@ -74,7 +74,9 @@ fn processInternal(
                 //     );
                 // },
                 .field_access => {
-                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, token_with_index.token.loc);
+                    const first = doc.ast_context.tokens.items[doc.tree.firstToken(idx)];
+                    const last = doc.ast_context.tokens.items[doc.tree.lastToken(idx)];
+                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, .{ .start = first.loc.start, .end = last.loc.end });
                     const hover = try decl.hoverSymbol(arena, workspace, if (client_capabilities.hover_supports_md) .Markdown else .PlainText);
                     return try std.fmt.allocPrint(
                         allocator,
