@@ -527,7 +527,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-
+    
     const sig_info = (try getSignatureInfo(
         arena,
         &self.workspace,
@@ -548,11 +548,14 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
         };
     };
 
+    var signatures = std.ArrayList(lsp.SignatureInformation).init(arena.allocator());
+    try signatures.append(sig_info);
+
     return lsp.Response{
         .id = id,
         .result = .{
             .SignatureHelp = .{
-                .signatures = &[1]lsp.SignatureInformation{sig_info},
+                .signatures = signatures.items,
                 .activeSignature = 0,
                 .activeParameter = sig_info.activeParameter,
             },
