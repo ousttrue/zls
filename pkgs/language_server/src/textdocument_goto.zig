@@ -21,8 +21,8 @@ pub fn gotoHandler(
                 return null;
             }
         },
-        .field_access => |range| {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
+        .field_access => |_| {
+            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
             return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
         },
         .string_literal => {

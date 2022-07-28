@@ -28,11 +28,10 @@ fn referencesDefinitionFieldAccess(
     workspace: *Workspace,
     doc: *Document,
     byte_position: u32,
-    range: std.zig.Token.Loc,
     include_decl: bool,
     config: *Config,
 ) ![]UriBytePosition {
-    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
     var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
     try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
     return locs.items;
@@ -64,7 +63,7 @@ pub fn process(
     const pos_context = doc.getPositionContext(byte_position);
     return switch (pos_context) {
         .var_access => try referencesDefinitionGlobal(arena, workspace, doc, byte_position, include_decl, config.skip_std_references),
-        .field_access => |range| try referencesDefinitionFieldAccess(arena, workspace, doc, byte_position, range, include_decl, config),
+        .field_access => |_| try referencesDefinitionFieldAccess(arena, workspace, doc, byte_position, include_decl, config),
         .label => try referencesDefinitionLabel(arena, doc, byte_position, include_decl),
         else => return null,
     };

@@ -35,7 +35,7 @@ pub fn nameToken(self: Self) Ast.TokenIndex {
     };
 }
 
-pub fn bytePosition(self: Self) usize{
+pub fn bytePosition(self: Self) usize {
     const tree = self.handle.tree;
     return tree.tokens.items(.start)[self.nameToken()];
 }
@@ -354,16 +354,20 @@ pub fn resolveVarDeclAlias(
     return null;
 }
 
-
 /// Token location inside source
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
     byte_position: usize,
-    range: std.zig.Token.Loc,
 ) !Self {
-    const name = doc.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
+    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse return error.NoToken;
+    const idx = doc.ast_context.tokens_node[token_with_index.index];
+    const tag = doc.tree.nodes.items(.tag);
+    std.debug.assert(tag[idx] == .field_access);
+    const first = doc.ast_context.tokens.items[doc.tree.firstToken(idx)];
+    const last = doc.ast_context.tokens.items[doc.tree.lastToken(idx)];
+    const range = std.zig.Token.Loc{ .start = first.loc.start, .end = last.loc.end };
 
     const allocator = arena.allocator();
     var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
@@ -381,6 +385,7 @@ pub fn getSymbolFieldAccess(
         .other => |n| n,
         else => return error.NodeNotFound,
     };
+    const name = doc.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
     return (try Self.lookupSymbolContainer(
         arena,
         workspace,

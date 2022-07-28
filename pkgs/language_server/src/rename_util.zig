@@ -25,9 +25,8 @@ fn renameDefinitionFieldAccess(
     workspace: *Workspace,
     doc: *Document,
     byte_position: u32,
-    range: std.zig.Token.Loc,
 ) ![]const UriBytePosition {
-    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position, range);
+    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
     return try decl.renameSymbol(arena, workspace);
 }
 
@@ -52,7 +51,7 @@ pub fn process(
     const pos_context = doc.getPositionContext(byte_position);
     return switch (pos_context) {
         .var_access => try renameDefinitionGlobal(arena, workspace, doc, byte_position),
-        .field_access => |range| try renameDefinitionFieldAccess(arena, workspace, doc, byte_position, range),
+        .field_access => |_| try renameDefinitionFieldAccess(arena, workspace, doc, byte_position),
         .label => try renameDefinitionLabel(arena, doc, byte_position),
         else => null,
     };
