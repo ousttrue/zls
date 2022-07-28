@@ -338,29 +338,17 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    if (hover_util.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities)) |hover_or_null| {
-        if (hover_or_null) |hover_contents| {
-            return lsp.Response{
-                .id = id,
-                .result = .{
-                    .Hover = .{
-                        .contents = .{ .value = hover_contents },
-                    },
-                },
-            };
-        } else {
-            return lsp.Response.createNull(id);
-        }
-    } else |err| {
-        const hover_contents = try std.fmt.allocPrint(arena.allocator(), "{}", .{err});
+    if (hover_util.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities)) |text| {
         return lsp.Response{
             .id = id,
             .result = .{
                 .Hover = .{
-                    .contents = .{ .value = hover_contents },
+                    .contents = .{ .value = text },
                 },
             },
         };
+    } else {
+        return lsp.Response.createNull(id);
     }
 }
 

@@ -80,7 +80,7 @@ fn hoverSymbol(
     return hover_text;
 }
 
-pub fn process(
+fn _process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
@@ -158,8 +158,21 @@ pub fn process(
                 }
             },
         }
-    }
-    else{
+    } else {
         return null;
+    }
+}
+
+pub fn process(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    doc: *Document,
+    byte_position: u32,
+    client_capabilities: *ClientCapabilities,
+) ?[]const u8 {
+    if (_process(arena, workspace, doc, byte_position, client_capabilities)) |hover_or_null| {
+        return hover_or_null;
+    } else |err| {
+        return std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null;
     }
 }
