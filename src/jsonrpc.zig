@@ -6,7 +6,7 @@ const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
 const Workspace = ws.Workspace;
 const Config = ws.Config;
-const Stdio = ws.Stdio;
+const Stdio = @import("./Stdio.zig");
 
 const logger = std.log.scoped(.jsonrpc);
 

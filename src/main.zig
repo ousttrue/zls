@@ -10,7 +10,7 @@ const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
 const Config = ws.Config;
-const Stdio = ws.Stdio;
+const Stdio = @import("./Stdio.zig");
 const ZigEnv = ws.ZigEnv;
 
 const logger = std.log.scoped(.main);
