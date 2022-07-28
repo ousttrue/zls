@@ -868,3 +868,23 @@ pub fn debugPrint(self: Self) void {
         logger.debug("\n--------------------------\n", .{});
     }
 }
+
+pub fn innermostBlockScopeIndex(self: Self, source_index: usize) usize {
+    if (self.scopes.len == 1) return 0;
+
+    var current: usize = 0;
+    for (self.scopes[1..]) |*scope, idx| {
+        if (source_index >= scope.range.start and source_index <= scope.range.end) {
+            switch (scope.data) {
+                .container, .function, .block => current = idx + 1,
+                else => {},
+            }
+        }
+        if (scope.range.start > source_index) break;
+    }
+    return current;
+}
+
+pub fn innermostBlockScope(self: Self, source_index: usize) Ast.Node.Index {
+    return self.scopes[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
+}

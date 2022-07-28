@@ -84,7 +84,7 @@ pub fn getSignatureInfo(
     byte_position: usize,
     builtins: []const Builtin,
 ) !?lsp.SignatureInformation {
-    const innermost_block = doc.innermostBlockScope(byte_position);
+    const innermost_block = doc.document_scope.innermostBlockScope(byte_position);
     const tree = doc.tree;
     const token_tags = tree.tokens.items(.tag);
     const token_starts = tree.tokens.items(.start);

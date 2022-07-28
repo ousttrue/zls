@@ -432,26 +432,6 @@ pub fn getLabelGlobal(self: *Self, pos_index: usize) !?DeclWithHandle {
     }
 }
 
-pub fn innermostBlockScopeIndex(handle: Self, source_index: usize) usize {
-    if (handle.document_scope.scopes.len == 1) return 0;
-
-    var current: usize = 0;
-    for (handle.document_scope.scopes[1..]) |*scope, idx| {
-        if (source_index >= scope.range.start and source_index <= scope.range.end) {
-            switch (scope.data) {
-                .container, .function, .block => current = idx + 1,
-                else => {},
-            }
-        }
-        if (scope.range.start > source_index) break;
-    }
-    return current;
-}
-
-pub fn innermostBlockScope(self: Self, source_index: usize) Ast.Node.Index {
-    return self.document_scope.scopes[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
-}
-
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
     const token = self.ast_context.tokens.items[token_idx];
     return UriBytePosition
