@@ -44,7 +44,7 @@ fn processInternal(
                 );
             }
         },
-        else => {
+        .identifier => {
             const tag = doc.ast_context.tree.nodes.items(.tag);
             const idx = doc.ast_context.tokens_node[token_with_index.index];
             const node_tag = tag[idx];
@@ -105,6 +105,9 @@ fn processInternal(
                     return context_info;
                 },
             }
+        },
+        else => {
+            return null;
         },
     }
 }
