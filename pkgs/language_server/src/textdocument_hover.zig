@@ -1,15 +1,16 @@
 const std = @import("std");
-const ClientCapabilities = @import("./ClientCapabilities.zig");
-const Document = @import("./Document.zig");
-const Workspace = @import("./Workspace.zig");
-const DeclWithHandle = @import("./DeclWithHandle.zig");
-const ast = @import("./ast.zig");
-const builtin_completions = @import("./builtin_completions.zig");
 const Ast = std.zig.Ast;
-const AstGetChildren = @import("./AstGetChildren.zig");
 const logger = std.log.scoped(.hover);
+const ws = @import("workspace");
+const ClientCapabilities = ws.ClientCapabilities;
+const Workspace = ws.Workspace;
+const Document = ws.Document;
+const DeclWithHandle = ws.DeclWithHandle;
+const ast = ws.ast;
+const builtin_completions = ws.builtin_completions;
+const AstGetChildren = ws.AstGetChildren;
 
-fn processInternal(
+pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
@@ -109,19 +110,5 @@ fn processInternal(
         else => {
             return null;
         },
-    }
-}
-
-pub fn process(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    doc: *Document,
-    byte_position: u32,
-    client_capabilities: *ClientCapabilities,
-) ?[]const u8 {
-    if (processInternal(arena, workspace, doc, byte_position, client_capabilities)) |hover_or_null| {
-        return hover_or_null;
-    } else |err| {
-        return std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null;
     }
 }

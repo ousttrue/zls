@@ -10,7 +10,6 @@ const Line = ws.Line;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
-const hover_util = ws.hover_util;
 const completion_util = ws.completion_util;
 const ClientCapabilities = ws.ClientCapabilities;
 const builtin_completions = ws.builtin_completions;
@@ -21,7 +20,7 @@ const getSignatureInfo = ws.signature_help.getSignatureInfo;
 const textdocument_symbol = @import("./textdocument_symbol.zig");
 const textdocument_diagnostics = @import("./textdocument_diagnostics.zig");
 const textdocument_goto = @import("./textdocument_goto.zig");
-
+const textdocument_hover = @import("./textdocument_hover.zig");
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 const Self = @This();
@@ -339,18 +338,19 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    if (hover_util.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities)) |text| {
-        return lsp.Response{
-            .id = id,
-            .result = .{
-                .Hover = .{
-                    .contents = .{ .value = text },
-                },
-            },
-        };
-    } else {
+    const hover_or_null = textdocument_hover.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities) catch |err| (std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null);
+    const text = hover_or_null orelse {
         return lsp.Response.createNull(id);
-    }
+    };
+
+    return lsp.Response{
+        .id = id,
+        .result = .{
+            .Hover = .{
+                .contents = .{ .value = text },
+            },
+        },
+    };
 }
 
 /// # language feature

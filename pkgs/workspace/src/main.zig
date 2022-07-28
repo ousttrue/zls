@@ -10,7 +10,6 @@ pub const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
 pub const SymbolTree = @import("./SymbolTree.zig");
-pub const hover_util = @import("./hover_util.zig");
 pub const completion_util = @import("./completion_util.zig");
 pub const ast = @import("./ast.zig");
 pub const signature_help = @import("./signature_help.zig");
