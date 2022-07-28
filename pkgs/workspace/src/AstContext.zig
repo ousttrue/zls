@@ -1,6 +1,7 @@
 const std = @import("std");
-const Self = @This();
+const UriBytePosition = @import("./UriBytePosition.zig");
 const AstGetChildren = @import("./AstGetChildren.zig");
+const Self = @This();
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
     var tokens = std.ArrayList(std.zig.Token).init(allocator);
@@ -175,8 +176,7 @@ fn writePath(self: Self, buffer: *std.ArrayList(u8), node_idx: u32) anyerror!voi
     if (parent != 0) {
         try self.writePath(buffer, parent);
         try w.print("/", .{});
-    } else {
-    }
+    } else {}
     const tag = self.tree.nodes.items(.tag);
     const node_tag = tag[node_idx];
     try w.print("{s}", .{@tagName(node_tag)});
@@ -204,4 +204,112 @@ pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx:
     });
 
     return buffer.items;
+}
+
+pub const PositionContext = union(enum) {
+    builtin: std.zig.Token.Loc,
+    string_literal: std.zig.Token.Loc,
+    field_access: std.zig.Token.Loc,
+    var_access: std.zig.Token.Loc,
+    global_error_set,
+    enum_literal,
+    // pre_label,
+    label: bool,
+    // other,
+    keyword,
+    empty,
+};
+
+fn getPositionContextFromIdentifier(self: Self, token_idx: u32, node_idx: u32, node_tag: std.zig.Ast.Node.Tag) PositionContext {
+    _ = token_idx;
+    return switch (node_tag) {
+        .field_access => {
+            const first = self.tokens.items[self.tree.firstToken(node_idx)];
+            const last = self.tokens.items[self.tree.lastToken(node_idx)];
+            return .{ .field_access = .{ .start = first.loc.start, .end = last.loc.end } };
+        },
+        .enum_literal => {
+            return .enum_literal;
+        },
+        else => {
+            const token = self.tokens.items[token_idx];
+            return .{ .var_access = token.loc };
+        },
+    };
+}
+
+pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
+    const token_with_index = self.tokenFromBytePos(byte_pos) orelse {
+        return .empty;
+    };
+    const token = token_with_index.token;
+    const token_index = token_with_index.index;
+    // const token_text = self.getTokenText(token);
+    const node_index = self.tokens_node[token_index];
+    const tag = self.tree.nodes.items(.tag);
+    const node_tag = tag[node_index];
+
+    return switch (token_with_index.token.tag) {
+        .builtin => .{ .builtin = token.loc },
+        .string_literal => .{ .string_literal = token.loc },
+        .identifier => self.getPositionContextFromIdentifier(token_index, node_index, node_tag),
+        .period => .{ .field_access = token.loc },
+        // global_error_set,
+        // enum_literal,
+        // // pre_label,
+        // label: bool,
+        // // other,
+        .keyword_addrspace,
+        .keyword_align,
+        .keyword_allowzero,
+        .keyword_and,
+        .keyword_anyframe,
+        .keyword_anytype,
+        .keyword_asm,
+        .keyword_async,
+        .keyword_await,
+        .keyword_break,
+        .keyword_callconv,
+        .keyword_catch,
+        .keyword_comptime,
+        .keyword_const,
+        .keyword_continue,
+        .keyword_defer,
+        .keyword_else,
+        .keyword_enum,
+        .keyword_errdefer,
+        .keyword_error,
+        .keyword_export,
+        .keyword_extern,
+        .keyword_fn,
+        .keyword_for,
+        .keyword_if,
+        .keyword_inline,
+        .keyword_noalias,
+        .keyword_noinline,
+        .keyword_nosuspend,
+        .keyword_opaque,
+        .keyword_or,
+        .keyword_orelse,
+        .keyword_packed,
+        .keyword_pub,
+        .keyword_resume,
+        .keyword_return,
+        .keyword_linksection,
+        .keyword_struct,
+        .keyword_suspend,
+        .keyword_switch,
+        .keyword_test,
+        .keyword_threadlocal,
+        .keyword_try,
+        .keyword_union,
+        .keyword_unreachable,
+        .keyword_usingnamespace,
+        .keyword_var,
+        .keyword_volatile,
+        .keyword_while,
+        => .keyword,
+
+        else => .empty,
+    };
 }

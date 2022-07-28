@@ -48,7 +48,7 @@ pub fn process(
     doc: *Document,
     byte_position: u32,
 ) !?[]const UriBytePosition {
-    const pos_context = doc.getPositionContext(byte_position);
+    const pos_context = doc.ast_context.getPositionContext(byte_position);
     return switch (pos_context) {
         .var_access => try renameDefinitionGlobal(arena, workspace, doc, byte_position),
         .field_access => |_| try renameDefinitionFieldAccess(arena, workspace, doc, byte_position),

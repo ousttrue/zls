@@ -12,7 +12,7 @@ pub fn gotoHandler(
     byte_position: u32,
     resolve_alias: bool,
 ) !?UriBytePosition {
-    const pos_context = doc.getPositionContext(byte_position);
+    const pos_context = doc.ast_context.getPositionContext(byte_position);
     switch (pos_context) {
         .var_access => {
             if (try DeclWithHandle.getSymbolGlobal(arena, workspace, doc, byte_position)) |decl| {

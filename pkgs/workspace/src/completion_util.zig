@@ -800,7 +800,7 @@ pub fn process(
         logger.debug("no token: {}", .{doc.utf8_buffer.text[byte_position]});
     }
 
-    const pos_context = doc.getPositionContext(byte_position);
+    const pos_context = doc.ast_context.getPositionContext(byte_position);
     switch (pos_context) {
         .builtin => {
             logger.debug("[completion][builtin]", .{});

@@ -60,7 +60,7 @@ pub fn process(
     include_decl: bool,
     config: *Config,
 ) !?[]UriBytePosition {
-    const pos_context = doc.getPositionContext(byte_position);
+    const pos_context = doc.ast_context.getPositionContext(byte_position);
     return switch (pos_context) {
         .var_access => try referencesDefinitionGlobal(arena, workspace, doc, byte_position, include_decl, config.skip_std_references),
         .field_access => |_| try referencesDefinitionFieldAccess(arena, workspace, doc, byte_position, include_decl, config),
