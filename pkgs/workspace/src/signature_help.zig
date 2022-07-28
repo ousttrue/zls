@@ -302,7 +302,7 @@ pub fn getSignatureInfo(
                         );
                     }
 
-                    const name = doc.identifierFromPosition(expr_end - 1) orelse {
+                    const name = doc.ast_context.identifierFromPosition(expr_end - 1) orelse {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;
                     };

@@ -385,7 +385,7 @@ pub fn getSymbolFieldAccess(
         .other => |n| n,
         else => return error.NodeNotFound,
     };
-    const name = doc.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
+    const name = doc.ast_context.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
     return (try Self.lookupSymbolContainer(
         arena,
         workspace,
@@ -427,7 +427,7 @@ pub fn gotoDefinitionSymbol(
 }
 
 pub fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, doc: *Document, pos_index: usize) !?Self {
-    if (doc.identifierFromPosition(pos_index)) |name| {
+    if (doc.ast_context.identifierFromPosition(pos_index)) |name| {
         return lookupSymbolGlobal(arena, workspace, doc, name, pos_index);
     } else {
         return null;
@@ -1165,4 +1165,31 @@ pub fn hoverSymbol(
             def_str;
     }
     return hover_text;
+}
+
+pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?Self {
+    for (handle.document_scope.scopes) |scope| {
+        if (source_index >= scope.range.start and source_index < scope.range.end) {
+            if (scope.decls.getEntry(symbol)) |candidate| {
+                switch (candidate.value_ptr.*) {
+                    .label_decl => {},
+                    else => continue,
+                }
+                return Self{
+                    .decl = candidate.value_ptr,
+                    .handle = handle,
+                };
+            }
+        }
+        if (scope.range.start > source_index) return null;
+    }
+    return null;
+}
+
+pub fn getLabelGlobal(handle: *Document, pos_index: usize) !?Self {
+    if (handle.ast_context.identifierFromPosition(pos_index)) |name| {
+        return try lookupLabel(handle, name, pos_index);
+    } else {
+        return null;
+    }
 }

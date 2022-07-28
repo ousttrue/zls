@@ -1,6 +1,9 @@
 const std = @import("std");
+const Ast = std.zig.Ast;
 const UriBytePosition = @import("./UriBytePosition.zig");
 const AstGetChildren = @import("./AstGetChildren.zig");
+const ast = @import("./ast.zig");
+const ZigEnv = @import("./ZigEnv.zig");
 const Self = @This();
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
@@ -312,4 +315,41 @@ pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
 
         else => .empty,
     };
+}
+
+fn isSymbolChar(char: u8) bool {
+    return std.ascii.isAlNum(char) or char == '_';
+}
+
+pub fn identifierFromPosition(self: Self, pos_index: usize) ?[]const u8 {
+    const text: []const u8 = self.tree.source;
+    if (pos_index + 1 >= text.len) {
+        return null;
+    }
+    if (!isSymbolChar(text[pos_index])) {
+        return null;
+    }
+
+    var start_idx = pos_index;
+    while (start_idx >= 0) : (start_idx -= 1) {
+        if (!isSymbolChar(text[start_idx])) {
+            start_idx += 1;
+            break;
+        }
+    }
+
+    var end_idx = pos_index;
+    while (end_idx < text.len and isSymbolChar(text[end_idx])) {
+        end_idx += 1;
+    }
+
+    const id = text[start_idx..end_idx];
+    // std.debug.print("{}, {}:{s}", .{start_idx, end_idx, id});
+    return id;
+}
+
+test "identifierFromPosition" {
+    try std.testing.expectEqualStrings("abc", try identifierFromPosition(1, " abc cde"));
+    try std.testing.expectEqualStrings("abc", try identifierFromPosition(2, " abc cde"));
+    // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }

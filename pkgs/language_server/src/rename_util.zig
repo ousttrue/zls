@@ -35,7 +35,7 @@ fn renameDefinitionLabel(
     handle: *Document,
     pos_index: usize,
 ) !?[]const UriBytePosition {
-    if (try handle.getLabelGlobal(pos_index)) |decl| {
+    if (try DeclWithHandle.getLabelGlobal(handle, pos_index)) |decl| {
         return try decl.renameLabel(arena);
     } else {
         return null;

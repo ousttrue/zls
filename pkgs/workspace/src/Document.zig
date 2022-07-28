@@ -354,82 +354,19 @@ pub fn gotoDefinitionString(
     pos_index: usize,
     zigenv: ZigEnv,
 ) !?UriBytePosition {
-    var it = ImportStrIterator.init(handle.tree);
+    const tree = handle.ast_context.tree.*;
+    var it = ImportStrIterator.init(tree);
     while (it.next()) |node| {
-        if (nodeContainsSourceIndex(handle.tree, node, pos_index)) {
-            if (importStr(handle.tree, node)) |import_str| {
+        if (nodeContainsSourceIndex(tree, node, pos_index)) {
+            if (importStr(tree, node)) |import_str| {
                 if (try handle.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
-                    logger.debug("gotoDefinitionString: {s}", .{uri});
+                    // logger.debug("gotoDefinitionString: {s}", .{uri});
                     return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
                 }
             }
         }
     }
     return null;
-}
-
-fn isSymbolChar(char: u8) bool {
-    return std.ascii.isAlNum(char) or char == '_';
-}
-
-pub fn identifierFromPosition(self: Self, pos_index: usize) ?[]const u8 {
-    const text: []const u8 = self.utf8_buffer.text;
-    if (pos_index + 1 >= text.len) {
-        return null;
-    }
-    if (!isSymbolChar(text[pos_index])) {
-        return null;
-    }
-
-    var start_idx = pos_index;
-    while (start_idx >= 0) : (start_idx -= 1) {
-        if (!isSymbolChar(text[start_idx])) {
-            start_idx += 1;
-            break;
-        }
-    }
-
-    var end_idx = pos_index;
-    while (end_idx < text.len and isSymbolChar(text[end_idx])) {
-        end_idx += 1;
-    }
-
-    const id = text[start_idx..end_idx];
-    // std.debug.print("{}, {}:{s}", .{start_idx, end_idx, id});
-    return id;
-}
-
-test "identifierFromPosition" {
-    try std.testing.expectEqualStrings("abc", try identifierFromPosition(1, " abc cde"));
-    try std.testing.expectEqualStrings("abc", try identifierFromPosition(2, " abc cde"));
-    // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
-}
-
-pub fn lookupLabel(handle: *Self, symbol: []const u8, source_index: usize) error{OutOfMemory}!?DeclWithHandle {
-    for (handle.document_scope.scopes) |scope| {
-        if (source_index >= scope.range.start and source_index < scope.range.end) {
-            if (scope.decls.getEntry(symbol)) |candidate| {
-                switch (candidate.value_ptr.*) {
-                    .label_decl => {},
-                    else => continue,
-                }
-                return DeclWithHandle{
-                    .decl = candidate.value_ptr,
-                    .handle = handle,
-                };
-            }
-        }
-        if (scope.range.start > source_index) return null;
-    }
-    return null;
-}
-
-pub fn getLabelGlobal(self: *Self, pos_index: usize) !?DeclWithHandle {
-    if (self.identifierFromPosition(pos_index)) |name| {
-        return try lookupLabel(self, name, pos_index);
-    } else {
-        return null;
-    }
 }
 
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {

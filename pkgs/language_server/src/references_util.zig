@@ -43,7 +43,7 @@ fn referencesDefinitionLabel(
     pos_index: usize,
     include_decl: bool,
 ) !?[]UriBytePosition {
-    if ((try handle.getLabelGlobal(pos_index))) |decl| {
+    if ((try DeclWithHandle.getLabelGlobal(handle, pos_index))) |decl| {
         var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
         try decl.labelReferences(include_decl, &locs);
         return locs.items;
