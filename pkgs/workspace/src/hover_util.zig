@@ -54,8 +54,8 @@ fn processInternal(
                         const hover = try decl.hoverSymbol(arena, workspace, if (client_capabilities.hover_supports_md) .Markdown else .PlainText);
                         return try std.fmt.allocPrint(
                             allocator,
-                            "# {s}\n\n{s}",
-                            .{ name, hover },
+                            "# {s}\n\n{s}\n\n{s}",
+                            .{ name, context_info, hover },
                         );
                     } else {
                         return try std.fmt.allocPrint(
@@ -78,8 +78,8 @@ fn processInternal(
                     const hover = try decl.hoverSymbol(arena, workspace, if (client_capabilities.hover_supports_md) .Markdown else .PlainText);
                     return try std.fmt.allocPrint(
                         allocator,
-                        "# {s}\n\n{s}",
-                        .{ name, hover },
+                        "# {s}\n\n{s}\n\n{s}",
+                        .{ name, context_info, hover },
                     );
                     // var buffer = std.ArrayList(u8).init(arena.allocator());
                     // const w = buffer.writer();
