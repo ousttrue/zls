@@ -6,6 +6,7 @@ const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig")
 pub const ResponseParams = union(enum) {
     SignatureHelp: types.SignatureHelp,
     CompletionList: types.CompletionList,
+    CompletionItems: []const types.CompletionItem,
     Location: types.Location,
     Hover: types.Hover,
     DocumentSymbols: []textdocument_documentSymbol.DocumentSymbol,

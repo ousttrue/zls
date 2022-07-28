@@ -406,11 +406,11 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     // logger.debug("{s}", .{tmp.items});
 
     const params = try lsp.fromDynamicTree(arena, lsp.completion.Completion, jsonParams.?);
-
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.line_position.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
+    // _ = byte_position;
 
     const completions = try completion_util.process(
         arena,
@@ -421,18 +421,27 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         self.config,
         &self.client_capabilities,
     );
-    logger.debug("{} completions", .{completions.len});
-    logger.debug("{s}", .{completions[0]});
+    // logger.debug("{} completions", .{completions.len});
+    // logger.debug("{s}", .{completions[0]});
 
-    return lsp.Response{
+    // const allocator = arena.allocator();
+    // var completions = std.ArrayList(lsp.CompletionItem).init(allocator);
+    // try completions.append(.{
+    //     .label = "lajfkdjkla",
+    // });
+
+    const response = lsp.Response{
         .id = id,
         .result = .{
-            .CompletionList = .{
-                .isIncomplete = false,
-                .items = completions,
-            },
+            .CompletionItems = completions,
         },
     };
+
+    // try tmp.resize(0);
+    // std.json.stringify(response, .{.emit_null_optional_fields=false}, tmp.writer()) catch unreachable;
+    // logger.debug("{s}", .{tmp.items});
+
+    return response;
 }
 
 /// # language feature

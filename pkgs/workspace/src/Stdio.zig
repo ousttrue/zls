@@ -44,7 +44,7 @@ fn sendShowMessage(self: *Self, message_type: lsp.MessageType, message: []const 
 
 pub fn sendToJson(self: *Self, value: anytype) void {
     self.json_buffer.resize(0) catch unreachable;
-    std.json.stringify(value, .{}, self.json_buffer.writer()) catch @panic("stringify");
+    std.json.stringify(value, .{ .emit_null_optional_fields = false }, self.json_buffer.writer()) catch @panic("stringify");
     self.send(self.json_buffer.items);
 }
 

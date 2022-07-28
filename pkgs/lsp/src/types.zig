@@ -125,7 +125,7 @@ pub const CompletionItem = struct {
     };
 
     label: string,
-    kind: Kind,
+    kind: Kind = .Text,
     textEdit: ?TextEdit = null,
     filterText: ?string = null,
     insertText: string = "",
