@@ -147,7 +147,6 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
 pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
     if (self.handles.getEntry(uri)) |entry| {
         try entry.value_ptr.*.refreshDocument(self.zigenv);
-        entry.value_ptr.*.count += 1;
         if (entry.value_ptr.*.is_build_file) |build_file| {
             build_file.refs += 1;
         }
@@ -204,7 +203,6 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Doc
         // If it is, append it to our imports, increment the count, set our new handle
         // and return the parsed tree root node.
         try doc.imports_used.append(self.allocator, handle_uri);
-        new_handle.count += 1;
         return new_handle;
     }
 

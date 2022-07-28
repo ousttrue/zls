@@ -22,6 +22,11 @@ pub fn init(allocator: std.mem.Allocator, text: [:0]u8) !Self {
     return self;
 }
 
+pub fn deinit(self: Self) void {
+    self.line_heads.deinit();
+    // self.allocator.free(self.utf8_buffer.mem);
+}
+
 fn resetLines(self: *Self) !void {
     self.line_heads.resize(0) catch unreachable;
     self.line_heads.append(0) catch unreachable;
@@ -33,10 +38,6 @@ fn resetLines(self: *Self) !void {
         }
         i += @intCast(u32, try std.unicode.utf8ByteSequenceLength(c));
     }
-}
-
-pub fn deinit(self: Self) void {
-    self.line_heads.deinit();
 }
 
 pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line.Encoding) !void {

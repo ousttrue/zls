@@ -2,9 +2,7 @@ const std = @import("std");
 const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
-const DocumentScope = @import("./DocumentScope.zig");
 const Line = @import("./Line.zig");
-const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const BuildFile = @import("./BuildFile.zig");
@@ -16,38 +14,27 @@ const Self = @This();
 allocator: std.mem.Allocator,
 uri: []const u8,
 utf8_buffer: Utf8Buffer,
-count: usize,
+ast_context: *AstContext,
 /// Contains one entry for every import in the document
 import_uris: []const []const u8,
 /// Items in this array list come from `import_uris`
 imports_used: std.ArrayListUnmanaged([]const u8),
-
-ast_context: *AstContext,
-document_scope: DocumentScope,
-
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
 
 pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     var self = try allocator.create(Self);
     errdefer allocator.destroy(self);
-
-    const ast_context = AstContext.new(allocator, text);
-    errdefer ast_context.delete();
-
     self.* = Self{
         .allocator = allocator,
         .uri = uri,
-        .count = 1,
         .import_uris = &.{},
         .imports_used = .{},
         .utf8_buffer = try Utf8Buffer.init(allocator, text),
-        .ast_context = ast_context,
-        .document_scope = try DocumentScope.init(allocator, ast_context.tree),
+        .ast_context = try AstContext.new(allocator, text),
         .associated_build_file = null,
         .is_build_file = null,
     };
-
     return self;
 }
 
@@ -57,9 +44,7 @@ pub fn delete(self: *Self) void {
     }
     self.allocator.free(self.import_uris);
     self.imports_used.deinit(self.allocator);
-    self.document_scope.deinit(self.allocator);
     self.ast_context.delete();
-    self.allocator.free(self.utf8_buffer.mem);
     self.allocator.destroy(self);
 }
 
@@ -122,10 +107,8 @@ pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
 
 pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
     self.ast_context.delete();
-    self.ast_context = AstContext.new(self.allocator, self.utf8_buffer.text);
-
-    self.document_scope.deinit(self.allocator);
-    self.document_scope = try DocumentScope.init(self.allocator, self.ast_context.tree);
+    self.ast_context = try AstContext.new(self.allocator, self.utf8_buffer.text);
+    errdefer self.ast_context.delete();
 
     const new_imports = try self.collectImportUris(zigenv);
     errdefer {

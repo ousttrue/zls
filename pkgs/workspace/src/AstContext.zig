@@ -4,6 +4,7 @@ const UriBytePosition = @import("./UriBytePosition.zig");
 const AstGetChildren = @import("./AstGetChildren.zig");
 const ast = @import("./ast.zig");
 const ZigEnv = @import("./ZigEnv.zig");
+const DocumentScope = @import("./DocumentScope.zig");
 const Self = @This();
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
@@ -60,8 +61,9 @@ tree: std.zig.Ast,
 nodes_parent: []u32,
 tokens: std.ArrayList(std.zig.Token),
 tokens_node: []u32,
+document_scope: DocumentScope,
 
-pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) *Self {
+pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
     const tree = std.zig.parse(allocator, text) catch unreachable;
     var self = allocator.create(Self) catch unreachable;
     self.* = Self{
@@ -70,6 +72,7 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) *Self {
         .nodes_parent = allocator.alloc(u32, tree.nodes.len) catch unreachable,
         .tokens = getAllTokens(allocator, tree.source),
         .tokens_node = allocator.alloc(u32, tree.tokens.len) catch unreachable,
+        .document_scope = try DocumentScope.init(allocator, tree),
     };
     for (self.nodes_parent) |*x| {
         x.* = 0;
@@ -94,6 +97,7 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) *Self {
 }
 
 pub fn delete(self: *Self) void {
+    self.document_scope.deinit(self.allocator);
     self.allocator.free(self.tokens_node);
     self.allocator.free(self.nodes_parent);
     self.tree.deinit(self.allocator);

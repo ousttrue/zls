@@ -441,11 +441,11 @@ pub fn lookupSymbolGlobal(
     symbol: []const u8,
     source_index: usize,
 ) error{OutOfMemory}!?Self {
-    const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(source_index);
+    const innermost_scope_idx = handle.ast_context.document_scope.innermostBlockScopeIndex(source_index);
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.document_scope.scopes[curr];
+        const scope = &handle.ast_context.document_scope.scopes[curr];
         if (source_index >= scope.range.start and source_index <= scope.range.end) blk: {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {
@@ -1062,7 +1062,7 @@ pub fn symbolReferences(
         },
         .param_decl => |param| {
             // Rename the param tok.
-            const fn_node: Ast.full.FnProto = loop: for (curr_handle.document_scope.scopes) |scope| {
+            const fn_node: Ast.full.FnProto = loop: for (curr_handle.ast_context.document_scope.scopes) |scope| {
                 switch (scope.data) {
                     .function => |proto| {
                         var buf: [1]Ast.Node.Index = undefined;
@@ -1168,7 +1168,7 @@ pub fn hoverSymbol(
 }
 
 pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?Self {
-    for (handle.document_scope.scopes) |scope| {
+    for (handle.ast_context.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {
