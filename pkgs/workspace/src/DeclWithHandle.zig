@@ -364,7 +364,7 @@ pub fn getSymbolFieldAccess(
     const idx = doc.ast_context.tokens_node[token_with_index.index];
     const tag = doc.ast_context.tree.nodes.items(.tag);
     std.debug.assert(tag[idx] == .field_access);
-    const first = doc.ast_context.tokens.items[doc.ast_context.tree.firstToken(idx)];
+    const first = doc.ast_context.tokens.items[doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx))];
     const last = doc.ast_context.tokens.items[doc.ast_context.tree.lastToken(idx)];
     const range = std.zig.Token.Loc{ .start = first.loc.start, .end = last.loc.end };
 

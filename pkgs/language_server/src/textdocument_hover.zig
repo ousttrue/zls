@@ -22,9 +22,6 @@ pub fn process(
     };
 
     var context_info = try doc.ast_context.getTokenIndexContext(arena.allocator(), token_with_index.index);
-
-    _ = workspace;
-
     const name = doc.ast_context.getTokenText(token_with_index.token);
     const allocator = arena.allocator();
     switch (token_with_index.token.tag) {
@@ -73,13 +70,34 @@ pub fn process(
                 //     );
                 // },
                 .field_access => {
-                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
-                    const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
+                    // const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
+                    // const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
+                    // return try std.fmt.allocPrint(
+                    //     allocator,
+                    //     "# {s}\n\n{s}\n\n{s}",
+                    //     .{ name, context_info, hover },
+                    // );
+
+                    var buffer = std.ArrayList(u8).init(arena.allocator());
+                    const first_token = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
+                    // const last_token = doc.ast_context.tree.lastToken(idx);
+                    for(doc.ast_context.tokens.items[first_token..token_with_index.index + 1])|token|
+                    {
+                        try buffer.writer().print(" {s}", .{doc.ast_context.getTokenText(token)});
+                    }
                     return try std.fmt.allocPrint(
                         allocator,
                         "# {s}\n\n{s}\n\n{s}",
-                        .{ name, context_info, hover },
+                        .{ name, context_info, buffer.items },
                     );
+
+                    // return try std.fmt.allocPrint(
+                    //     allocator,
+                    //     "# {s}\n\n{s}\n\n{s}",
+                    //     .{ name, context_info, hover },
+                    // );
+
+
                     // var buffer = std.ArrayList(u8).init(arena.allocator());
                     // const w = buffer.writer();
                     // try w.print("# field_access: {s}\n\n{s}\n\n", .{name, context_info});

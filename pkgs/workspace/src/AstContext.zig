@@ -235,11 +235,33 @@ pub const PositionContext = union(enum) {
     empty,
 };
 
+pub fn getRootIdentifier(self: Self, node_idx: u32) u32 {
+    var current = node_idx;
+    var tag = self.tree.nodes.items(.tag);
+    while (true) {
+        var child = AstGetChildren.getChild(self.allocator, &self.tree, current);
+        var child_tag = tag[child];
+        switch (child_tag) {
+            .identifier => {
+                return child;
+            },
+            .field_access, .call_one, .call => {
+                current = child;
+                continue;
+            },
+            else => {
+                return child;
+            },
+        }
+    }
+    unreachable;
+}
+
 fn getPositionContextFromIdentifier(self: Self, token_idx: u32, node_idx: u32, node_tag: std.zig.Ast.Node.Tag) PositionContext {
     _ = token_idx;
     return switch (node_tag) {
         .field_access => {
-            const first = self.tokens.items[self.tree.firstToken(node_idx)];
+            const first = self.tokens.items[self.tree.firstToken(self.getRootIdentifier(node_idx))];
             const last = self.tokens.items[self.tree.lastToken(node_idx)];
             return .{ .field_access = .{ .start = first.loc.start, .end = last.loc.end } };
         },
