@@ -698,8 +698,16 @@ fn completeFieldAccess(
     doc_kind: ast.MarkupFormat,
 ) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
-    const token_begin = doc.ast_context.getRootIdentifier(doc.ast_context.tokens_node[token_index]);
-    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_begin, token_index)) |result| {
+    {
+        const token = doc.ast_context.tokens.items[token_index];
+        std.debug.assert(token.tag == .period);
+    }
+    const idx = doc.ast_context.tokens_node[token_index - 1];
+    const token_begin = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
+    const tag = doc.ast_context.tree.nodes.items(.tag);
+    std.log.debug("node: {}", .{tag[idx]});
+
+    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_begin, token_index - 1)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
@@ -764,57 +772,77 @@ pub fn process(
     byte_position: u32,
     config: *Config,
     doc_kind: ast.MarkupFormat,
-) ![]const lsp.CompletionItem {    
+) ![]const lsp.CompletionItem {
+    const token_with_index = doc.ast_context.prevTokenFromBytePos(byte_position) orelse {
+        logger.debug("no token: {}", .{doc.utf8_buffer.text[byte_position]});
+        return error.TokenNotFound;
+    };
+    logger.debug("prev: {}: {s}", .{ token_with_index.token.tag, doc.ast_context.getTokenText(token_with_index.token) });
+
+    _ = trigger_character;
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
-            if (doc.ast_context.tokenFromBytePos(byte_position - 1)) |token_with_index| {
-                return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
-            }
+            return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
         } else if (std.mem.eql(u8, trigger, "@")) {
             logger.debug("trigger '@' => builtin", .{});
             return builtin_completions.completeBuiltin();
         } else {
             logger.debug("trigger '{s}'", .{trigger});
+            return &[_]lsp.CompletionItem{};
+        }
+    } else {
+        switch (token_with_index.token.tag) {
+            .period => {
+                // completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
+                // const idx = doc.ast_context.tokens_node[token_with_index.index];
+                // const tag = doc.ast_context.tree.nodes.items(.tag);
+                // const node_tag = tag[idx];
+                // switch(node_tag)
+                // {
+                //     .field_access =>{
+                //         return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
+                //     },
+                //     else =>{
+                //         return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
+                //     },
+                // }
+                return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
+            },
+            else => {
+                return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
+            },
         }
     }
 
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-        logger.debug("no token: {}", .{doc.utf8_buffer.text[byte_position]});
-        return error.TokenNotFound;
-    };
-
-    // const context = try doc.ast_context.getTokenIndexContext(arena.allocator(), token_with_index.index);
-    // logger.debug("{s}", .{context});
-
-    const pos_context = doc.ast_context.getPositionContext(byte_position);
-    switch (pos_context) {
-        .builtin => {
-            logger.debug("[completion][builtin]", .{});
-            return builtin_completions.completeBuiltin();
-        },
-        .var_access, .empty => {
-            logger.debug("[completion][global]", .{});
-            return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
-        },
-        .field_access => |_| {
-            logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
-        },
-        .global_error_set => {
-            logger.debug("[completion][global_error_set]", .{});
-            return try completeError(arena, workspace, doc, config);
-        },
-        .enum_literal => {
-            logger.debug("[completion][enum_literal]", .{});
-            return try completeDot(arena, workspace, doc, config);
-        },
-        .label => {
-            logger.debug("[completion][label]", .{});
-            return try completeLabel(arena, workspace, byte_position, doc, config, doc_kind);
-        },
-        else => {
-            return &[_]lsp.CompletionItem{};
-        },
-    }
+    // const pos_context = doc.ast_context.getPositionContext(byte_position);
+    // switch (pos_context) {
+    //     .builtin => {
+    //         logger.debug("[completion][builtin]", .{});
+    //         return builtin_completions.completeBuiltin();
+    //     },
+    //     .var_access, .empty => {
+    //         logger.debug("[completion][global]", .{});
+    //         return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
+    //     },
+    //     .field_access => |_| {
+    //         logger.debug("[completion][field_access]", .{});
+    //         return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
+    //     },
+    //     .global_error_set => {
+    //         logger.debug("[completion][global_error_set]", .{});
+    //         return try completeError(arena, workspace, doc, config);
+    //     },
+    //     .enum_literal => {
+    //         logger.debug("[completion][enum_literal]", .{});
+    //         return try completeDot(arena, workspace, doc, config);
+    //     },
+    //     .label => {
+    //         logger.debug("[completion][label]", .{});
+    //         return try completeLabel(arena, workspace, byte_position, doc, config, doc_kind);
+    //     },
+    //     else => {
+    //         return &[_]lsp.CompletionItem{};
+    //     },
+    // }
 }

@@ -10,11 +10,11 @@ fn referencesDefinitionGlobal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
-    pos_index: usize,
+    token_index: u32,
     include_decl: bool,
     skip_std_references: bool,
 ) !?[]UriBytePosition {
-    if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
+    if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(arena, workspace, handle, token_index)) |decl| {
         var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
         try decl.symbolReferences(arena, workspace, include_decl, &locs, skip_std_references);
         return locs.items;
@@ -60,9 +60,14 @@ pub fn process(
     include_decl: bool,
     config: *Config,
 ) !?[]UriBytePosition {
-    const pos_context = doc.ast_context.getPositionContext(byte_position);
+    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
+        // token not found. return no hover.
+        return null;
+    };
+
+    const pos_context = doc.ast_context.getPositionContext(byte_position);    
     return switch (pos_context) {
-        .var_access => try referencesDefinitionGlobal(arena, workspace, doc, byte_position, include_decl, config.skip_std_references),
+        .var_access => try referencesDefinitionGlobal(arena, workspace, doc, token_with_index.index, include_decl, config.skip_std_references),
         .field_access => |_| try referencesDefinitionFieldAccess(arena, workspace, doc, byte_position, include_decl, config),
         .label => try referencesDefinitionLabel(arena, doc, byte_position, include_decl),
         else => return null,

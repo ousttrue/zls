@@ -443,11 +443,11 @@ pub fn resolveTypeOfNodeInternal(
                 };
             }
 
-            if (try DeclWithHandle.lookupSymbolGlobal(
+            if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(
                 arena,
                 workspace,
                 doc,
-                starts[main_tokens[node]],
+                main_tokens[node],
             )) |child| {
                 switch (child.decl.*) {
                     .ast_node => |n| {

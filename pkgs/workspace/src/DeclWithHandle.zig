@@ -272,11 +272,11 @@ fn resolveVarDeclAliasInternal(
 
     if (node_tags[node] == .identifier) {
         const token = main_tokens[node];
-        return try lookupSymbolGlobal(
+        return try lookupSymbolGlobalTokenIndex(
             arena,
             workspace,
             handle,
-            tree.tokens.items(.start)[token],
+            token,
         );
     }
 
@@ -418,20 +418,21 @@ pub fn gotoDefinitionSymbol(
     };
 }
 
-pub fn lookupSymbolGlobal(
+pub fn lookupSymbolGlobalTokenIndex(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
-    source_index: usize,
+    token_idx: u32,
 ) error{OutOfMemory}!?Self {
-    const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
-    const symbol = handle.ast_context.getTokenText(token_with_index.token);
-    const innermost_scope_idx = handle.ast_context.document_scope.innermostBlockScopeIndex(source_index);
+    // const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
+    const token = handle.ast_context.tokens.items[token_idx];
+    const symbol = handle.ast_context.getTokenText(token);
+    const innermost_scope_idx = handle.ast_context.document_scope.innermostBlockScopeIndex(token.loc.start);
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {
         const scope = &handle.ast_context.document_scope.scopes[curr];
-        if (source_index >= scope.range.start and source_index <= scope.range.end) blk: {
+        if (token.loc.start >= scope.range.start and token.loc.end <= scope.range.end) blk: {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {
                     .ast_node => |node| {
@@ -515,7 +516,6 @@ fn symbolReferencesInternal(
     const node_tags = tree.nodes.items(.tag);
     const datas = tree.nodes.items(.data);
     const main_tokens = tree.nodes.items(.main_token);
-    const starts = tree.tokens.items(.start);
 
     switch (node_tags[node]) {
         .block, .block_semicolon, .block_two, .block_two_semicolon => {
@@ -626,7 +626,7 @@ fn symbolReferencesInternal(
             }
         },
         .identifier => {
-            if (try lookupSymbolGlobal(arena, workspace, doc, starts[main_tokens[node]])) |child| {
+            if (try lookupSymbolGlobalTokenIndex(arena, workspace, doc, main_tokens[node])) |child| {
                 if (std.meta.eql(self, child)) {
                     try locations.append(doc.tokenReference(main_tokens[node]));
                 }

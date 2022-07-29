@@ -185,6 +185,19 @@ pub fn tokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
     return null;
 }
 
+pub fn prevTokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
+    for (self.tokens.items) |token, i| {
+        if (byte_pos < token.loc.start) {
+            if (i == 0) {
+                return null;
+            } else {
+                return TokenWithIndex{ .token = self.tokens.items[i - 1], .index = @intCast(u32, i - 1) };
+            }
+        }
+    }
+    return null;
+}
+
 fn writePath(self: Self, buffer: *std.ArrayList(u8), node_idx: u32) anyerror!void {
     const parent = self.nodes_parent[node_idx];
     const w = buffer.writer();
@@ -236,8 +249,13 @@ pub const PositionContext = union(enum) {
 };
 
 pub fn getRootIdentifier(self: Self, node_idx: u32) u32 {
-    var current = node_idx;
     var tag = self.tree.nodes.items(.tag);
+    if(tag[node_idx] != .field_access)
+    {
+        return node_idx;
+    }
+
+    var current = node_idx;
     while (true) {
         var child = AstGetChildren.getChild(self.allocator, &self.tree, current);
         var child_tag = tag[child];

@@ -20,16 +20,23 @@ pub fn getFieldAccessType(
 ) !?Self {
     var current_type = TypeWithHandle.typeVal(handle, 0);
     var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
+
+    var i = token_begin;
+    while (i <= token_end) : (i += 1) {
+        const tok = handle.ast_context.tokens.items[i];
+        logger.debug("[{}] {s}", .{ i, handle.ast_context.getTokenText(tok) });
+    }
+
     var token_idx = token_begin;
     while (token_idx <= token_end) : (token_idx += 1) {
         const tok = handle.ast_context.tokens.items[token_idx];
         switch (tok.tag) {
             .identifier => {
-                if (try DeclWithHandle.lookupSymbolGlobal(
+                if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(
                     arena,
                     workspace,
                     current_type.handle,
-                    tok.loc.start,
+                    token_idx,
                 )) |child| {
                     if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {
                         current_type = child_type;

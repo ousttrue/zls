@@ -46,7 +46,7 @@ pub fn process(
             const node_tag = tag[idx];
             switch (node_tag) {
                 .identifier => {
-                    if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, doc, byte_position)) |decl| {
+                    if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_with_index.index)) |decl| {
                         const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                         return try std.fmt.allocPrint(
                             allocator,

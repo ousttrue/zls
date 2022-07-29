@@ -13,9 +13,14 @@ pub fn process(
     doc: *Document,
     byte_position: u32,
 ) !?[]const UriBytePosition {
+    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
+        // token not found. return no hover.
+        return null;
+    };
+
     const pos_context = doc.ast_context.getPositionContext(byte_position);
     return switch (pos_context) {
-        .var_access => if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, doc, byte_position)) |decl|
+        .var_access => if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_with_index.index)) |decl|
             try decl.renameSymbol(arena, workspace)
         else
             null,
