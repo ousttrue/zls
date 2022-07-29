@@ -693,16 +693,13 @@ fn completeFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    range: std.zig.Token.Loc,
+    token_index: u32,
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]lsp.CompletionItem {
-    const allocator = arena.allocator();
-    var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
-    defer allocator.free(copy);
-    var tokenizer = std.zig.Tokenizer.init(copy);
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
-    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, &tokenizer)) |result| {
+    const token_begin = doc.ast_context.getRootIdentifier(doc.ast_context.tokens_node[token_index]);
+    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_begin, token_index)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
@@ -767,13 +764,12 @@ pub fn process(
     byte_position: u32,
     config: *Config,
     doc_kind: ast.MarkupFormat,
-) ![]const lsp.CompletionItem {
+) ![]const lsp.CompletionItem {    
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
             if (doc.ast_context.tokenFromBytePos(byte_position - 1)) |token_with_index| {
-                const range = token_with_index.token.loc;
-                return try completeFieldAccess(arena, workspace, doc, range, config, doc_kind);
+                return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
             }
         } else if (std.mem.eql(u8, trigger, "@")) {
             logger.debug("trigger '@' => builtin", .{});
@@ -783,12 +779,13 @@ pub fn process(
         }
     }
 
-    if (doc.ast_context.tokenFromBytePos(byte_position)) |token_with_index| {
-        const context = try doc.ast_context.getTokenIndexContext(arena.allocator(), token_with_index.index);
-        logger.debug("{s}", .{context});
-    } else {
+    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
         logger.debug("no token: {}", .{doc.utf8_buffer.text[byte_position]});
-    }
+        return error.TokenNotFound;
+    };
+
+    // const context = try doc.ast_context.getTokenIndexContext(arena.allocator(), token_with_index.index);
+    // logger.debug("{s}", .{context});
 
     const pos_context = doc.ast_context.getPositionContext(byte_position);
     switch (pos_context) {
@@ -800,9 +797,9 @@ pub fn process(
             logger.debug("[completion][global]", .{});
             return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
         },
-        .field_access => |range| {
+        .field_access => |_| {
             logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, doc, range, config, doc_kind);
+            return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
         },
         .global_error_set => {
             logger.debug("[completion][global_error_set]", .{});

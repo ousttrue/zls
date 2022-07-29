@@ -263,21 +263,22 @@ pub fn getSignatureInfo(
                     try symbol_stack.append(alloc, .l_paren);
                     continue;
                 }
-                const expr_start = token_starts[expr_first_token];
+                // const expr_start = token_starts[expr_first_token];
                 const last_token_slice = tree.tokenSlice(expr_last_token);
                 const expr_end = token_starts[expr_last_token] + last_token_slice.len;
 
-                const allocator = arena.allocator();
-                var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[expr_start..expr_end]);
-                defer allocator.free(copy);
-                var tokenizer = std.zig.Tokenizer.init(copy);
+                // const allocator = arena.allocator();
+                // var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[expr_start..expr_end]);
+                // defer allocator.free(copy);
+                // var tokenizer = std.zig.Tokenizer.init(copy);
 
                 // Resolve the expression.
                 if (try FieldAccessReturn.getFieldAccessType(
                     arena,
                     workspace,
                     doc,
-                    &tokenizer,
+                    expr_first_token,
+                    expr_last_token,
                 )) |result| {
                     const type_handle = result.unwrapped orelse result.original;
                     var node = switch (type_handle.type.data) {

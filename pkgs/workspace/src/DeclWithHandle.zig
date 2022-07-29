@@ -364,18 +364,13 @@ pub fn getSymbolFieldAccess(
     const idx = doc.ast_context.tokens_node[token_with_index.index];
     const tag = doc.ast_context.tree.nodes.items(.tag);
     std.debug.assert(tag[idx] == .field_access);
-    const first = doc.ast_context.tokens.items[doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx))];
-    const range = std.zig.Token.Loc{ .start = first.loc.start, .end = token_with_index.token.loc.end };
-
-    const allocator = arena.allocator();
-    var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
-    defer allocator.free(copy);
-    var tokenizer = std.zig.Tokenizer.init(copy);
+    const first = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
     const result = (try FieldAccessReturn.getFieldAccessType(
         arena,
         workspace,
         doc,
-        &tokenizer,
+        first,
+        token_with_index.index,
     )) orelse return error.NoFieldAccessType;
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {
