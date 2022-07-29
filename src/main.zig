@@ -52,7 +52,7 @@ pub fn log(
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    var message = std.fmt.allocPrint(arena.allocator(), "[{s}-{s}] " ++ format, .{ @tagName(message_level), @tagName(scope) } ++ args) catch {
+    var message = std.fmt.allocPrint(arena.allocator(), "{s}: " ++ format, .{ @tagName(scope) } ++ args) catch {
         std.debug.print("Failed to allocPrint message.\n", .{});
         return;
     };
@@ -82,6 +82,7 @@ pub fn main() anyerror!void {
     const allocator = std.heap.page_allocator;
 
     transport = Stdio.init(allocator);
+    logger.info("######## [ZLS MODIFIED] ########", .{});
 
     // Check arguments.
     var args_it = try std.process.ArgIterator.initWithAllocator(allocator);
