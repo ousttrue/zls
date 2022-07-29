@@ -70,26 +70,26 @@ pub fn process(
                 //     );
                 // },
                 .field_access => {
-                    // const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
-                    // const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
-                    // return try std.fmt.allocPrint(
-                    //     allocator,
-                    //     "# {s}\n\n{s}\n\n{s}",
-                    //     .{ name, context_info, hover },
-                    // );
-
-                    var buffer = std.ArrayList(u8).init(arena.allocator());
-                    const first_token = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
-                    // const last_token = doc.ast_context.tree.lastToken(idx);
-                    for(doc.ast_context.tokens.items[first_token..token_with_index.index + 1])|token|
-                    {
-                        try buffer.writer().print(" {s}", .{doc.ast_context.getTokenText(token)});
-                    }
+                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, byte_position);
+                    const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                     return try std.fmt.allocPrint(
                         allocator,
                         "# {s}\n\n{s}\n\n{s}",
-                        .{ name, context_info, buffer.items },
+                        .{ name, context_info, hover },
                     );
+
+                    // var buffer = std.ArrayList(u8).init(arena.allocator());
+                    // const first_token = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
+                    // // const last_token = doc.ast_context.tree.lastToken(idx);
+                    // for(doc.ast_context.tokens.items[first_token..token_with_index.index + 1])|token|
+                    // {
+                    //     try buffer.writer().print(" {s}", .{doc.ast_context.getTokenText(token)});
+                    // }
+                    // return try std.fmt.allocPrint(
+                    //     allocator,
+                    //     "# {s}\n\n{s}\n\n{s}",
+                    //     .{ name, context_info, buffer.items },
+                    // );
 
                     // return try std.fmt.allocPrint(
                     //     allocator,

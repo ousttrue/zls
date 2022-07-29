@@ -281,7 +281,6 @@ pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
     };
     const token = token_with_index.token;
     const token_index = token_with_index.index;
-    // const token_text = self.getTokenText(token);
     const node_index = self.tokens_node[token_index];
     const tag = self.tree.nodes.items(.tag);
     const node_tag = tag[node_index];
