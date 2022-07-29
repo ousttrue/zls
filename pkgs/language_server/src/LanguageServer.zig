@@ -46,7 +46,7 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     .codeActionProvider = false,
     .declarationProvider = false,
     .definitionProvider = true,
-    .typeDefinitionProvider = false,
+    .typeDefinitionProvider = true,
     .implementationProvider = false,
     .referencesProvider = true,
     .documentSymbolProvider = true,
@@ -363,6 +363,39 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
 /// ## document position request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
+    logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
+    const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
+    const position = params.position;
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
+
+    if (try textdocument_goto.gotoHandler(arena, &self.workspace, doc, @intCast(u32, byte_position), false)) |location| {
+        const goto_doc = self.workspace.getDocument(location.uri) orelse return error.DocumentNotFound;
+        const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
+        const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
+
+        return lsp.Response{
+            .id = id,
+            .result = .{
+                .Location = .{
+                    .uri = location.uri,
+                    .range = .{
+                        .start = goto_pos,
+                        .end = goto_pos,
+                    },
+                },
+            },
+        };
+    } else {
+        return lsp.Response.createNull(id);
+    }
+}
+
+/// # language feature
+/// ## document position request
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_typeDefinition
+pub fn @"textDocument/typeDefinition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
     logger.debug("[definition]{s} {}", .{ params.textDocument.uri, params.position });
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;

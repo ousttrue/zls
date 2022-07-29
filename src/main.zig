@@ -190,12 +190,12 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&language_server, "textDocument/hover");
     dispatcher.registerRequest(&language_server, "textDocument/formatting");
     dispatcher.registerRequest(&language_server, "textDocument/definition");
+    dispatcher.registerRequest(&language_server, "textDocument/typeDefinition");
     dispatcher.registerNotify(&language_server, "$/cancelRequest");
     dispatcher.registerRequest(&language_server, "textDocument/completion");
     dispatcher.registerRequest(&language_server, "textDocument/rename");
     dispatcher.registerRequest(&language_server, "textDocument/references");
     dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
-    // dispatcher.registerRequest("textDocument/typeDefinition", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
     // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
 
