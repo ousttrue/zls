@@ -376,7 +376,6 @@ pub fn getSymbolFieldAccess(
         arena,
         workspace,
         doc,
-        byte_position,
         &tokenizer,
     )) orelse return error.NoFieldAccessType;
     const container_handle = result.unwrapped orelse result.original;

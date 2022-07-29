@@ -693,7 +693,6 @@ fn completeFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    byte_position: u32,
     range: std.zig.Token.Loc,
     config: *Config,
     doc_kind: ast.MarkupFormat,
@@ -702,9 +701,8 @@ fn completeFieldAccess(
     var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
     defer allocator.free(copy);
     var tokenizer = std.zig.Tokenizer.init(copy);
-
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
-    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, byte_position, &tokenizer)) |result| {
+    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, &tokenizer)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
@@ -775,7 +773,7 @@ pub fn process(
             logger.debug("trigger '.' => field_access", .{});
             if (doc.ast_context.tokenFromBytePos(byte_position - 1)) |token_with_index| {
                 const range = token_with_index.token.loc;
-                return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, doc_kind);
+                return try completeFieldAccess(arena, workspace, doc, range, config, doc_kind);
             }
         } else if (std.mem.eql(u8, trigger, "@")) {
             logger.debug("trigger '@' => builtin", .{});
@@ -804,7 +802,7 @@ pub fn process(
         },
         .field_access => |range| {
             logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, doc_kind);
+            return try completeFieldAccess(arena, workspace, doc, range, config, doc_kind);
         },
         .global_error_set => {
             logger.debug("[completion][global_error_set]", .{});

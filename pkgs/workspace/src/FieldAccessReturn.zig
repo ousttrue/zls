@@ -15,13 +15,10 @@ pub fn getFieldAccessType(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
-    source_index: usize,
     tokenizer: *std.zig.Tokenizer,
 ) !?Self {
     var current_type = TypeWithHandle.typeVal(handle, 0);
-
     var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
-
     while (true) {
         const tok = tokenizer.next();
         switch (tok.tag) {
@@ -34,7 +31,7 @@ pub fn getFieldAccessType(
                     arena,
                     workspace,
                     current_type.handle,
-                    source_index,
+                    tok.loc.start,
                 )) |child| {
                     if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {
                         current_type = child_type;
