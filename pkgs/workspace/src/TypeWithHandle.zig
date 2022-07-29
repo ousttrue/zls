@@ -447,7 +447,6 @@ pub fn resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 doc,
-                tree.getNodeSource(node),
                 starts[main_tokens[node]],
             )) |child| {
                 switch (child.decl.*) {

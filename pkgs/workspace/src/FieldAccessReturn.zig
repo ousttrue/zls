@@ -34,7 +34,6 @@ pub fn getFieldAccessType(
                     arena,
                     workspace,
                     current_type.handle,
-                    tokenizer.buffer[tok.loc.start..tok.loc.end],
                     source_index,
                 )) |child| {
                     if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {

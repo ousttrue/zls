@@ -7,19 +7,6 @@ const Workspace = ws.Workspace;
 const Document = ws.Document;
 const analysis = ws.analysis;
 
-fn renameDefinitionGlobal(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    handle: *Document,
-    pos_index: usize,
-) !?[]const UriBytePosition {
-    if (try DeclWithHandle.getSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
-        return try decl.renameSymbol(arena, workspace);
-    } else {
-        return null;
-    }
-}
-
 fn renameDefinitionFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -50,7 +37,10 @@ pub fn process(
 ) !?[]const UriBytePosition {
     const pos_context = doc.ast_context.getPositionContext(byte_position);
     return switch (pos_context) {
-        .var_access => try renameDefinitionGlobal(arena, workspace, doc, byte_position),
+        .var_access => if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, doc, byte_position)) |decl|
+            try decl.renameSymbol(arena, workspace)
+        else
+            null,
         .field_access => |_| try renameDefinitionFieldAccess(arena, workspace, doc, byte_position),
         .label => try renameDefinitionLabel(arena, doc, byte_position),
         else => null,

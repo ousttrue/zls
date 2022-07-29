@@ -276,7 +276,6 @@ fn resolveVarDeclAliasInternal(
             arena,
             workspace,
             handle,
-            tree.tokenSlice(token),
             tree.tokens.items(.start)[token],
         );
     }
@@ -426,21 +425,14 @@ pub fn gotoDefinitionSymbol(
     };
 }
 
-pub fn getSymbolGlobal(arena: *std.heap.ArenaAllocator, workspace: *Workspace, doc: *Document, pos_index: usize) !?Self {
-    if (doc.ast_context.identifierFromPosition(pos_index)) |name| {
-        return lookupSymbolGlobal(arena, workspace, doc, name, pos_index);
-    } else {
-        return null;
-    }
-}
-
 pub fn lookupSymbolGlobal(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
-    symbol: []const u8,
     source_index: usize,
 ) error{OutOfMemory}!?Self {
+    const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
+    const symbol = handle.ast_context.getTokenText(token_with_index.token);
     const innermost_scope_idx = handle.ast_context.document_scope.innermostBlockScopeIndex(source_index);
 
     var curr = innermost_scope_idx;
@@ -641,7 +633,7 @@ fn symbolReferencesInternal(
             }
         },
         .identifier => {
-            if (try lookupSymbolGlobal(arena, workspace, doc, tree.getNodeSource(node), starts[main_tokens[node]])) |child| {
+            if (try lookupSymbolGlobal(arena, workspace, doc, starts[main_tokens[node]])) |child| {
                 if (std.meta.eql(self, child)) {
                     try locations.append(doc.tokenReference(main_tokens[node]));
                 }

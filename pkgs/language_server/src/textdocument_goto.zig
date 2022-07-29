@@ -15,7 +15,7 @@ pub fn gotoHandler(
     const pos_context = doc.ast_context.getPositionContext(byte_position);
     switch (pos_context) {
         .var_access => {
-            if (try DeclWithHandle.getSymbolGlobal(arena, workspace, doc, byte_position)) |decl| {
+            if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, doc, byte_position)) |decl| {
                 return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
             } else {
                 return null;

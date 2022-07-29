@@ -14,7 +14,7 @@ fn referencesDefinitionGlobal(
     include_decl: bool,
     skip_std_references: bool,
 ) !?[]UriBytePosition {
-    if (try DeclWithHandle.getSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
+    if (try DeclWithHandle.lookupSymbolGlobal(arena, workspace, handle, pos_index)) |decl| {
         var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
         try decl.symbolReferences(arena, workspace, include_decl, &locs, skip_std_references);
         return locs.items;
