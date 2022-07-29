@@ -6,7 +6,6 @@ pub const UriBytePosition = @import("./UriBytePosition.zig");
 pub const Config = @import("./Config.zig");
 pub const ZigEnv = @import("./ZigEnv.zig");
 pub const Builtin = @import("./Builtin.zig");
-pub const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
 pub const SymbolTree = @import("./SymbolTree.zig");

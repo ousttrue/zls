@@ -11,7 +11,7 @@ const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
 const completion_util = ws.completion_util;
-const ClientCapabilities = ws.ClientCapabilities;
+const ClientCapabilities = @import("./ClientCapabilities.zig");
 const builtin_completions = ws.builtin_completions;
 const rename_util = @import("./rename_util.zig");
 const references_util = @import("./references_util.zig");
@@ -338,7 +338,13 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    const hover_or_null = textdocument_hover.process(arena, &self.workspace, doc, byte_position, &self.client_capabilities) catch |err| (std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null);
+    const hover_or_null = textdocument_hover.process(
+        arena,
+        &self.workspace,
+        doc,
+        byte_position,
+        if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
+    ) catch |err| (std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null);
     const text = hover_or_null orelse {
         return lsp.Response.createNull(id);
     };
@@ -408,7 +414,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         params.context.triggerCharacter,
         byte_position,
         self.config,
-        &self.client_capabilities,
+        if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
     );
     // logger.debug("{} completions", .{completions.len});
     // logger.debug("{s}", .{completions[0]});
@@ -527,7 +533,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    
+
     const sig_info = (try getSignatureInfo(
         arena,
         &self.workspace,

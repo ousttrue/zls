@@ -5,7 +5,6 @@ const Document = @import("./Document.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const Scope = @import("./Scope.zig");
 const Config = @import("./Config.zig");
-const ClientCapabilities = @import("./ClientCapabilities.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
@@ -21,7 +20,7 @@ fn typeToCompletion(
     field_access: FieldAccessReturn,
     orig_handle: *Document,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     const type_handle = field_access.original;
     switch (type_handle.type.data) {
@@ -62,7 +61,7 @@ fn typeToCompletion(
                 type_handle.type.is_type_val,
                 null,
                 config,
-                client_capabilities,
+                doc_kind,
             );
         },
         .other => |n| try nodeToCompletion(
@@ -76,7 +75,7 @@ fn typeToCompletion(
             type_handle.type.is_type_val,
             null,
             config,
-            client_capabilities,
+            doc_kind,
         ),
         .primitive => {},
     }
@@ -163,7 +162,7 @@ pub fn iterateSymbolsContainerInternal(
     instance_access: bool,
     use_trail: *std.ArrayList(*const Ast.Node.Index),
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     const tree = handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
@@ -195,7 +194,7 @@ pub fn iterateSymbolsContainerInternal(
 
         const decl = DeclWithHandle{ .decl = entry.value_ptr, .handle = handle };
         if (handle != orig_handle and !decl.isPublic()) continue;
-        try callback(arena, workspace, context, decl, config, client_capabilities);
+        try callback(arena, workspace, context, decl, config, doc_kind);
     }
 
     for (container_scope.uses) |use| {
@@ -223,7 +222,7 @@ pub fn iterateSymbolsContainerInternal(
             false,
             use_trail,
             config,
-            client_capabilities,
+            doc_kind,
         );
     }
 }
@@ -238,7 +237,7 @@ pub fn iterateSymbolsContainer(
     context: anytype,
     instance_access: bool,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.allocator());
     return try iterateSymbolsContainerInternal(
@@ -252,7 +251,7 @@ pub fn iterateSymbolsContainer(
         instance_access,
         &use_trail,
         config,
-        client_capabilities,
+        doc_kind,
     );
 }
 
@@ -267,16 +266,11 @@ fn nodeToCompletion(
     is_type_val: bool,
     parent_is_type_val: ?bool,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     const tree = handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
-
-    const doc_kind: ast.MarkupFormat = if (client_capabilities.completion_doc_supports_md)
-        .Markdown
-    else
-        .PlainText;
 
     const doc = if (try ast.getDocComments(
         list.allocator,
@@ -284,7 +278,7 @@ fn nodeToCompletion(
         node,
         doc_kind,
     )) |doc_comments|
-        lsp.MarkupContent.init(client_capabilities.completion_doc_supports_md, doc_comments)
+        lsp.MarkupContent{ .value = doc_comments }
     else
         null;
 
@@ -306,7 +300,7 @@ fn nodeToCompletion(
             context,
             !is_type_val,
             config,
-            client_capabilities,
+            doc_kind,
         );
     }
 
@@ -322,7 +316,7 @@ fn nodeToCompletion(
             var buf: [1]Ast.Node.Index = undefined;
             const func = ast.fnProto(tree, node, &buf).?;
             if (func.name_token) |name_token| {
-                const use_snippets = config.enable_snippets and client_capabilities.supports_snippets;
+                const use_snippets = false; // config.enable_snippets and client_capabilities.supports_snippets;
                 const insert_text = if (use_snippets) blk: {
                     const skip_self_param = !(parent_is_type_val orelse true) and
                         try TypeWithHandle.hasSelfParam(arena, workspace, handle, func);
@@ -356,7 +350,7 @@ fn nodeToCompletion(
                     .arena = arena,
                     .orig_handle = orig_handle,
                 };
-                return try declToCompletion(arena, workspace, context, result, config, client_capabilities);
+                return try declToCompletion(arena, workspace, context, result, config, doc_kind);
             }
 
             try list.append(.{
@@ -433,7 +427,7 @@ fn nodeToCompletion(
                     .{ .original = actual_type },
                     orig_handle,
                     config,
-                    client_capabilities,
+                    doc_kind,
                 );
             }
             return;
@@ -476,7 +470,7 @@ fn declToCompletion(
     context: DeclToCompletionContext,
     decl_handle: DeclWithHandle,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) !void {
     const tree = decl_handle.handle.ast_context.tree;
     switch (decl_handle.decl.*) {
@@ -491,15 +485,13 @@ fn declToCompletion(
             false,
             context.parent_is_type_val,
             config,
-            client_capabilities,
+            doc_kind,
         ),
         .param_decl => |param| {
-            const doc_kind: ast.MarkupFormat = if (client_capabilities.completion_doc_supports_md) .Markdown else .PlainText;
             const doc = if (param.first_doc_comment) |doc_comments|
-                lsp.MarkupContent.init(
-                    client_capabilities.completion_doc_supports_md,
-                    try ast.collectDocComments(context.arena.allocator(), tree, doc_comments, doc_kind, false),
-                )
+                lsp.MarkupContent{
+                    .value = try ast.collectDocComments(context.arena.allocator(), tree, doc_comments, doc_kind, false),
+                }
             else
                 null;
 
@@ -569,7 +561,7 @@ pub fn iterateLabels(
     comptime callback: anytype,
     context: anytype,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     for (handle.ast_context.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
@@ -579,7 +571,7 @@ pub fn iterateLabels(
                     .label_decl => {},
                     else => continue,
                 }
-                try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, client_capabilities);
+                try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, doc_kind);
             }
         }
         if (scope.range.start >= source_index) return;
@@ -592,7 +584,7 @@ fn completeLabel(
     pos_index: usize,
     handle: *Document,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
@@ -602,7 +594,7 @@ fn completeLabel(
         .arena = arena,
         .orig_handle = handle,
     };
-    try iterateLabels(arena, workspace, handle, pos_index, declToCompletion, context, config, client_capabilities);
+    try iterateLabels(arena, workspace, handle, pos_index, declToCompletion, context, config, doc_kind);
     builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     return completions.items;
 }
@@ -616,7 +608,7 @@ fn iterateSymbolsGlobalInternal(
     context: anytype,
     use_trail: *std.ArrayList(*const Ast.Node.Index),
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     for (handle.ast_context.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
@@ -625,7 +617,7 @@ fn iterateSymbolsGlobalInternal(
                 if (entry.value_ptr.* == .ast_node and
                     handle.ast_context.tree.nodes.items(.tag)[entry.value_ptr.*.ast_node].isContainerField()) continue;
                 if (entry.value_ptr.* == .label_decl) continue;
-                try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, client_capabilities);
+                try callback(arena, workspace, context, DeclWithHandle{ .decl = entry.value_ptr, .handle = handle }, config, doc_kind);
             }
 
             for (scope.uses) |use| {
@@ -653,7 +645,7 @@ fn iterateSymbolsGlobalInternal(
                     false,
                     use_trail,
                     config,
-                    client_capabilities,
+                    doc_kind,
                 );
             }
         }
@@ -670,10 +662,10 @@ pub fn iterateSymbolsGlobal(
     comptime callback: anytype,
     context: anytype,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
     var use_trail = std.ArrayList(*const Ast.Node.Index).init(arena.allocator());
-    return try iterateSymbolsGlobalInternal(arena, workspace, handle, source_index, callback, context, &use_trail, config, client_capabilities);
+    return try iterateSymbolsGlobalInternal(arena, workspace, handle, source_index, callback, context, &use_trail, config, doc_kind);
 }
 
 fn completeGlobal(
@@ -682,7 +674,7 @@ fn completeGlobal(
     pos_index: usize,
     handle: *Document,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
 
@@ -692,7 +684,7 @@ fn completeGlobal(
         .arena = arena,
         .orig_handle = handle,
     };
-    try iterateSymbolsGlobal(arena, workspace, handle, pos_index, declToCompletion, context, config, client_capabilities);
+    try iterateSymbolsGlobal(arena, workspace, handle, pos_index, declToCompletion, context, config, doc_kind);
     builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     return completions.items;
 }
@@ -704,7 +696,7 @@ fn completeFieldAccess(
     byte_position: u32,
     range: std.zig.Token.Loc,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) ![]lsp.CompletionItem {
     const allocator = arena.allocator();
     var copy = try allocator.dupeZ(u8, doc.utf8_buffer.text[range.start..range.end]);
@@ -713,7 +705,7 @@ fn completeFieldAccess(
 
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
     if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, byte_position, &tokenizer)) |result| {
-        try typeToCompletion(arena, workspace, &completions, result, doc, config, client_capabilities);
+        try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
     return completions.items;
@@ -776,14 +768,14 @@ pub fn process(
     trigger_character: ?[]const u8,
     byte_position: u32,
     config: *Config,
-    client_capabilities: *ClientCapabilities,
+    doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
             if (doc.ast_context.tokenFromBytePos(byte_position - 1)) |token_with_index| {
                 const range = token_with_index.token.loc;
-                return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, client_capabilities);
+                return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, doc_kind);
             }
         } else if (std.mem.eql(u8, trigger, "@")) {
             logger.debug("trigger '@' => builtin", .{});
@@ -808,11 +800,11 @@ pub fn process(
         },
         .var_access, .empty => {
             logger.debug("[completion][global]", .{});
-            return try completeGlobal(arena, workspace, byte_position, doc, config, client_capabilities);
+            return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
         },
         .field_access => |range| {
             logger.debug("[completion][field_access]", .{});
-            return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, client_capabilities);
+            return try completeFieldAccess(arena, workspace, doc, byte_position, range, config, doc_kind);
         },
         .global_error_set => {
             logger.debug("[completion][global_error_set]", .{});
@@ -824,7 +816,7 @@ pub fn process(
         },
         .label => {
             logger.debug("[completion][label]", .{});
-            return try completeLabel(arena, workspace, byte_position, doc, config, client_capabilities);
+            return try completeLabel(arena, workspace, byte_position, doc, config, doc_kind);
         },
         else => {
             return &[_]lsp.CompletionItem{};
