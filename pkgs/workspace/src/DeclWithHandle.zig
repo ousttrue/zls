@@ -384,7 +384,7 @@ pub fn getSymbolFieldAccess(
         .other => |n| n,
         else => return error.NodeNotFound,
     };
-    const name = doc.ast_context.identifierFromPosition(byte_position) orelse return error.NoIdentifier;
+    const name = doc.ast_context.getTokenTextFromBytePosition(byte_position) orelse return error.NoIdentifier;
     return (try Self.lookupSymbolContainer(
         arena,
         workspace,
@@ -1179,7 +1179,7 @@ pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) e
 }
 
 pub fn getLabelGlobal(handle: *Document, pos_index: usize) !?Self {
-    if (handle.ast_context.identifierFromPosition(pos_index)) |name| {
+    if (handle.ast_context.getTokenTextFromBytePosition(pos_index)) |name| {
         return try lookupLabel(handle, name, pos_index);
     } else {
         return null;

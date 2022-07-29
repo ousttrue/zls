@@ -112,6 +112,13 @@ pub fn getTokenText(self: Self, token: std.zig.Token) []const u8 {
     return self.getText(token.loc);
 }
 
+pub fn getTokenTextFromBytePosition(self: Self, byte_position: usize) ?[]const u8 {
+    return if (self.tokenFromBytePos(byte_position)) |token_with_index|
+        self.getTokenText(token_with_index.token)
+    else
+        null;
+}
+
 pub fn getTokens(self: Self, start: usize, last: usize) []const std.zig.Token {
     var end = last;
     if (end < self.tokens.items.len) {
@@ -324,39 +331,6 @@ pub fn getPositionContext(self: Self, byte_pos: usize) PositionContext {
 
 fn isSymbolChar(char: u8) bool {
     return std.ascii.isAlNum(char) or char == '_';
-}
-
-pub fn identifierFromPosition(self: Self, pos_index: usize) ?[]const u8 {
-    const text: []const u8 = self.tree.source;
-    if (pos_index + 1 >= text.len) {
-        return null;
-    }
-    if (!isSymbolChar(text[pos_index])) {
-        return null;
-    }
-
-    var start_idx = pos_index;
-    while (start_idx >= 0) : (start_idx -= 1) {
-        if (!isSymbolChar(text[start_idx])) {
-            start_idx += 1;
-            break;
-        }
-    }
-
-    var end_idx = pos_index;
-    while (end_idx < text.len and isSymbolChar(text[end_idx])) {
-        end_idx += 1;
-    }
-
-    const id = text[start_idx..end_idx];
-    // std.debug.print("{}, {}:{s}", .{start_idx, end_idx, id});
-    return id;
-}
-
-test "identifierFromPosition" {
-    try std.testing.expectEqualStrings("abc", try identifierFromPosition(1, " abc cde"));
-    try std.testing.expectEqualStrings("abc", try identifierFromPosition(2, " abc cde"));
-    // try std.testing.expectEqualStrings("", try identifierFromPosition(3, "abc cde"));
 }
 
 /// Collects all imports we can find into a slice of import paths (without quotes).
