@@ -30,7 +30,7 @@ pub fn gotoHandler(
         },
         .label => {
             // return self.gotoDefinitionLabel(arena, doc, byte_position);
-            if (try DeclWithHandle.getLabelGlobal(doc, byte_position)) |decl| {
+            if (try DeclWithHandle.lookupLabel(doc, byte_position)) |decl| {
                 return decl.gotoDefinitionSymbol(workspace, arena, false);
             } else {
                 return null;

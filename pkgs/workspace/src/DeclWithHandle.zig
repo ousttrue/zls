@@ -1159,7 +1159,9 @@ pub fn hoverSymbol(
     return hover_text;
 }
 
-pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) error{OutOfMemory}!?Self {
+pub fn lookupLabel(handle: *Document, source_index: usize) error{OutOfMemory}!?Self {
+    const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
+    const symbol = handle.ast_context.getTokenText(token_with_index.token);
     for (handle.ast_context.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             if (scope.decls.getEntry(symbol)) |candidate| {
@@ -1176,12 +1178,4 @@ pub fn lookupLabel(handle: *Document, symbol: []const u8, source_index: usize) e
         if (scope.range.start > source_index) return null;
     }
     return null;
-}
-
-pub fn getLabelGlobal(handle: *Document, pos_index: usize) !?Self {
-    if (handle.ast_context.getTokenTextFromBytePosition(pos_index)) |name| {
-        return try lookupLabel(handle, name, pos_index);
-    } else {
-        return null;
-    }
 }
