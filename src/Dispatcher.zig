@@ -1,7 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const language_server = @import("language_server");
-const logger = std.log.scoped(.jsonrpc);
+const logger = std.log.scoped(.Didpatcher);
 
 const RequestProto = fn (self: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response;
 const RequestFunctor = struct {
@@ -84,15 +84,15 @@ pub fn dispatchRequest(self: Self, arena: *std.heap.ArenaAllocator, id: i64, met
         const start_time = std.time.milliTimestamp();
         if (functor.call(arena, id, params)) |res| {
             const end_time = std.time.milliTimestamp();
-            logger.info("id[{}] {s} => {}ms", .{ id, method, end_time - start_time });
+            logger.info("({}){s} => {}ms", .{ id, method, end_time - start_time });
             return res;
         } else |err| {
-            logger.err("id[{}] {s} => {s}", .{ id, method, @errorName(err) });
+            logger.err("({}){s} => {s}", .{ id, method, @errorName(err) });
             return Error.InternalError;
         }
     } else {
         // no method
-        logger.err("id[{}] {s} => unknown request", .{ id, method });
+        logger.err("({}){s} => unknown request", .{ id, method });
         return Error.MethodNotFound;
     }
 }

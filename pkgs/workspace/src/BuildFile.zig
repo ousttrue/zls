@@ -2,7 +2,7 @@ const std = @import("std");
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
 const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
-const logger = std.log.scoped(.Self);
+const logger = std.log.scoped(.BuildFile);
 const Pkg = struct {
     name: []const u8,
     uri: []const u8,

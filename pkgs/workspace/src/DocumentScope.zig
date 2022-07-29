@@ -5,7 +5,7 @@ const ast = @import("./ast.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
 const TypeWithHandle = @import("./TypeWithHandle.zig");
-const logger = std.log.scoped(.Self);
+const logger = std.log.scoped(.DocumentScope);
 
 fn nodeSourceRange(tree: Ast, node: Ast.Node.Index) std.zig.Token.Loc {
     const loc_start = ast.tokenLocation(tree, tree.firstToken(node));

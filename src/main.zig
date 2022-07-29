@@ -52,7 +52,7 @@ pub fn log(
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    var message = std.fmt.allocPrint(arena.allocator(), "{s}: " ++ format, .{ @tagName(scope) } ++ args) catch {
+    var message = std.fmt.allocPrint(arena.allocator(), "{s}> " ++ format, .{ @tagName(scope) } ++ args) catch {
         std.debug.print("Failed to allocPrint message.\n", .{});
         return;
     };
