@@ -167,19 +167,57 @@ pub fn getDocument(self: *Self, uri: []const u8) ?*Document {
     return null;
 }
 
+pub fn uriFromImportStrAlloc(
+    self: Self,
+    allocator: std.mem.Allocator,
+    doc: *Document,
+    import_str: []const u8,
+) !?[]const u8 {
+    if (std.mem.eql(u8, import_str, "std")) {
+        // special path
+        return try allocator.dupe(u8, self.zigenv.std_uri);
+    } else if (std.mem.eql(u8, import_str, "builtin")) {
+        // special path
+        if (self.build_file.builtin_uri) |builtin_uri| {
+            return try allocator.dupe(u8, builtin_uri);
+        }
+        return try URI.fromPath(allocator, self.zigenv.builtin_path.slice());
+    } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
+        // std.build.Pkg
+        for (self.build_file.packages.items) |pkg| {
+            if (std.mem.eql(u8, import_str, pkg.name)) {
+                return try allocator.dupe(u8, pkg.uri);
+            }
+        }
+        return null;
+    } else {
+        // "./relative/path_to.zig"
+        const base = doc.uri;
+        var base_len = base.len;
+        while (base[base_len - 1] != '/' and base_len > 0) {
+            base_len -= 1;
+        }
+        base_len -= 1;
+        if (base_len <= 0) {
+            return error.UriBadScheme;
+        }
+        return try URI.pathRelative(allocator, base[0..base_len], import_str);
+    }
+}
+
 pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Document {
     const allocator = self.allocator;
-    const final_uri = (try doc.uriFromImportStrAlloc(allocator, import_str, self.zigenv)) orelse return null;
+    const final_uri = (try self.uriFromImportStrAlloc(allocator, doc, import_str)) orelse return null;
     defer allocator.free(final_uri);
-    logger.debug("{s} + {s} => {s}", .{ doc.uri, import_str, final_uri });
 
-    // New document, read the file then call into openDocument.
     const file_path = try URI.parse(allocator, final_uri);
     defer allocator.free(file_path);
     if (self.handles.get(final_uri)) |found| {
         return found;
     }
 
+    // New document, read the file then call into openDocument.
+    logger.debug("{s} + {s} => {s}", .{ doc.uri, import_str, final_uri });
     var file = std.fs.cwd().openFile(file_path, .{}) catch {
         logger.debug("Cannot open import file {s}", .{file_path});
         return null;

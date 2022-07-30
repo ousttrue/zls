@@ -165,9 +165,9 @@ pub fn getGoto(
     const token = doc.ast_context.tokens.items[token_index];
     switch(token.tag)
     {
-        .string_literal => {
-            return doc.gotoDefinitionString(arena, token.loc.start, workspace.zigenv);
-        },
+        // .string_literal => {
+        //     return doc.gotoDefinitionString(arena, token.loc.start, workspace.zigenv);
+        // },
         .identifier => {
             // continue;
         },
@@ -245,3 +245,50 @@ pub fn getRenferences(
         },
     }
 }
+
+// fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, source_index: usize) bool {
+//     const first_token = ast.tokenLocation(tree, tree.firstToken(node)).start;
+//     const last_token = ast.tokenLocation(tree, ast.lastToken(tree, node)).end;
+//     return source_index >= first_token and source_index <= last_token;
+// }
+
+// fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
+//     const node_tags = tree.nodes.items(.tag);
+//     const data = tree.nodes.items(.data)[node];
+//     const params = switch (node_tags[node]) {
+//         .builtin_call, .builtin_call_comma => tree.extra_data[data.lhs..data.rhs],
+//         .builtin_call_two, .builtin_call_two_comma => if (data.lhs == 0)
+//             &[_]Ast.Node.Index{}
+//         else if (data.rhs == 0)
+//             &[_]Ast.Node.Index{data.lhs}
+//         else
+//             &[_]Ast.Node.Index{ data.lhs, data.rhs },
+//         else => unreachable,
+//     };
+
+//     if (params.len != 1) return null;
+
+//     const import_str = tree.tokenSlice(tree.nodes.items(.main_token)[params[0]]);
+//     return import_str[1 .. import_str.len - 1];
+// }
+
+// pub fn gotoDefinitionString(
+//     self: *Self,
+//     arena: *std.heap.ArenaAllocator,
+//     pos_index: usize,
+//     zigenv: ZigEnv,
+// ) !?UriBytePosition {
+//     const tree = self.ast_context.tree;
+//     var it = ImportStrIterator.init(tree);
+//     while (it.next()) |node| {
+//         if (nodeContainsSourceIndex(tree, node, pos_index)) {
+//             if (importStr(tree, node)) |import_str| {
+//                 if (try self.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
+//                     // logger.debug("gotoDefinitionString: {s}", .{uri});
+//                     return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
+//                 }
+//             }
+//         }
+//     }
+//     return null;
+// }

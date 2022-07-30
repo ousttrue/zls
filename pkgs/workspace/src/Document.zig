@@ -20,8 +20,6 @@ allocator: std.mem.Allocator,
 uri: []const u8,
 utf8_buffer: Utf8Buffer,
 ast_context: *AstContext,
-associated_build_file: ?*BuildFile,
-is_build_file: ?*BuildFile,
 
 pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     var self = try allocator.create(Self);
@@ -31,8 +29,6 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .uri = uri,
         .utf8_buffer = try Utf8Buffer.init(allocator, text),
         .ast_context = try AstContext.new(allocator, text),
-        .associated_build_file = null,
-        .is_build_file = null,
     };
     return self;
 }
@@ -40,63 +36,6 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
 pub fn delete(self: *Self) void {
     self.ast_context.delete();
     self.allocator.destroy(self);
-}
-
-pub fn uriFromImportStrAlloc(self: *Self, allocator: std.mem.Allocator, import_str: []const u8, zigenv: ZigEnv) !?[]const u8 {
-    if (std.mem.eql(u8, import_str, "std")) {
-        return try allocator.dupe(u8, zigenv.std_uri);
-    } else if (std.mem.eql(u8, import_str, "builtin")) {
-        if (self.associated_build_file) |build_file| {
-            if (build_file.builtin_uri) |builtin_uri| {
-                return try allocator.dupe(u8, builtin_uri);
-            }
-        }
-        return try URI.fromPath(allocator, zigenv.builtin_path.slice());
-    } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
-        if (self.associated_build_file) |build_file| {
-            for (build_file.packages.items) |pkg| {
-                if (std.mem.eql(u8, import_str, pkg.name)) {
-                    return try allocator.dupe(u8, pkg.uri);
-                }
-            }
-        }
-        return null;
-    } else {
-        const base = self.uri;
-        var base_len = base.len;
-        while (base[base_len - 1] != '/' and base_len > 0) {
-            base_len -= 1;
-        }
-        base_len -= 1;
-        if (base_len <= 0) {
-            return error.UriBadScheme;
-        }
-        return try URI.pathRelative(allocator, base[0..base_len], import_str);
-    }
-}
-
-pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
-    var new_imports = std.ArrayList([]const u8).init(self.allocator);
-    errdefer {
-        for (new_imports.items) |imp| {
-            self.allocator.free(imp);
-        }
-        new_imports.deinit();
-    }
-    try self.ast_context.collectImports(&new_imports);
-
-    // Convert to URIs
-    var i: usize = 0;
-    while (i < new_imports.items.len) {
-        if (try self.uriFromImportStrAlloc(self.allocator, new_imports.items[i], zigenv)) |uri| {
-            // The raw import strings are owned by the document and do not need to be freed here.
-            new_imports.items[i] = uri;
-            i += 1;
-        } else {
-            _ = new_imports.swapRemove(i);
-        }
-    }
-    return new_imports.toOwnedSlice();
 }
 
 pub fn refreshDocument(self: *Self) !void {
@@ -205,53 +144,6 @@ const ImportStrIterator = struct {
         return null;
     }
 };
-
-fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, source_index: usize) bool {
-    const first_token = ast.tokenLocation(tree, tree.firstToken(node)).start;
-    const last_token = ast.tokenLocation(tree, ast.lastToken(tree, node)).end;
-    return source_index >= first_token and source_index <= last_token;
-}
-
-fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
-    const node_tags = tree.nodes.items(.tag);
-    const data = tree.nodes.items(.data)[node];
-    const params = switch (node_tags[node]) {
-        .builtin_call, .builtin_call_comma => tree.extra_data[data.lhs..data.rhs],
-        .builtin_call_two, .builtin_call_two_comma => if (data.lhs == 0)
-            &[_]Ast.Node.Index{}
-        else if (data.rhs == 0)
-            &[_]Ast.Node.Index{data.lhs}
-        else
-            &[_]Ast.Node.Index{ data.lhs, data.rhs },
-        else => unreachable,
-    };
-
-    if (params.len != 1) return null;
-
-    const import_str = tree.tokenSlice(tree.nodes.items(.main_token)[params[0]]);
-    return import_str[1 .. import_str.len - 1];
-}
-
-pub fn gotoDefinitionString(
-    self: *Self,
-    arena: *std.heap.ArenaAllocator,
-    pos_index: usize,
-    zigenv: ZigEnv,
-) !?UriBytePosition {
-    const tree = self.ast_context.tree;
-    var it = ImportStrIterator.init(tree);
-    while (it.next()) |node| {
-        if (nodeContainsSourceIndex(tree, node, pos_index)) {
-            if (importStr(tree, node)) |import_str| {
-                if (try self.uriFromImportStrAlloc(arena.allocator(), import_str, zigenv)) |uri| {
-                    // logger.debug("gotoDefinitionString: {s}", .{uri});
-                    return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
-                }
-            }
-        }
-    }
-    return null;
-}
 
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
     const token = self.ast_context.tokens.items[token_idx];
