@@ -48,7 +48,7 @@ pub const ChangeDocument = struct {
     contentChanges: std.json.Value,
 };
 
-const TextDocumentIdentifierRequest = struct {
+pub const TextDocumentIdentifierRequest = struct {
     textDocument: TextDocumentIdentifier,
 };
 

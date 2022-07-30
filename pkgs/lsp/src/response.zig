@@ -15,6 +15,7 @@ pub const ResponseParams = union(enum) {
     Locations: []types.Location,
     WorkspaceEdit: types.WorkspaceEdit,
     InitializeResult: initialize.InitializeResult,
+    CodeLens: []types.CodeLens,
     Null: ?struct {},
 };
 

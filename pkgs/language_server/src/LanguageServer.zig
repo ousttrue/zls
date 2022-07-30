@@ -43,6 +43,9 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     .documentHighlightProvider = false,
     .hoverProvider = true,
     .codeActionProvider = false,
+    .codeLensProvider = .{
+        .resolveProvider = true,
+    },
     .declarationProvider = false,
     .definitionProvider = true,
     .typeDefinitionProvider = true,
@@ -287,8 +290,10 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
             } },
         };
     }
+
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
     const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
+
     var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, doc);
     var array = try std.ArrayList(u32).initCapacity(arena.allocator(), token_array.len * 5);
     for (token_array) |token| {
@@ -325,6 +330,46 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
         .id = id,
         .result = .{ .SemanticTokensFull = .{ .data = data } },
     };
+}
+
+/// # language feature
+/// ## document request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp
+pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    const params = try lsp.fromDynamicTree(arena, lsp.requests.TextDocumentIdentifierRequest, jsonParams.?);
+    const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
+    _ = doc;
+    var data = std.ArrayList(lsp.types.CodeLens).init(arena.allocator());
+    try data.append(.{
+        .range = .{
+            .start = .{
+                .line = 0,
+                .character = 0,
+            },
+            .end = .{
+                .line = 0,
+                .character = 0,
+            },
+        },
+        .command = .{
+            .title = "zls codelens",
+            .command = "zls/codelens/command",
+        },
+    });
+    return lsp.Response{
+        .id = id,
+        .result = .{ .CodeLens = data.items },
+    };
+}
+
+pub fn @"codeLens/resolve"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    _ = self;
+    var json_buffer = std.ArrayList(u8).init(arena.allocator());
+    jsonParams.?.jsonStringify(.{ .emit_null_optional_fields = false }, json_buffer.writer()) catch @panic("stringify");
+    logger.debug("{s}", .{json_buffer.items});
+    // const params = try lsp.fromDynamicTree(arena, lsp.requests.TextDocumentIdentifierRequest, jsonParams.?);
+    // const doc = self.workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
+    return lsp.Response.createNull(id);
 }
 
 /// # language feature

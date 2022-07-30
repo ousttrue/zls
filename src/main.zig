@@ -181,12 +181,17 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&language_server, "initialize");
     dispatcher.registerNotify(&language_server, "initialized");
     dispatcher.registerRequest(&language_server, "shutdown");
+
     dispatcher.registerNotify(&language_server, "textDocument/didOpen");
     dispatcher.registerNotify(&language_server, "textDocument/didChange");
     dispatcher.registerNotify(&language_server, "textDocument/didSave");
     dispatcher.registerNotify(&language_server, "textDocument/didClose");
+
     dispatcher.registerRequest(&language_server, "textDocument/semanticTokens/full");
     dispatcher.registerRequest(&language_server, "textDocument/documentSymbol");
+    dispatcher.registerRequest(&language_server, "textDocument/codeLens");
+    dispatcher.registerRequest(&language_server, "codeLens/resolve");
+
     dispatcher.registerRequest(&language_server, "textDocument/hover");
     dispatcher.registerRequest(&language_server, "textDocument/formatting");
     dispatcher.registerRequest(&language_server, "textDocument/definition");

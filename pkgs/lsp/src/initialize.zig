@@ -61,6 +61,9 @@ pub const ServerCapabilities = struct {
     documentHighlightProvider: bool,
     hoverProvider: bool,
     codeActionProvider: bool,
+    codeLensProvider: ?struct {
+        resolveProvider: ?bool,
+    },
     declarationProvider: bool,
     definitionProvider: bool,
     typeDefinitionProvider: bool,

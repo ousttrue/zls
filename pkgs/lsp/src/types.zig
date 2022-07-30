@@ -127,7 +127,6 @@ pub const CompletionItem = struct {
     documentation: ?MarkupContent = null,
 };
 
-
 pub const WorkspaceFolder = struct {
     uri: string,
     name: string,
@@ -166,3 +165,12 @@ pub fn Default(comptime T: type, comptime default_value: T) type {
 }
 
 pub const MaybeStringArray = Default([]const []const u8, &.{});
+
+pub const CodeLens = struct {
+    range: Range,
+    command: ?struct {
+        title: string,
+        command: string,
+        arguments: ?[]string = null,
+    } = null,
+};
