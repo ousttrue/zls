@@ -63,3 +63,13 @@ pub fn parseUri(self: *Self, str: []const u8) !void {
 pub fn slice(self: Self) []const u8 {
     return self._buffer[0..self.len];
 }
+
+pub fn isAbsoluteExists(self: Self) bool {
+    if (!std.fs.path.isAbsolute(self.slice())) {
+        return false;
+    }
+    std.fs.cwd().access(self.slice(), .{}) catch {
+        return false;
+    };
+    return true;
+}

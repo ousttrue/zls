@@ -2,12 +2,13 @@ const std = @import("std");
 const builtin = @import("builtin");
 const known_folders = @import("known-folders");
 const URI = @import("./uri.zig");
+const FixedPath = @import("./FixedPath.zig");
 const logger = std.log.scoped(.Config);
 
 const Self = @This();
 
 allocator: std.mem.Allocator,
-exe_path: []const u8,
+exe_path: FixedPath,
 std_uri: []const u8,
 builtin_path: []const u8,
 // config.build_runner_path orelse @panic("no build_runner_path"),
@@ -59,23 +60,11 @@ pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
     return null;
 }
 
-fn isAbsoluteExists(config_zig_exe_path: ?[]const u8) ?[]const u8 {
-    if (config_zig_exe_path) |exe_path| {
-        if (std.fs.path.isAbsolute(exe_path)) {
-            if (std.fs.cwd().access(exe_path, .{})) {
-                return exe_path;
-            } else |_| {}
-        }
-        logger.debug("zig path `{s}` is not absolute, will look in path", .{exe_path});
-    }
-    return null;
-}
-
-fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: []const u8) ![]const u8 {
+fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) ![]const u8 {
     // Use `zig env` to find the lib path
     const zig_env_result = try std.ChildProcess.exec(.{
         .allocator = allocator,
-        .argv = &[_][]const u8{ zig_exe_path, "env" },
+        .argv = &[_][]const u8{ zig_exe_path.slice(), "env" },
     });
     defer {
         allocator.free(zig_env_result.stdout);
@@ -142,7 +131,7 @@ fn getZigBuiltinAlloc(allocator: std.mem.Allocator, zig_exe_path: []const u8, co
 pub fn init(
     allocator: std.mem.Allocator,
     config_dir: ?[]const u8,
-    config_zig_exe_path: ?[]const u8,
+    config_zig_exe_path: FixedPath,
     config_zig_lib_path: ?[]const u8,
     config_builtin_path: ?[]const u8,
     config_build_runner_path: ?[]const u8,
@@ -150,10 +139,16 @@ pub fn init(
     cache_root: []const u8,
     global_cache_root: []const u8,
 ) !Self {
-    const zig_exe_path = if (isAbsoluteExists(config_zig_exe_path)) |path|
-        try allocator.dupe(u8, path)
-    else
-        (try findZig(allocator)).?;
+    // exe
+    var zig_exe_path: FixedPath = .{};
+    if (config_zig_exe_path.isAbsoluteExists()) {
+        zig_exe_path = config_zig_exe_path;
+    }
+    if (zig_exe_path.len == 0) {
+        if (try findZig(allocator)) |exe| {
+            zig_exe_path = FixedPath.fromFullpath(exe);
+        }
+    }
     logger.info("Using zig executable: {s}", .{zig_exe_path});
 
     const zig_lib_path = if (config_zig_lib_path) |path|
@@ -166,7 +161,7 @@ pub fn init(
         try allocator.dupe(u8, path)
     else blk: {
         if (config_dir) |dir| {
-            break :blk try getZigBuiltinAlloc(allocator, zig_exe_path, dir);
+            break :blk try getZigBuiltinAlloc(allocator, zig_exe_path.slice(), dir);
         } else {
             logger.info("no config_dir", .{});
             return error.NoConfigDir;
@@ -214,12 +209,10 @@ pub fn deinit(self: *Self) void {
     self.allocator.free(self.build_runner_path);
     self.allocator.free(self.builtin_path);
     self.allocator.free(self.std_uri);
-    self.allocator.free(self.exe_path);
 }
 
-pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![]const u8
-{
-    var process = std.ChildProcess.init(&[_][]const u8{ self.exe_path, "fmt", "--stdin" }, allocator);
+pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![]const u8 {
+    var process = std.ChildProcess.init(&[_][]const u8{ self.exe_path.slice(), "fmt", "--stdin" }, allocator);
     process.stdin_behavior = .Pipe;
     process.stdout_behavior = .Pipe;
     try process.spawn();
@@ -230,7 +223,7 @@ pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![
     switch (try process.wait()) {
         .Exited => |code| if (code == 0) {
             return bytes;
-        }else{
+        } else {
             return error.ExitedNonZero;
         },
         else => {

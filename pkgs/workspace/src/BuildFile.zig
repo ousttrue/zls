@@ -85,7 +85,7 @@ pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file
     const zig_run_result = try std.ChildProcess.exec(.{
         .allocator = allocator,
         .argv = &[_][]const u8{
-            zigenv.exe_path,
+            zigenv.exe_path.slice(),
             "run",
             zigenv.build_runner_path,
             "--cache-dir",
@@ -95,7 +95,7 @@ pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file
             build_file_path,
             "--pkg-end",
             "--",
-            zigenv.exe_path,
+            zigenv.exe_path.slice(),
             directory_path,
             zigenv.cache_root,
             zigenv.global_cache_root,

@@ -1,6 +1,7 @@
 //! Configuration options for zls.
 
 const std = @import("std");
+const FixedPath = @import("./FixedPath.zig");
 const logger = std.log.scoped(.Config);
 const Self = @This();
 
@@ -12,7 +13,7 @@ zig_lib_path: ?[]const u8 = null,
 
 /// zig executable path used to run the custom build runner.
 /// May be used to find a lib path if none is provided.
-zig_exe_path: ?[]const u8 = null,
+zig_exe_path: FixedPath = .{},
 
 /// Whether to pay attention to style issues. This is opt-in since the style
 /// guide explicitly states that the style info provided is a guideline only.
