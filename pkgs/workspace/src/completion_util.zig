@@ -718,55 +718,55 @@ fn completeFieldAccess(
     return completions.items;
 }
 
-pub fn tagStoreCompletionItems(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    base: *Document,
-    comptime name: []const u8,
-) ![]lsp.CompletionItem {
-    // TODO Better solution for deciding what tags to include
-    var max_len: usize = @field(base.ast_context.document_scope, name).count();
-    for (base.imports_used.items) |uri| {
-        max_len += @field(workspace.handles.get(uri).?.ast_context.document_scope, name).count();
-    }
+// pub fn tagStoreCompletionItems(
+//     arena: *std.heap.ArenaAllocator,
+//     workspace: *Workspace,
+//     base: *Document,
+//     comptime name: []const u8,
+// ) ![]lsp.CompletionItem {
+//     // TODO Better solution for deciding what tags to include
+//     var max_len: usize = @field(base.ast_context.document_scope, name).count();
+//     for (base.imports_used.items) |uri| {
+//         max_len += @field(workspace.handles.get(uri).?.ast_context.document_scope, name).count();
+//     }
 
-    var result_set = DocumentScope.CompletionSet{};
-    try result_set.ensureTotalCapacity(arena.allocator(), max_len);
-    for (@field(base.ast_context.document_scope, name).entries.items(.key)) |completion| {
-        result_set.putAssumeCapacityNoClobber(completion, {});
-    }
+//     var result_set = DocumentScope.CompletionSet{};
+//     try result_set.ensureTotalCapacity(arena.allocator(), max_len);
+//     for (@field(base.ast_context.document_scope, name).entries.items(.key)) |completion| {
+//         result_set.putAssumeCapacityNoClobber(completion, {});
+//     }
 
-    for (base.imports_used.items) |uri| {
-        const curr_set = &@field(workspace.handles.get(uri).?.ast_context.document_scope, name);
-        for (curr_set.entries.items(.key)) |completion| {
-            result_set.putAssumeCapacity(completion, {});
-        }
-    }
-    return result_set.entries.items(.key);
-}
+//     for (base.imports_used.items) |uri| {
+//         const curr_set = &@field(workspace.handles.get(uri).?.ast_context.document_scope, name);
+//         for (curr_set.entries.items(.key)) |completion| {
+//             result_set.putAssumeCapacity(completion, {});
+//         }
+//     }
+//     return result_set.entries.items(.key);
+// }
 
-fn completeError(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    doc: *Document,
-    config: *Config,
-) ![]lsp.CompletionItem {
-    const completions = try tagStoreCompletionItems(arena, workspace, doc, "error_completions");
-    builtin_completions.truncateCompletions(completions, config.max_detail_length);
-    logger.debug("Completing error:", .{});
-    return completions;
-}
+// fn completeError(
+//     arena: *std.heap.ArenaAllocator,
+//     workspace: *Workspace,
+//     doc: *Document,
+//     config: *Config,
+// ) ![]lsp.CompletionItem {
+//     const completions = try tagStoreCompletionItems(arena, workspace, doc, "error_completions");
+//     builtin_completions.truncateCompletions(completions, config.max_detail_length);
+//     logger.debug("Completing error:", .{});
+//     return completions;
+// }
 
-fn completeDot(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    doc: *Document,
-    config: *Config,
-) ![]lsp.CompletionItem {
-    var completions = try tagStoreCompletionItems(arena, workspace, doc, "enum_completions");
-    builtin_completions.truncateCompletions(completions, config.max_detail_length);
-    return completions;
-}
+// fn completeDot(
+//     arena: *std.heap.ArenaAllocator,
+//     workspace: *Workspace,
+//     doc: *Document,
+//     config: *Config,
+// ) ![]lsp.CompletionItem {
+//     var completions = try tagStoreCompletionItems(arena, workspace, doc, "enum_completions");
+//     builtin_completions.truncateCompletions(completions, config.max_detail_length);
+//     return completions;
+// }
 
 pub fn process(
     arena: *std.heap.ArenaAllocator,

@@ -180,40 +180,6 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Doc
     const final_uri = (try doc.uriFromImportStrAlloc(allocator, import_str, self.zigenv)) orelse return null;
     defer allocator.free(final_uri);
 
-    for (doc.imports_used.items) |uri| {
-        if (std.mem.eql(u8, uri, final_uri)) {
-            if (self.getDocument(final_uri)) |found| {
-                return found;
-            }
-        }
-    }
-
-    // The URI must be somewhere in the import_uris or the package uris
-    const handle_uri = find_uri: {
-        for (doc.import_uris) |uri| {
-            if (std.mem.eql(u8, uri, final_uri)) {
-                break :find_uri uri;
-            }
-        }
-        if (doc.associated_build_file) |bf| {
-            for (bf.packages.items) |pkg| {
-                if (std.mem.eql(u8, pkg.uri, final_uri)) {
-                    break :find_uri pkg.uri;
-                }
-            }
-        }
-        return null;
-    };
-
-    // New import.
-    // Check if the import is already opened by others.
-    if (self.getDocument(final_uri)) |new_handle| {
-        // If it is, append it to our imports, increment the count, set our new handle
-        // and return the parsed tree root node.
-        try doc.imports_used.append(self.allocator, handle_uri);
-        return new_handle;
-    }
-
     // New document, read the file then call into openDocument.
     const file_path = try URI.parse(allocator, final_uri);
     defer allocator.free(file_path);
@@ -240,8 +206,6 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Doc
         };
         errdefer allocator.free(file_contents);
 
-        // Add to import table of current handle.
-        try doc.imports_used.append(self.allocator, handle_uri);
         // Swap handles.
         // This takes ownership of the passed uri and text.
         const duped_final_uri = try allocator.dupe(u8, final_uri);

@@ -17,8 +17,6 @@ utf8_buffer: Utf8Buffer,
 ast_context: *AstContext,
 /// Contains one entry for every import in the document
 import_uris: []const []const u8,
-/// Items in this array list come from `import_uris`
-imports_used: std.ArrayListUnmanaged([]const u8),
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
 
@@ -29,7 +27,6 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
         .allocator = allocator,
         .uri = uri,
         .import_uris = &.{},
-        .imports_used = .{},
         .utf8_buffer = try Utf8Buffer.init(allocator, text),
         .ast_context = try AstContext.new(allocator, text),
         .associated_build_file = null,
@@ -43,7 +40,6 @@ pub fn delete(self: *Self) void {
         self.allocator.free(imp_uri);
     }
     self.allocator.free(self.import_uris);
-    self.imports_used.deinit(self.allocator);
     self.ast_context.delete();
     self.allocator.destroy(self);
 }
@@ -125,24 +121,6 @@ pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
             self.allocator.free(uri);
         }
         self.allocator.free(old_imports);
-    }
-
-    var i: usize = 0;
-    while (i < self.imports_used.items.len) {
-        const old = self.imports_used.items[i];
-        still_exists: {
-            for (new_imports) |new_import| {
-                if (std.mem.eql(u8, new_import, old)) {
-                    self.imports_used.items[i] = new_import;
-                    break :still_exists;
-                }
-            }
-            logger.debug("Import removed: {s}", .{old});
-            // self.decrementCount(old);
-            _ = self.imports_used.swapRemove(i);
-            continue;
-        }
-        i += 1;
     }
 }
 

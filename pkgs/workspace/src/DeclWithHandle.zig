@@ -1013,35 +1013,35 @@ pub fn symbolReferences(
 
                 // Check entry's transitive imports
                 try imports.append(entry.value_ptr.*);
-                var i: usize = 0;
-                blk: while (i < imports.items.len) : (i += 1) {
-                    const import = imports.items[i];
-                    for (import.imports_used.items) |uri| {
-                        const h = workspace.getDocument(uri) orelse break;
+                // var i: usize = 0;
+                // blk: while (i < imports.items.len) : (i += 1) {
+                //     const import = imports.items[i];
+                //     for (import.imports_used.items) |uri| {
+                //         const h = workspace.getDocument(uri) orelse break;
 
-                        if (h == curr_handle) {
-                            // entry does import curr_handle
-                            try self.symbolReferencesInternal(
-                                arena,
-                                workspace,
-                                entry.value_ptr.*,
-                                0,
-                                locations,
-                            );
-                            break :blk;
-                        }
+                //         if (h == curr_handle) {
+                //             // entry does import curr_handle
+                //             try self.symbolReferencesInternal(
+                //                 arena,
+                //                 workspace,
+                //                 entry.value_ptr.*,
+                //                 0,
+                //                 locations,
+                //             );
+                //             break :blk;
+                //         }
 
-                        select: {
-                            for (imports.items) |item| {
-                                if (item == h) {
-                                    // already checked this import
-                                    break :select;
-                                }
-                            }
-                            try imports.append(h);
-                        }
-                    }
-                }
+                //         select: {
+                //             for (imports.items) |item| {
+                //                 if (item == h) {
+                //                     // already checked this import
+                //                     break :select;
+                //                 }
+                //             }
+                //             try imports.append(h);
+                //         }
+                //     }
+                // }
                 try imports.resize(0);
             }
         },
