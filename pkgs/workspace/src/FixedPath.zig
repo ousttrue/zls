@@ -70,6 +70,13 @@ pub fn slice(self: Self) []const u8 {
     return self._buffer[0..self.len];
 }
 
+pub fn parent(self: Self) ?Self {
+    return if (std.fs.path.dirname(self.slice())) |dirname|
+        fromFullpath(dirname)
+    else
+        null;
+}
+
 // try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path,  name});
 pub fn child(self: Self, name: []const u8) Self {
     var copy = fromFullpath(self.slice());
@@ -95,7 +102,7 @@ pub fn exec(self: Self, allocator: std.mem.Allocator, args: []const []const u8) 
     var _args = std.ArrayList([]const u8).init(allocator);
     defer _args.deinit();
 
-    var w = buffer.writer();    
+    var w = buffer.writer();
     try w.print("{s}", .{self.slice()});
     try _args.append(self.slice());
     for (args) |arg| {

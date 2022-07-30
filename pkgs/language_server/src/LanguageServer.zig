@@ -242,7 +242,8 @@ pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jso
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SaveDocument, jsonParams.?);
     const doc = workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
-    try doc.applySave(self.zigenv);
+    _ = doc;
+    // try doc.applySave(self.zigenv);
 }
 
 /// # document sync
