@@ -5,19 +5,6 @@ const URI = @import("./uri.zig");
 const FixedPath = @import("./FixedPath.zig");
 const logger = std.log.scoped(.ZigEnv);
 
-const Self = @This();
-
-allocator: std.mem.Allocator,
-exe_path: FixedPath,
-std_uri: []const u8,
-builtin_path: FixedPath,
-// config.build_runner_path orelse @panic("no build_runner_path"),
-// config.build_runner_cache_path orelse @panic("build_runner_cache_path"),
-build_runner_path: []const u8,
-build_runner_cache_path: []const u8,
-cache_root: []const u8,
-global_cache_root: []const u8,
-
 fn stdUriFromLibPath(allocator: std.mem.Allocator, zpath: []const u8) ![]const u8 {
     const std_path = try std.fs.path.resolve(allocator, &[_][]const u8{
         zpath, "./std/std.zig",
@@ -60,7 +47,7 @@ pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
     return null;
 }
 
-fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) ![]const u8 {
+fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) !FixedPath {
     // Use `zig env` to find the lib path
     const zig_env_result = try std.ChildProcess.exec(.{
         .allocator = allocator,
@@ -91,9 +78,7 @@ fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) ![]cons
                     unreachable;
                 };
                 defer std.json.parseFree(Env, json_env, .{ .allocator = allocator });
-                // We know this is allocated with `allocator`, we just steal it!
-                defer json_env.lib_dir = null;
-                return json_env.lib_dir.?;
+                return FixedPath.fromFullpath(json_env.lib_dir.?);
             }
         },
         else => {
@@ -134,6 +119,18 @@ fn getZigBuiltinAlloc(
     return path;
 }
 
+const Self = @This();
+
+allocator: std.mem.Allocator,
+exe: FixedPath,
+lib: FixedPath,
+std_uri: []const u8,
+builtin_path: FixedPath,
+build_runner_path: []const u8,
+build_runner_cache_path: []const u8,
+cache_root: []const u8,
+global_cache_root: []const u8,
+
 pub fn init(
     allocator: std.mem.Allocator,
     config_dir: ?[]const u8,
@@ -160,11 +157,14 @@ pub fn init(
     }
     logger.info("Using zig executable: {s}", .{zig_exe_path.slice()});
 
-    const zig_lib_path = if (config_zig_lib_path) |path|
-        try allocator.dupe(u8, path)
-    else
-        try getZigLibAlloc(allocator, zig_exe_path);
-    logger.info("Using zig lib path: {s}", .{zig_lib_path});
+    // lib
+    var zig_lib_path: FixedPath = .{};
+    if (config_zig_lib_path) |not_null| {
+        zig_lib_path = FixedPath.fromFullpath(not_null);
+    } else {
+        zig_lib_path = try getZigLibAlloc(allocator, zig_exe_path);
+    }
+    logger.info("Using zig lib path: {s}", .{zig_lib_path.slice()});
 
     // builtin_path
     var builtin_path: FixedPath = .{};
@@ -199,12 +199,11 @@ pub fn init(
         break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
     };
 
-    const std_uri = try stdUriFromLibPath(allocator, zig_lib_path);
-
     return Self{
         .allocator = allocator,
-        .exe_path = zig_exe_path,
-        .std_uri = std_uri,
+        .exe = zig_exe_path,
+        .lib = zig_lib_path,
+        .std_uri = try stdUriFromLibPath(allocator, zig_lib_path.slice()),
         .builtin_path = builtin_path,
         .build_runner_path = build_runner_path,
         .build_runner_cache_path = build_runner_cache_path,
@@ -214,15 +213,15 @@ pub fn init(
 }
 
 pub fn deinit(self: *Self) void {
+    self.allocator.free(self.std_uri);
     self.allocator.free(self.cache_root);
     self.allocator.free(self.global_cache_root);
     self.allocator.free(self.build_runner_cache_path);
     self.allocator.free(self.build_runner_path);
-    self.allocator.free(self.std_uri);
 }
 
 pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![]const u8 {
-    var process = std.ChildProcess.init(&[_][]const u8{ self.exe_path.slice(), "fmt", "--stdin" }, allocator);
+    var process = std.ChildProcess.init(&[_][]const u8{ self.exe.slice(), "fmt", "--stdin" }, allocator);
     process.stdin_behavior = .Pipe;
     process.stdout_behavior = .Pipe;
     try process.spawn();
