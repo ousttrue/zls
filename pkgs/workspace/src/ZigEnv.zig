@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const known_folders = @import("known-folders");
 const URI = @import("./uri.zig");
 const FixedPath = @import("./FixedPath.zig");
-const logger = std.log.scoped(.Config);
+const logger = std.log.scoped(.ZigEnv);
 
 const Self = @This();
 
@@ -103,12 +103,16 @@ fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) ![]cons
     unreachable;
 }
 
-fn getZigBuiltinAlloc(allocator: std.mem.Allocator, zig_exe_path: []const u8, config_dir: []const u8) ![]const u8 {
+fn getZigBuiltinAlloc(
+    allocator: std.mem.Allocator,
+    zig_exe_path: FixedPath,
+    config_dir: []const u8,
+) ![]const u8 {
     logger.info("getZigBuiltinAlloc: {s}", .{config_dir});
     const result = try std.ChildProcess.exec(.{
         .allocator = allocator,
         .argv = &.{
-            zig_exe_path,
+            zig_exe_path.slice(),
             "build-exe",
             "--show-builtin",
         },
@@ -131,7 +135,7 @@ fn getZigBuiltinAlloc(allocator: std.mem.Allocator, zig_exe_path: []const u8, co
 pub fn init(
     allocator: std.mem.Allocator,
     config_dir: ?[]const u8,
-    config_zig_exe_path: FixedPath,
+    config_zig_exe_path: ?[]const u8,
     config_zig_lib_path: ?[]const u8,
     config_builtin_path: ?[]const u8,
     config_build_runner_path: ?[]const u8,
@@ -141,15 +145,18 @@ pub fn init(
 ) !Self {
     // exe
     var zig_exe_path: FixedPath = .{};
-    if (config_zig_exe_path.isAbsoluteExists()) {
-        zig_exe_path = config_zig_exe_path;
+    if (config_zig_exe_path) |not_null| {
+        const exe = FixedPath.fromFullpath(not_null);
+        if (exe.isAbsoluteExists()) {
+            zig_exe_path = exe;
+        }
     }
     if (zig_exe_path.len == 0) {
         if (try findZig(allocator)) |exe| {
             zig_exe_path = FixedPath.fromFullpath(exe);
         }
     }
-    logger.info("Using zig executable: {s}", .{zig_exe_path});
+    logger.info("Using zig executable: {s}", .{zig_exe_path.slice()});
 
     const zig_lib_path = if (config_zig_lib_path) |path|
         try allocator.dupe(u8, path)
@@ -161,7 +168,7 @@ pub fn init(
         try allocator.dupe(u8, path)
     else blk: {
         if (config_dir) |dir| {
-            break :blk try getZigBuiltinAlloc(allocator, zig_exe_path.slice(), dir);
+            break :blk try getZigBuiltinAlloc(allocator, zig_exe_path, dir);
         } else {
             logger.info("no config_dir", .{});
             return error.NoConfigDir;
