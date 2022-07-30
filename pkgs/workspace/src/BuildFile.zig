@@ -142,7 +142,7 @@ pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file
 }
 
 pub fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: ZigEnv) !*Self {
-    logger.debug("{s} => extracting packages...", .{uri});
+    logger.debug("extracting packages: {s} ...", .{uri});
 
     // This is a build file.
     var build_file = try Self.new(allocator, uri);
@@ -152,9 +152,9 @@ pub fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: Zi
     defer allocator.free(build_file_path);
 
     if (build_file.loadBuildAssociatedConfiguration(allocator, build_file_path)) {
-        logger.info("{s} => loadBuildAssociatedConfiguration", .{build_file.uri});
+        logger.info("loadBuildAssociatedConfiguration: {s} ok", .{build_file.uri});
     } else |err| {
-        logger.debug("Failed to load config associated with build file {s} (error: {})", .{ build_file.uri, err });
+        logger.debug("loadBuildAssociatedConfiguration: {s} {}", .{ build_file.uri, err });
     }
 
     if (build_file.builtin_uri == null) {
@@ -165,9 +165,9 @@ pub fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: Zi
     // TODO: Do this in a separate thread?
     // It can take quite long.
     if (build_file.loadPackages(allocator, build_file_path, zigenv)) {
-        logger.info("{s} => loadPackages", .{build_file.uri});
+        logger.info("loadPackages: {s} => ok", .{build_file.uri});
     } else |err| {
-        logger.debug("{s} => {}", .{ build_file.uri, err });
+        logger.debug("loadPackages: {s} => {}", .{ build_file.uri, err });
     }
 
     return build_file;

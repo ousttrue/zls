@@ -179,6 +179,7 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Doc
     const allocator = self.allocator;
     const final_uri = (try doc.uriFromImportStrAlloc(allocator, import_str, self.zigenv)) orelse return null;
     defer allocator.free(final_uri);
+    logger.debug("{s} + {s} => {s}", .{doc.uri, import_str, final_uri});
 
     // New document, read the file then call into openDocument.
     const file_path = try URI.parse(allocator, final_uri);
