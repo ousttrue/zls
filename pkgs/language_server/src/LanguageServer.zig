@@ -119,8 +119,7 @@ pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self 
 pub fn deinit(self: *Self) void {
     if(self.workspace)|workspace|
     {
-        workspace.deinit();
-        self.allocator.destroy(workspace);
+        workspace.delete();
     }
     self.notification_queue.deinit();
 }
@@ -168,15 +167,11 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
 
     if(params.rootUri)|uri|
     {
-        var workspace = try self.allocator.create(Workspace);
-        workspace.* = Workspace.init(self.allocator, self.zigenv, try FixedPath.fromUri(uri));
-        self.workspace = workspace;
+        self.workspace = try Workspace.new(self.allocator, self.zigenv, try FixedPath.fromUri(uri));
     }
     else if(params.rootPath)|path|
     {
-        var workspace = try self.allocator.create(Workspace);
-        workspace.* = Workspace.init(self.allocator, self.zigenv, FixedPath.fromFullpath(path));
-        self.workspace = workspace;
+        self.workspace = try Workspace.new(self.allocator, self.zigenv, FixedPath.fromFullpath(path));
     }
     else{
         return error.NoWorkspaceRoot;

@@ -17,22 +17,24 @@ root: FixedPath,
 handles: std.StringHashMap(*Document),
 build_files: std.ArrayList(*BuildFile),
 
-pub fn init(
+pub fn new(
     allocator: std.mem.Allocator,
     zigenv: ZigEnv,
     root: FixedPath,
-) Self {
+) !*Self {
     logger.info("{s}", .{root.slice()});
-    return Self{
+    var self = try allocator.create(Self);
+    self.* = Self{
         .allocator = allocator,
         .zigenv = zigenv,
         .root = root,
         .handles = std.StringHashMap(*Document).init(allocator),
         .build_files = std.ArrayList(*BuildFile).init(allocator),
     };
+    return self;
 }
 
-pub fn deinit(self: *Self) void {
+pub fn delete(self: *Self) void {
     var entry_iterator = self.handles.iterator();
     while (entry_iterator.next()) |entry| {
         self.allocator.free(entry.key_ptr.*);
@@ -44,6 +46,7 @@ pub fn deinit(self: *Self) void {
         build_file.delete();
     }
     self.build_files.deinit();
+    self.allocator.destroy(self);
 }
 
 fn findBuildFile(self: *Self, uri: []const u8) !?*BuildFile {
@@ -168,7 +171,7 @@ pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
 pub fn getDocument(self: *Self, uri: []const u8) ?*Document {
     if (self.handles.getEntry(uri)) |entry| {
         return entry.value_ptr.*;
-    }
+    } else {}
     return null;
 }
 
