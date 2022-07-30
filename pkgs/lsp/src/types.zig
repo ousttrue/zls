@@ -127,11 +127,6 @@ pub const CompletionItem = struct {
     documentation: ?MarkupContent = null,
 };
 
-pub const WorkspaceFolder = struct {
-    uri: string,
-    name: string,
-};
-
 pub const SignatureInformation = struct {
     pub const ParameterInformation = struct {
         // TODO Can also send a pair of encoded offsets

@@ -3,6 +3,7 @@
 ///    * uri: Document
 ///
 const std = @import("std");
+const FixedPath = @import("./FixedPath.zig");
 const URI = @import("./uri.zig");
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
@@ -12,16 +13,20 @@ const Self = @This();
 
 allocator: std.mem.Allocator,
 zigenv: ZigEnv,
+root: FixedPath,
 handles: std.StringHashMap(*Document),
 build_files: std.ArrayList(*BuildFile),
 
 pub fn init(
     allocator: std.mem.Allocator,
     zigenv: ZigEnv,
+    root: FixedPath,
 ) Self {
+    logger.info("{s}", .{root.slice()});
     return Self{
         .allocator = allocator,
         .zigenv = zigenv,
+        .root = root,
         .handles = std.StringHashMap(*Document).init(allocator),
         .build_files = std.ArrayList(*BuildFile).init(allocator),
     };

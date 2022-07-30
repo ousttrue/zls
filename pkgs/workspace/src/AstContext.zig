@@ -187,10 +187,12 @@ pub fn tokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
 
 pub fn prevTokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
     for (self.tokens.items) |token, i| {
-        if (byte_pos < token.loc.start) {
+        if (byte_pos <= token.loc.start) {
             if (i == 0) {
                 return null;
             } else {
+                // if(std.)
+                //        ^
                 return TokenWithIndex{ .token = self.tokens.items[i - 1], .index = @intCast(u32, i - 1) };
             }
         }

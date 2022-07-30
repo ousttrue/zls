@@ -1,3 +1,4 @@
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize
 const std = @import("std");
 const types = @import("./types.zig");
 const Default = types.Default;
@@ -24,9 +25,23 @@ pub const ClientCapabilities = struct {
     offsetEncoding: MaybeStringArray,
 };
 
+pub const WorkspaceFolder = struct {
+    uri: string,
+    name: string,
+};
+
 pub const InitializeParams = struct {
+    processId: ?i64,
+    clientInfo: ?struct {
+        name: string,
+        version: ?string,
+    },
+    locale: ?string,
+    rootPath: ?string,
+    rootUri: ?string,
     capabilities: ClientCapabilities,
-    workspaceFolders: ?[]const types.WorkspaceFolder,
+    trace: ?string,
+    workspaceFolders: ?[]const WorkspaceFolder,
 };
 
 pub const SemanticTokensProvider = struct {

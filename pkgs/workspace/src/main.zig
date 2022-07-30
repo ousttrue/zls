@@ -1,4 +1,5 @@
 const std = @import("std");
+pub const FixedPath = @import("./FixedPath.zig");
 pub const Workspace = @import("./Workspace.zig");
 pub const Document = @import("./Document.zig");
 pub const Line = @import("./Line.zig");

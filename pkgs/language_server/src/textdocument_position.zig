@@ -119,7 +119,7 @@ pub fn getHover(
             }
         },
         else => {
-            return null;
+            return context_info;
         },
     }
 }
