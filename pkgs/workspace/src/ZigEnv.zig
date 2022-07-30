@@ -93,14 +93,9 @@ fn getZigBuiltinAlloc(
     zig_exe_path: FixedPath,
     config_dir: []const u8,
 ) !FixedPath {
-    const result = try std.ChildProcess.exec(.{
-        .allocator = allocator,
-        .argv = &.{
-            zig_exe_path.slice(),
-            "build-exe",
-            "--show-builtin",
-        },
-        .max_output_bytes = 1024 * 1024 * 50,
+    const result = try zig_exe_path.exec(allocator, .{
+        "build-exe",
+        "--show-builtin",
     });
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
@@ -114,7 +109,7 @@ fn getZigBuiltinAlloc(
 
     var path = FixedPath.fromFullpath(config_dir);
     path = path.child("builtin.zig");
-    logger.info("zig.exe build-exe --show-bultin > {s}", .{path.slice()});
+    logger.info("{s}", .{path.slice()});
 
     return path;
 }
