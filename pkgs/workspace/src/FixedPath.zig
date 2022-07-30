@@ -1,9 +1,8 @@
 const std = @import("std");
 const logger = std.log.scoped(.FixedPath);
 const Self = @This();
-const MAXPATH = 260;
 
-_buffer: [MAXPATH]u8 = undefined,
+_buffer: [std.fs.MAX_PATH_BYTES]u8 = undefined,
 len: usize = 0,
 
 pub fn fromFullpath(fullpath: []const u8) Self {
@@ -17,6 +16,12 @@ pub fn fromCwd() !Self {
     var self = Self{};
     self.len = (try std.os.getcwd(&self._buffer)).len;
     return self;
+}
+
+pub fn fromSelfExe() !Self {
+    var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const exe_dir_path = try std.fs.selfExeDirPath(&exe_dir_bytes);
+    return fromFullpath(exe_dir_path);
 }
 
 pub fn fromUri(uri: []const u8) !Self {
@@ -65,6 +70,7 @@ pub fn slice(self: Self) []const u8 {
     return self._buffer[0..self.len];
 }
 
+// try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path,  name});
 pub fn child(self: Self, name: []const u8) Self {
     var copy = fromFullpath(self.slice());
     copy._buffer[copy.len] = '/';
@@ -83,23 +89,24 @@ pub fn isAbsoluteExists(self: Self) bool {
     return true;
 }
 
-pub fn exec(self: Self, allocator: std.mem.Allocator, args: anytype) !std.ChildProcess.ExecResult {
+pub fn exec(self: Self, allocator: std.mem.Allocator, args: []const []const u8) !std.ChildProcess.ExecResult {
     var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
-    var w = buffer.writer();
-    var _args: [args.len + 1][]const u8 = undefined;
-    _args[0] = self.slice();
-    try w.print("{s}", .{self.slice()});
+    var _args = std.ArrayList([]const u8).init(allocator);
+    defer _args.deinit();
 
-    inline for (args) |arg, i| {
+    var w = buffer.writer();    
+    try w.print("{s}", .{self.slice()});
+    try _args.append(self.slice());
+    for (args) |arg| {
         try w.print(" {s}", .{arg});
-        _args[i + 1] = arg;
+        try _args.append(arg);
     }
 
     logger.debug("{s}", .{buffer.items});
     return std.ChildProcess.exec(.{
         .allocator = allocator,
-        .argv = &_args,
+        .argv = _args.items,
         .max_output_bytes = 1024 * 1024 * 50,
     });
 }

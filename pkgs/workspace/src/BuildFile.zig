@@ -82,26 +82,21 @@ pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file
     defer if (_build_file_path == null) allocator.free(build_file_path);
     const directory_path = build_file_path[0 .. build_file_path.len - "build.zig".len];
 
-    const zig_run_result = try std.ChildProcess.exec(.{
-        .allocator = allocator,
-        .argv = &[_][]const u8{
-            zigenv.exe.slice(),
-            "run",
-            zigenv.build_runner_path,
-            "--cache-dir",
-            zigenv.build_runner_cache_path,
-            "--pkg-begin",
-            "@build@",
-            build_file_path,
-            "--pkg-end",
-            "--",
-            zigenv.exe.slice(),
-            directory_path,
-            zigenv.cache_root,
-            zigenv.global_cache_root,
-        },
+    const zig_run_result = try zigenv.exe.exec(allocator, &.{
+        "run",
+        zigenv.build_runner_path.slice(),
+        "--cache-dir",
+        zigenv.build_runner_cache_path.slice(),
+        "--pkg-begin",
+        "@build@",
+        build_file_path,
+        "--pkg-end",
+        "--",
+        zigenv.exe.slice(),
+        directory_path,
+        zigenv.cache_root.slice(),
+        zigenv.global_cache_root.slice(),
     });
-
     defer {
         allocator.free(zig_run_result.stdout);
         allocator.free(zig_run_result.stderr);
@@ -110,8 +105,6 @@ pub fn loadPackages(build_file: *Self, allocator: std.mem.Allocator, _build_file
     switch (zig_run_result.term) {
         .Exited => |exit_code| {
             if (exit_code == 0) {
-                logger.debug("Finished zig run for build file {s}", .{build_file.uri});
-
                 for (build_file.packages.items) |old_pkg| {
                     allocator.free(old_pkg.name);
                     allocator.free(old_pkg.uri);

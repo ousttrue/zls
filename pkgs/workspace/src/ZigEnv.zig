@@ -49,14 +49,9 @@ pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
 
 fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) !FixedPath {
     // Use `zig env` to find the lib path
-    const zig_env_result = try std.ChildProcess.exec(.{
-        .allocator = allocator,
-        .argv = &[_][]const u8{ zig_exe_path.slice(), "env" },
-    });
-    defer {
-        allocator.free(zig_env_result.stdout);
-        allocator.free(zig_env_result.stderr);
-    }
+    const zig_env_result = try zig_exe_path.exec(allocator, &.{"env"});
+    defer allocator.free(zig_env_result.stdout);
+    defer allocator.free(zig_env_result.stderr);
 
     switch (zig_env_result.term) {
         .Exited => |exit_code| {
@@ -93,7 +88,7 @@ fn getZigBuiltinAlloc(
     zig_exe_path: FixedPath,
     config_dir: []const u8,
 ) !FixedPath {
-    const result = try zig_exe_path.exec(allocator, .{
+    const result = try zig_exe_path.exec(allocator, &.{
         "build-exe",
         "--show-builtin",
     });
@@ -121,10 +116,10 @@ exe: FixedPath,
 lib: FixedPath,
 std_uri: []const u8,
 builtin_path: FixedPath,
-build_runner_path: []const u8,
-build_runner_cache_path: []const u8,
-cache_root: []const u8,
-global_cache_root: []const u8,
+build_runner_path: FixedPath,
+build_runner_cache_path: FixedPath,
+cache_root: FixedPath,
+global_cache_root: FixedPath,
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -175,24 +170,29 @@ pub fn init(
     }
     logger.info("Using builtin_path: {s}", .{builtin_path.slice()});
 
-    const build_runner_path = if (config_build_runner_path) |path|
-        try allocator.dupe(u8, path)
-    else blk: {
-        var exe_dir_bytes: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-        const exe_dir_path = try std.fs.selfExeDirPath(&exe_dir_bytes);
-        break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path, "build_runner.zig" });
-    };
+    // build_runner_path
+    var build_runner_path = FixedPath{};
+    if (config_build_runner_path) |not_null| {
+        build_runner_path = FixedPath.fromFullpath(not_null);
+    } else {
+        const exe_dir_path = try FixedPath.fromSelfExe();
+        build_runner_path = exe_dir_path.child("build_runner.zig");
+    }
+    logger.info("Using build_runner_path: {s}", .{build_runner_path.slice()});
 
-    const build_runner_cache_path = if (config_build_runner_cache_path) |path|
-        try allocator.dupe(u8, path)
-    else blk: {
+    // build_runner_cache_path
+    var build_runner_cache_path = FixedPath{};
+    if (config_build_runner_cache_path) |not_null| {
+        build_runner_cache_path = FixedPath.fromFullpath(not_null);
+    } else {
         const cache_dir_path = (try known_folders.getPath(allocator, .cache)) orelse {
             logger.warn("Known-folders could not fetch the cache path", .{});
             unreachable;
         };
         defer allocator.free(cache_dir_path);
-        break :blk try std.fs.path.resolve(allocator, &[_][]const u8{ cache_dir_path, "zls" });
-    };
+        build_runner_cache_path = FixedPath.fromFullpath(cache_dir_path).child("zls");
+    }
+    logger.info("Using build_cache_runner_path: {s}", .{build_runner_cache_path.slice()});
 
     return Self{
         .allocator = allocator,
@@ -202,17 +202,13 @@ pub fn init(
         .builtin_path = builtin_path,
         .build_runner_path = build_runner_path,
         .build_runner_cache_path = build_runner_cache_path,
-        .cache_root = try allocator.dupe(u8, cache_root),
-        .global_cache_root = try allocator.dupe(u8, global_cache_root),
+        .cache_root = FixedPath.fromFullpath(cache_root),
+        .global_cache_root = FixedPath.fromFullpath(global_cache_root),
     };
 }
 
 pub fn deinit(self: *Self) void {
     self.allocator.free(self.std_uri);
-    self.allocator.free(self.cache_root);
-    self.allocator.free(self.global_cache_root);
-    self.allocator.free(self.build_runner_cache_path);
-    self.allocator.free(self.build_runner_path);
 }
 
 pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![]const u8 {
