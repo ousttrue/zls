@@ -1,19 +1,12 @@
 const std = @import("std");
-const URI = @import("./uri.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const Ast = std.zig.Ast;
 const Line = @import("./Line.zig");
 const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
-const BuildFile = @import("./BuildFile.zig");
 const AstContext = @import("./AstContext.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");
 const logger = std.log.scoped(.Document);
-
-pub const FixedImport = struct
-{
-    str: [std.fs.MAX_PATH_BYTES]u8,
-};
 
 const Self = @This();
 allocator: std.mem.Allocator,
@@ -34,6 +27,7 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
 }
 
 pub fn delete(self: *Self) void {
+    self.utf8_buffer.deinit();
     self.ast_context.delete();
     self.allocator.destroy(self);
 }
