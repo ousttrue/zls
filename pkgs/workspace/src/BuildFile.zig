@@ -165,7 +165,7 @@ pub fn extractPackages(allocator: std.mem.Allocator, uri: []const u8, zigenv: Zi
     }
 
     if (build_file.builtin_uri == null) {
-        build_file.builtin_uri = try URI.fromPath(allocator, zigenv.builtin_path);
+        build_file.builtin_uri = try URI.fromPath(allocator, zigenv.builtin_path.slice());
         logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_uri});
     }
 

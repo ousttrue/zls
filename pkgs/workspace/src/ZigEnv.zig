@@ -10,7 +10,7 @@ const Self = @This();
 allocator: std.mem.Allocator,
 exe_path: FixedPath,
 std_uri: []const u8,
-builtin_path: []const u8,
+builtin_path: FixedPath,
 // config.build_runner_path orelse @panic("no build_runner_path"),
 // config.build_runner_cache_path orelse @panic("build_runner_cache_path"),
 build_runner_path: []const u8,
@@ -107,8 +107,7 @@ fn getZigBuiltinAlloc(
     allocator: std.mem.Allocator,
     zig_exe_path: FixedPath,
     config_dir: []const u8,
-) ![]const u8 {
-    logger.info("getZigBuiltinAlloc: {s}", .{config_dir});
+) !FixedPath {
     const result = try std.ChildProcess.exec(.{
         .allocator = allocator,
         .argv = &.{
@@ -126,10 +125,13 @@ fn getZigBuiltinAlloc(
 
     const f = try d.createFile("builtin.zig", .{});
     defer f.close();
-
     try f.writer().writeAll(result.stdout);
 
-    return try std.fs.path.join(allocator, &.{ config_dir, "builtin.zig" });
+    var path = FixedPath.fromFullpath(config_dir);
+    path = path.child("builtin.zig");
+    logger.info("zig.exe build-exe --show-bultin > {s}", .{path.slice()});
+
+    return path;
 }
 
 pub fn init(
@@ -164,17 +166,19 @@ pub fn init(
         try getZigLibAlloc(allocator, zig_exe_path);
     logger.info("Using zig lib path: {s}", .{zig_lib_path});
 
-    const builtin_path = if (config_builtin_path) |path|
-        try allocator.dupe(u8, path)
-    else blk: {
+    // builtin_path
+    var builtin_path: FixedPath = .{};
+    if (config_builtin_path) |not_null| {
+        builtin_path = FixedPath.fromFullpath(not_null);
+    } else {
         if (config_dir) |dir| {
-            break :blk try getZigBuiltinAlloc(allocator, zig_exe_path, dir);
+            builtin_path = try getZigBuiltinAlloc(allocator, zig_exe_path, dir);
         } else {
-            logger.info("no config_dir", .{});
+            logger.err("no config_dir", .{});
             return error.NoConfigDir;
         }
-    };
-    logger.info("Using builtin_path: {s}", .{builtin_path});
+    }
+    logger.info("Using builtin_path: {s}", .{builtin_path.slice()});
 
     const build_runner_path = if (config_build_runner_path) |path|
         try allocator.dupe(u8, path)
@@ -214,7 +218,6 @@ pub fn deinit(self: *Self) void {
     self.allocator.free(self.global_cache_root);
     self.allocator.free(self.build_runner_cache_path);
     self.allocator.free(self.build_runner_path);
-    self.allocator.free(self.builtin_path);
     self.allocator.free(self.std_uri);
 }
 

@@ -57,7 +57,7 @@ pub fn uriFromImportStrAlloc(self: *Self, allocator: std.mem.Allocator, import_s
                 return try allocator.dupe(u8, builtin_uri);
             }
         }
-        return try URI.fromPath(allocator, zigenv.builtin_path);
+        return try URI.fromPath(allocator, zigenv.builtin_path.slice());
     } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
         if (self.associated_build_file) |build_file| {
             for (build_file.packages.items) |pkg| {

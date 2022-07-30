@@ -64,6 +64,14 @@ pub fn slice(self: Self) []const u8 {
     return self._buffer[0..self.len];
 }
 
+pub fn child(self: Self, name: []const u8) Self {
+    var copy = fromFullpath(self.slice());
+    copy._buffer[copy.len] = '/';
+    std.mem.copy(u8, copy._buffer[(copy.len + 1) .. ], name);
+    copy.len += 1 + name.len;
+    return copy;
+}
+
 pub fn isAbsoluteExists(self: Self) bool {
     if (!std.fs.path.isAbsolute(self.slice())) {
         return false;
