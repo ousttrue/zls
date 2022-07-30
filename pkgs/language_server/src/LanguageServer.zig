@@ -228,7 +228,7 @@ pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, j
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
-    try doc.applyChanges(params.contentChanges.Array, self.encoding, self.zigenv);
+    try doc.applyChanges(params.contentChanges.Array, self.encoding);
     // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
     //     try self.notification_queue.append(notification);
     // } else |err| {

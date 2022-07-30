@@ -10,13 +10,16 @@ const AstContext = @import("./AstContext.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");
 const logger = std.log.scoped(.Document);
 
+pub const FixedImport = struct
+{
+    str: [std.fs.MAX_PATH_BYTES]u8,
+};
+
 const Self = @This();
 allocator: std.mem.Allocator,
 uri: []const u8,
 utf8_buffer: Utf8Buffer,
 ast_context: *AstContext,
-/// Contains one entry for every import in the document
-import_uris: []const []const u8,
 associated_build_file: ?*BuildFile,
 is_build_file: ?*BuildFile,
 
@@ -26,7 +29,6 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
     self.* = Self{
         .allocator = allocator,
         .uri = uri,
-        .import_uris = &.{},
         .utf8_buffer = try Utf8Buffer.init(allocator, text),
         .ast_context = try AstContext.new(allocator, text),
         .associated_build_file = null,
@@ -36,10 +38,6 @@ pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
 }
 
 pub fn delete(self: *Self) void {
-    for (self.import_uris) |imp_uri| {
-        self.allocator.free(imp_uri);
-    }
-    self.allocator.free(self.import_uris);
     self.ast_context.delete();
     self.allocator.destroy(self);
 }
@@ -101,32 +99,15 @@ pub fn collectImportUris(self: *Self, zigenv: ZigEnv) ![]const []const u8 {
     return new_imports.toOwnedSlice();
 }
 
-pub fn refreshDocument(self: *Self, zigenv: ZigEnv) !void {
+pub fn refreshDocument(self: *Self) !void {
     self.ast_context.delete();
     self.ast_context = try AstContext.new(self.allocator, self.utf8_buffer.text);
     errdefer self.ast_context.delete();
-
-    const new_imports = try self.collectImportUris(zigenv);
-    errdefer {
-        for (new_imports) |imp| {
-            self.allocator.free(imp);
-        }
-        self.allocator.free(new_imports);
-    }
-
-    const old_imports = self.import_uris;
-    self.import_uris = new_imports;
-    defer {
-        for (old_imports) |uri| {
-            self.allocator.free(uri);
-        }
-        self.allocator.free(old_imports);
-    }
 }
 
-pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line.Encoding, zigenv: ZigEnv) !void {
+pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line.Encoding) !void {
     try self.utf8_buffer.applyChanges(content_changes, encoding);
-    try self.refreshDocument(zigenv);
+    try self.refreshDocument();
 }
 
 pub fn applySave(self: *Self, zigenv: ZigEnv) !void {

@@ -132,7 +132,6 @@ fn findBuildFile(self: *Self, uri: []const u8) !?*BuildFile {
 fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
     const doc = try Document.new(self.allocator, uri, text);
     errdefer doc.delete();
-    doc.import_uris = try doc.collectImportUris(self.zigenv);
 
     // TODO: Better logic for detecting std or subdirectories?
     if (std.mem.indexOf(u8, uri, "/std/") != null) {
@@ -154,7 +153,7 @@ fn newDocument(self: *Self, uri: []const u8, text: [:0]u8) anyerror!*Document {
 
 pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
     if (self.handles.getEntry(uri)) |entry| {
-        try entry.value_ptr.*.refreshDocument(self.zigenv);
+        try entry.value_ptr.*.refreshDocument();
         if (entry.value_ptr.*.is_build_file) |build_file| {
             build_file.refs += 1;
         }
