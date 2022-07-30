@@ -81,9 +81,11 @@ pub fn getSignatureInfo(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    byte_position: usize,
+    token_index: u32,
     builtins: []const Builtin,
 ) !?lsp.SignatureInformation {
+    const token = doc.ast_context.tokens.items[token_index];
+    const byte_position = token.loc.start;
     const innermost_block = doc.ast_context.document_scope.innermostBlockScope(byte_position);
     const tree = doc.ast_context.tree;
     const token_tags = tree.tokens.items(.tag);

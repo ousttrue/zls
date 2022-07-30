@@ -700,7 +700,11 @@ fn completeFieldAccess(
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
     {
         const token = doc.ast_context.tokens.items[token_index];
-        std.debug.assert(token.tag == .period);
+        if(token.tag != .period)
+        {
+            logger.warn("not period: {} => {s}", .{token.tag, doc.ast_context.getTokenText(token)});
+            return completions.items;
+        }
     }
     const idx = doc.ast_context.tokens_node[token_index - 1];
     const token_begin = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
@@ -769,21 +773,19 @@ pub fn process(
     workspace: *Workspace,
     doc: *Document,
     trigger_character: ?[]const u8,
-    byte_position: u32,
+    token_index: u32,
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
-    const token_with_index = doc.ast_context.prevTokenFromBytePos(byte_position) orelse {
-        logger.debug("no token: {}", .{doc.utf8_buffer.text[byte_position]});
-        return error.TokenNotFound;
-    };
-    logger.debug("prev: {}: {s}", .{ token_with_index.token.tag, doc.ast_context.getTokenText(token_with_index.token) });
+
+    const token = doc.ast_context.tokens.items[token_index];
+    logger.debug("prev: {}: {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
 
     _ = trigger_character;
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
-            return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
+            return try completeFieldAccess(arena, workspace, doc, token_index, config, doc_kind);
         } else if (std.mem.eql(u8, trigger, "@")) {
             logger.debug("trigger '@' => builtin", .{});
             return builtin_completions.completeBuiltin();
@@ -792,7 +794,7 @@ pub fn process(
             return &[_]lsp.CompletionItem{};
         }
     } else {
-        switch (token_with_index.token.tag) {
+        switch (token.tag) {
             .period => {
                 // completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
                 // const idx = doc.ast_context.tokens_node[token_with_index.index];
@@ -807,10 +809,10 @@ pub fn process(
                 //         return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
                 //     },
                 // }
-                return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
+                return try completeFieldAccess(arena, workspace, doc, token_index, config, doc_kind);
             },
             else => {
-                return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
+                return try completeGlobal(arena, workspace, token.loc.start, doc, config, doc_kind);
             },
         }
     }
