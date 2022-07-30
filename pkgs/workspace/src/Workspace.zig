@@ -184,33 +184,35 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Doc
     // New document, read the file then call into openDocument.
     const file_path = try URI.parse(allocator, final_uri);
     defer allocator.free(file_path);
+    if(self.handles.get(final_uri))|found|
+    {
+        return found;
+    }
 
     var file = std.fs.cwd().openFile(file_path, .{}) catch {
         logger.debug("Cannot open import file {s}", .{file_path});
         return null;
     };
-
     defer file.close();
-    {
-        const file_contents = file.readToEndAllocOptions(
-            allocator,
-            std.math.maxInt(usize),
-            null,
-            @alignOf(u8),
-            0,
-        ) catch |err| switch (err) {
-            error.OutOfMemory => return error.OutOfMemory,
-            else => {
-                logger.debug("Could not read from file {s}", .{file_path});
-                return null;
-            },
-        };
-        errdefer allocator.free(file_contents);
 
-        // Swap handles.
-        // This takes ownership of the passed uri and text.
-        const duped_final_uri = try allocator.dupe(u8, final_uri);
-        errdefer allocator.free(duped_final_uri);
-        return try self.newDocument(duped_final_uri, file_contents);
-    }
+    const file_contents = file.readToEndAllocOptions(
+        allocator,
+        std.math.maxInt(usize),
+        null,
+        @alignOf(u8),
+        0,
+    ) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => {
+            logger.debug("Could not read from file {s}", .{file_path});
+            return null;
+        },
+    };
+    errdefer allocator.free(file_contents);
+
+    // Swap handles.
+    // This takes ownership of the passed uri and text.
+    const duped_final_uri = try allocator.dupe(u8, final_uri);
+    errdefer allocator.free(duped_final_uri);
+    return try self.newDocument(duped_final_uri, file_contents);
 }
