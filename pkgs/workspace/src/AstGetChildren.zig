@@ -28,6 +28,19 @@ pub fn nodeData(self: *Self, data: std.zig.Ast.Node.Data) void {
     }
 }
 
+pub fn fullWhile(self: *Self, full_while: std.zig.Ast.full.While) void {
+    self.append(full_while.ast.cond_expr);
+    self.append(full_while.ast.cont_expr);
+    self.append(full_while.ast.then_expr);
+    self.append(full_while.ast.else_expr);
+}
+
+pub fn fullIf(self: *Self, full_if: std.zig.Ast.full.If) void {
+    self.append(full_if.ast.cond_expr);
+    self.append(full_if.ast.then_expr);
+    self.append(full_if.ast.else_expr);
+}
+
 pub fn items(self: Self) []const u32 {
     return self.children.items;
 }
@@ -103,14 +116,57 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .call_one, .call_one_comma => {
             self.nodeData(node_data);
         },
+        .@"switch",
+        .switch_comma,
+        => {
+            self.append(node_data.lhs);
+            const extra = tree.extraData(node_data.rhs, std.zig.Ast.Node.SubRange);
+            for (tree.extra_data[extra.start..extra.end]) |child| {
+                self.append(child);
+            }
+        },
+        .switch_case_one => {
+            const switch_case = tree.switchCaseOne(idx);
+            for (switch_case.ast.values) |child| {
+                self.append(child);
+            }
+            self.append(switch_case.ast.target_expr);
+        },
+        .switch_case => {
+            const switch_case = tree.switchCase(idx);
+            for (switch_case.ast.values) |child| {
+                self.append(child);
+            }
+            self.append(switch_case.ast.target_expr);
+        },
+        .while_simple => {
+            self.nodeData(node_data);
+        },
+        .while_cont => {
+            self.fullWhile(tree.whileCont(idx));
+        },
+        .for_simple => {
+            self.fullWhile(tree.forSimple(idx));
+        },
+        .@"for" => {
+            self.nodeData(node_data);
+        },
+        .if_simple => {
+            self.fullIf(tree.ifSimple(idx));
+        },
+        .@"if" => {
+            self.fullIf(tree.ifFull(idx));
+        },
+        .@"break" => {
+            self.nodeData(node_data);
+        },
+        .@"return" => {
+            self.append(node_data.lhs);
+        },
         .fn_decl,
         .builtin_call_two,
         .block_two,
         .block_two_semicolon,
-        .if_simple,
-        .while_simple,
-        .for_simple,
-        .@"for",
         .container_field_init,
         .container_decl_two,
         .container_decl_two_trailing,
@@ -120,7 +176,7 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
         .string_literal => {
             // leaf. no children
         },
-        .deref, .@"return" => {
+        .deref => {
             self.append(node_data.lhs);
         },
         .call, .call_comma => {
@@ -134,42 +190,6 @@ pub fn getChildren(self: *Self, tree: *const std.zig.Ast, idx: u32) []const u32 
             for (tree.extra_data[node_data.lhs..node_data.rhs]) |child| {
                 self.append(child);
             }
-        },
-        .@"if" => {
-            // const extra = tree.extraData(node_data.rhs, Node.If);
-            const if_full = tree.ifFull(idx);
-            self.append(if_full.ast.cond_expr);
-            self.append(if_full.ast.then_expr);
-            self.append(if_full.ast.else_expr);
-        },
-        .@"switch",
-        .switch_comma,
-        => {
-            self.append(node_data.lhs);
-            const extra = tree.extraData(node_data.rhs, std.zig.Ast.Node.SubRange);
-            for (tree.extra_data[extra.start..extra.end]) |child| {
-                self.append(child);
-            }
-        },
-        .switch_case => {
-            const switch_case = tree.switchCase(idx);
-            for (switch_case.ast.values) |child| {
-                self.append(child);
-            }
-            self.append(switch_case.ast.target_expr);
-        },
-        .switch_case_one => {
-            const switch_case = tree.switchCaseOne(idx);
-            for (switch_case.ast.values) |child| {
-                self.append(child);
-            }
-            self.append(switch_case.ast.target_expr);
-        },
-        .while_cont => {
-            self.append(node_data.lhs);
-            const extra = tree.extraData(node_data.rhs, std.zig.Ast.Node.WhileCont);
-            self.append(extra.cont_expr);
-            self.append(extra.then_expr);
         },
         .struct_init_dot_comma => {
             const struct_init = tree.structInitDot(idx);

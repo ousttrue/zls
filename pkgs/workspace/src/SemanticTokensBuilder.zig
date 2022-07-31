@@ -281,6 +281,9 @@ fn push_identifier(self: *Self, token_idx: u32, loc: std.zig.Token.Loc) !void {
     const idx = ast_context.tokens_node[token_idx];
     const tag = ast_context.tree.nodes.items(.tag);
     const node_tag = tag[idx];
+    // const data = ast_context.tree.nodes.items(.data);
+    // const node_data = data[idx];
+
     // const parent_idx = ast_context.nodes_parent[idx];
     // const parent_tag = tag[parent_idx];
     const name = ast_context.getText(loc);
@@ -348,6 +351,9 @@ fn push_identifier(self: *Self, token_idx: u32, loc: std.zig.Token.Loc) !void {
         },
         .while_simple, .for_simple, .if_simple, .@"if" => {
             try self.push_semantic_token(loc, .variable, .{});
+        },
+        .@"break", .block_semicolon => {
+            try self.push_semantic_token(loc, .event, .{});           
         },
         else => {
             // try self.push_semantic_token(loc, .variable, .{});

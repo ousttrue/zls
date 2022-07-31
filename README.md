@@ -8,5 +8,5 @@ This is an experimental modified version
 * [ ] @import completion (zig_files, std, user_pkg...etc)
 * [ ] @cImport completion (use zig translate-c ?)
 * [ ] remove workspace dependency to lsp
-* [ ] identifier => source.line.character URI
-* [ ] identifier => type(module.field)
+* [ ] goto: .enum_literal
+* [ ] diagnostics: when format error
