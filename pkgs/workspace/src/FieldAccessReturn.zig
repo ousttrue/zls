@@ -21,11 +21,11 @@ pub fn getFieldAccessType(
     var current_type = TypeWithHandle.typeVal(handle, 0);
     var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
 
-    var i = token_begin;
-    while (i <= token_end) : (i += 1) {
-        const tok = handle.ast_context.tokens.items[i];
-        logger.debug("[{}] {s}", .{ i, handle.ast_context.getTokenText(tok) });
-    }
+    // var i = token_begin;
+    // while (i <= token_end) : (i += 1) {
+    //     const tok = handle.ast_context.tokens.items[i];
+    //     logger.debug("[{}] {s}", .{ i, handle.ast_context.getTokenText(tok) });
+    // }
 
     var token_idx = token_begin;
     while (token_idx <= token_end) : (token_idx += 1) {
