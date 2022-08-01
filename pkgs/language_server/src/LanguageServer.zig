@@ -14,6 +14,7 @@ const DeclWithHandle = ws.DeclWithHandle;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
+const AstNodeIterator = ws.AstNodeIterator;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 const builtin_completions = ws.builtin_completions;
@@ -117,8 +118,7 @@ pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self 
 }
 
 pub fn deinit(self: *Self) void {
-    if(self.workspace)|workspace|
-    {
+    if (self.workspace) |workspace| {
         workspace.delete();
     }
     self.notification_queue.deinit();
@@ -165,15 +165,11 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
         }
     }
 
-    if(params.rootUri)|uri|
-    {
+    if (params.rootUri) |uri| {
         self.workspace = try Workspace.new(self.allocator, self.zigenv, try FixedPath.fromUri(uri));
-    }
-    else if(params.rootPath)|path|
-    {
+    } else if (params.rootPath) |path| {
         self.workspace = try Workspace.new(self.allocator, self.zigenv, FixedPath.fromFullpath(path));
-    }
-    else{
+    } else {
         return error.NoWorkspaceRoot;
     }
 
@@ -376,24 +372,46 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.TextDocumentIdentifierRequest, jsonParams.?);
     const doc = workspace.getDocument(params.textDocument.uri) orelse return error.DocumentNotFound;
-    _ = doc;
+
+    const tree = doc.ast_context.tree;
     var data = std.ArrayList(lsp.types.CodeLens).init(arena.allocator());
-    try data.append(.{
-        .range = .{
-            .start = .{
-                .line = 0,
-                .character = 0,
+    // const tag = doc.ast_context.tree.nodes.items(.tag);
+    var buffer: [2]u32 = undefined;
+    var i: u32 = 0;
+    while (i < tree.nodes.len) : (i += 1) {
+        const children = AstNodeIterator.NodeChildren.init(doc.ast_context.tree, i, &buffer);
+        switch (children) {
+            .fn_proto => |fn_proto| {
+                const token_idx = fn_proto.ast.fn_token;
+                const token = doc.ast_context.tokens.items[token_idx];
+                const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token_idx, true, self.config)) |refs| refs.len else 0;
+                const start = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.start, self.encoding);
+                const end = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.end, self.encoding);
+                const text = try std.fmt.allocPrint(arena.allocator(), "{}", .{n});
+                const arg = try std.fmt.allocPrint(arena.allocator(), "{}", .{token_idx});
+                // logger.debug("{s}", .{text});
+                try data.append(.{
+                    .range = .{
+                        .start = .{
+                            .line = start.line,
+                            .character = start.x,
+                        },
+                        .end = .{
+                            .line = end.line,
+                            .character = end.x,
+                        },
+                    },
+                    .command = .{
+                        .title = text,
+                        .command = "references",
+                        .arguments = &.{arg},
+                    },
+                });
             },
-            .end = .{
-                .line = 0,
-                .character = 1,
-            },
-        },
-        .command = .{
-            .title = "zls codelens",
-            .command = "zls/codelens/command",
-        },
-    });
+            else => {},
+        }
+    }
+
     return lsp.Response{
         .id = id,
         .result = .{ .CodeLens = data.items },

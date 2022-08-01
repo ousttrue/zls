@@ -16,6 +16,7 @@ pub const signature_help = @import("./signature_help.zig");
 pub const builtin_completions = @import("./builtin_completions.zig");
 pub const DeclWithHandle = @import("./DeclWithHandle.zig");
 pub const TypeWithHandle = @import("./TypeWithHandle.zig");
+pub const AstNodeIterator = @import("./AstNodeIterator.zig");
 
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
     TypeWithHandle.init(allocator);
