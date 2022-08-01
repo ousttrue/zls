@@ -1,7 +1,7 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const UriBytePosition = @import("./UriBytePosition.zig");
-const AstGetChildren = @import("./AstGetChildren.zig");
+const AstNodeIterator = @import("./AstNodeIterator.zig");
 const ast = @import("./ast.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const DocumentScope = @import("./DocumentScope.zig");
@@ -39,9 +39,9 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32)) void {
         context.tokens_node[token_idx] = idx;
     }
 
-    var children = AstGetChildren.init(context.allocator);
-    defer children.deinit();
-    for (children.getChildren(&context.tree, idx)) |child| {
+    var it = AstNodeIterator.init(idx);
+    _ = async it.iterateAsync(context.tree);
+    while (it.value) |child| : (it.next()) {
         if (child >= context.nodes_parent.len) {
             const tags = tree.nodes.items(.tag);
             const node_tag = tags[idx];
@@ -238,14 +238,15 @@ pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx:
 
 pub fn getRootIdentifier(self: Self, node_idx: u32) u32 {
     var tag = self.tree.nodes.items(.tag);
-    if(tag[node_idx] != .field_access)
-    {
+    if (tag[node_idx] != .field_access) {
         return node_idx;
     }
 
     var current = node_idx;
     while (true) {
-        var child = AstGetChildren.getChild(self.allocator, &self.tree, current);
+        var it = AstNodeIterator.init(current);
+        _ = async it.iterateAsync(self.tree);
+        const child = it.value.?;
         var child_tag = tag[child];
         switch (child_tag) {
             .identifier => {

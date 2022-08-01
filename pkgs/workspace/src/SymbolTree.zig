@@ -2,7 +2,7 @@ const std = @import("std");
 const ast = @import("./ast.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
-const AstGetChildren = @import("./AstGetChildren.zig");
+const AstNodeIterator = @import("./AstNodeIterator.zig");
 const logger = std.log.scoped(.SymbolTree);
 
 pub const Symbol = struct {
@@ -29,9 +29,9 @@ pub fn deinit(self: Self) void {
 }
 
 pub fn traverse(self: *Self, node: Ast.Node.Index) anyerror!void {
-    var children = AstGetChildren.init(self.allocator);
-    defer children.deinit();
-    for (children.getChildren(&self.tree, node)) |child| {
+    var it = AstNodeIterator.init(node);
+    _ = async it.iterateAsync(self.tree);
+    while (it.value) |child| : (it.next()) {
         if (TypeWithHandle.getDeclName(self.tree, child)) |name| {
             if (name.len > 0) {
                 // logger.debug("symbol: {s}", .{name});
@@ -42,7 +42,7 @@ pub fn traverse(self: *Self, node: Ast.Node.Index) anyerror!void {
                 });
                 try self.traverse(child);
             }
-        } 
+        }
     }
 }
 
