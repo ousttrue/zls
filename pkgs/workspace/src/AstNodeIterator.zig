@@ -127,7 +127,7 @@ pub const NodeChildren = union(enum) {
             .@"suspend" => .{ .one = node_data.lhs },
             .@"resume" => .{ .one = node_data.lhs },
             .@"continue" => .none,
-            .@"break" => .{ .two = node_data },
+            .@"break" => .{ .one = node_data.rhs },
             .@"return" => .{ .one = node_data.lhs },
             .fn_proto_simple => .{ .fn_proto = tree.fnProtoSimple(buffer[0..1], idx) },
             .fn_proto_multi => .{ .fn_proto = tree.fnProtoMulti(idx) },
