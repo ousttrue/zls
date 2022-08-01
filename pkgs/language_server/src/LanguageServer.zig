@@ -378,6 +378,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
     // const tag = doc.ast_context.tree.nodes.items(.tag);
     var buffer: [2]u32 = undefined;
     var i: u32 = 0;
+    const allocator = arena.allocator();
     while (i < tree.nodes.len) : (i += 1) {
         const children = AstNodeIterator.NodeChildren.init(doc.ast_context.tree, i, &buffer);
         switch (children) {
@@ -387,24 +388,24 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
                 const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token_idx, true, self.config)) |refs| refs.len else 0;
                 const start = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.start, self.encoding);
                 const end = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.end, self.encoding);
-                const text = try std.fmt.allocPrint(arena.allocator(), "{}", .{n});
-                const arg = try std.fmt.allocPrint(arena.allocator(), "{}", .{token_idx});
+                const text = try std.fmt.allocPrint(allocator, "{}", .{n});
+                _ = text;
+                // const arg = try std.fmt.allocPrint(allocator, "{}", .{token_idx});
                 // logger.debug("{s}", .{text});
                 try data.append(.{
                     .range = .{
                         .start = .{
                             .line = start.line,
-                            .character = start.x,
+                            .character = 0,
                         },
                         .end = .{
                             .line = end.line,
-                            .character = end.x,
+                            .character = 1,
                         },
                     },
                     .command = .{
                         .title = text,
-                        .command = "references",
-                        .arguments = &.{arg},
+                        .command = "",
                     },
                 });
             },

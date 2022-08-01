@@ -60,7 +60,7 @@ pub const NodeChildren = union(enum) {
         return switch (node_tag) {
             .root => .{ .nodes = tree.rootDecls() },
             .@"usingnamespace" => .{ .one = node_data.lhs },
-            .test_decl => .{ .two = node_data },
+            .test_decl => .{ .one = node_data.rhs },
             .global_var_decl => .{ .var_decl = tree.globalVarDecl(idx) },
             .local_var_decl => .{ .var_decl = tree.localVarDecl(idx) },
             .simple_var_decl => .{ .var_decl = tree.simpleVarDecl(idx) },
