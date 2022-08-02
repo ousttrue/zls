@@ -107,34 +107,13 @@ pub fn getGoto(
         },
     }
 
-    const idx = doc.ast_context.tokens_node[token_index];
-    const tag = doc.ast_context.tree.nodes.items(.tag);
-    const node_tag = tag[idx];
     var lookup = SymbolLookup.init(arena.allocator());
     defer lookup.deinit();
-    switch (node_tag) {
-        .field_access => {
-            if (lookup.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl| {
-                return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
-            } else {
-                return null;
-            }
-        },
-        // .label => {
-        //     if (try DeclWithHandle.lookupLabel(doc, token.loc.start)) |decl| {
-        //         return decl.gotoDefinitionSymbol(workspace, arena, false);
-        //     } else {
-        //         return null;
-        //     }
-        // },
-        else => {
-            if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
-                return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
-            } else {
-                return null;
-            }
-        },
-    }
+    const decl = lookup.lookupIdentifier(arena, workspace, doc, token_index) orelse {
+        return null;
+    };
+
+    return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
 }
 
 pub fn getRenferences(
@@ -150,38 +129,13 @@ pub fn getRenferences(
         return null;
     }
 
-    const idx = doc.ast_context.tokens_node[token_index];
-    const tag = doc.ast_context.tree.nodes.items(.tag);
-    const node_tag = tag[idx];
     var lookup = SymbolLookup.init(arena.allocator());
     defer lookup.deinit();
-    switch (node_tag) {
-        .field_access => {
-            if (lookup.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl| {
-                var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-                try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
-                return locs.items;
-            } else {
-                return null;
-            }
-        },
-        // .label => {
-        //     if ((try DeclWithHandle.lookupLabel(doc, token.loc.start))) |decl| {
-        //         var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-        //         try decl.labelReferences(include_decl, &locs);
-        //         return locs.items;
-        //     } else {
-        //         return null;
-        //     }
-        // },
-        else => {
-            if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
-                var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-                try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
-                return locs.items;
-            } else {
-                return null;
-            }
-        },
-    }
+    const decl = lookup.lookupIdentifier(arena, workspace, doc, token_index) orelse {
+        return null;
+    };
+
+    var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
+    try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
+    return locs.items;
 }
