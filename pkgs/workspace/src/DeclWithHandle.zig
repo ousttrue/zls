@@ -71,7 +71,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
     const node_tags = tree.nodes.items(.tag);
     const main_tokens = tree.nodes.items(.main_token);
     return switch (self.decl.*) {
-        .ast_node => |node| try TypeWithHandle.resolveTypeOfNodeInternal(
+        .ast_node => |node| TypeWithHandle.resolveTypeOfNodeInternal(
             arena,
             workspace,
             self.handle,
@@ -91,36 +91,36 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
                         return null;
                 }
             }
-            return ((try TypeWithHandle.resolveTypeOfNodeInternal(
+            return (TypeWithHandle.resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 self.handle,
                 param_decl.type_expr,
                 bound_type_params,
-            )) orelse return null).instanceTypeVal();
+            ) orelse return null).instanceTypeVal();
         },
-        .pointer_payload => |pay| try TypeWithHandle.resolveUnwrapOptionalType(
+        .pointer_payload => |pay| TypeWithHandle.resolveUnwrapOptionalType(
             arena,
             workspace,
-            (try TypeWithHandle.resolveTypeOfNodeInternal(
+            TypeWithHandle.resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 self.handle,
                 pay.condition,
                 bound_type_params,
-            )) orelse return null,
+            ) orelse return null,
             bound_type_params,
         ),
         .array_payload => |pay| try TypeWithHandle.resolveBracketAccessType(
             arena,
             workspace,
-            (try TypeWithHandle.resolveTypeOfNodeInternal(
+            TypeWithHandle.resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 self.handle,
                 pay.array_expr,
                 bound_type_params,
-            )) orelse return null,
+            ) orelse return null,
             .Single,
             bound_type_params,
         ),
@@ -132,7 +132,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
         .switch_payload => |pay| {
             if (pay.items.len == 0) return null;
             // TODO Peer type resolution, we just use the first item for now.
-            const switch_expr_type = (try TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, self.handle, pay.switch_expr, bound_type_params)) orelse return null;
+            const switch_expr_type = TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, self.handle, pay.switch_expr, bound_type_params) orelse return null;
             if (!switch_expr_type.isUnionType())
                 return null;
 
@@ -143,13 +143,13 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
                         .ast_node => |node| {
                             if (ast.containerField(switch_expr_type.handle.ast_context.tree, node)) |container_field| {
                                 if (container_field.ast.type_expr != 0) {
-                                    return ((try TypeWithHandle.resolveTypeOfNodeInternal(
+                                    return (TypeWithHandle.resolveTypeOfNodeInternal(
                                         arena,
                                         workspace,
                                         switch_expr_type.handle,
                                         container_field.ast.type_expr,
                                         bound_type_params,
-                                    )) orelse return null).instanceTypeVal();
+                                    ) orelse return null).instanceTypeVal();
                                 }
                             }
                         },
@@ -176,7 +176,7 @@ pub fn gotoDefinitionSymbol(
             if (resolve_alias) {
                 var lookup = SymbolLookup.init(arena.allocator());
                 defer lookup.deinit();
-                if (try lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+                if (lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
                     break :block result.bytePosition();
                 }
@@ -370,7 +370,7 @@ fn symbolReferencesInternal(
         .identifier => {
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, main_tokens[node])) |child| {
+            if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, main_tokens[node])) |child| {
                 if (std.meta.eql(self, child)) {
                     try locations.append(doc.tokenReference(main_tokens[node]));
                 }
@@ -652,7 +652,7 @@ fn symbolReferencesInternal(
             const left_type = try TypeWithHandle.resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, &bound_type_params)) orelse return,
+                TypeWithHandle.resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, &bound_type_params) orelse return,
                 &bound_type_params,
             );
 
@@ -663,7 +663,7 @@ fn symbolReferencesInternal(
 
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (try lookup.lookupSymbolContainer(
+            if (lookup.lookupSymbolContainer(
                 arena,
                 workspace,
                 left_type.handle,
@@ -843,7 +843,7 @@ pub fn hoverSymbol(
         .ast_node => |node| def: {
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (try lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+            if (lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 return try result.hoverSymbol(arena, workspace, hover_kind);
             }
             doc_str = try ast.getDocComments(arena.allocator(), tree, node, hover_kind);

@@ -276,7 +276,7 @@ pub fn getSignatureInfo(
                 // var tokenizer = std.zig.Tokenizer.init(copy);
 
                 // Resolve the expression.
-                if (try FieldAccessReturn.getFieldAccessType(
+                if (FieldAccessReturn.getFieldAccessType(
                     arena,
                     workspace,
                     doc,
@@ -312,14 +312,14 @@ pub fn getSignatureInfo(
                     const skip_self_param = !type_handle.type.is_type_val;
                     var lookup = SymbolLookup.init(arena.allocator());
                     defer lookup.deinit();
-                    const decl_handle = (try lookup.lookupSymbolContainer(
+                    const decl_handle = lookup.lookupSymbolContainer(
                         arena,
                         workspace,
                         type_handle.handle,
                         node,
                         name,
                         true,
-                    )) orelse {
+                    ) orelse {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;
                     };
@@ -332,7 +332,7 @@ pub fn getSignatureInfo(
                         },
                     };
 
-                    if (try lookup.resolveVarDeclAlias(
+                    if (lookup.resolveVarDeclAlias(
                         arena,
                         workspace,
                         decl_handle.handle,

@@ -16,7 +16,7 @@ pub fn getFieldAccessType(
     workspace: *Workspace,
     doc: *Document,
     token_idx: u32,
-) !?Self {
+) ?Self {
     var current_type = TypeWithHandle.typeVal(doc, 0);
     var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
     const idx = doc.ast_context.tokens_node[token_idx];
@@ -28,7 +28,7 @@ pub fn getFieldAccessType(
             .identifier => {
                 var lookup = SymbolLookup.init(arena.allocator());
                 defer lookup.deinit();
-                if (try lookup.lookupSymbolGlobalTokenIndex(
+                if (lookup.lookupSymbolGlobalTokenIndex(
                     arena,
                     workspace,
                     current_type.handle,
@@ -74,7 +74,7 @@ pub fn getFieldAccessType(
 
                         var lookup = SymbolLookup.init(arena.allocator());
                         defer lookup.deinit();
-                        if (try lookup.lookupSymbolContainer(
+                        if (lookup.lookupSymbolContainer(
                             arena,
                             workspace,
                             current_type.handle,
@@ -90,12 +90,12 @@ pub fn getFieldAccessType(
                         } else return null;
                     },
                     .question_mark => {
-                        current_type = (try TypeWithHandle.resolveUnwrapOptionalType(
+                        current_type = TypeWithHandle.resolveUnwrapOptionalType(
                             arena,
                             workspace,
                             current_type,
                             &bound_type_params,
-                        )) orelse return null;
+                        ) orelse return null;
                     },
                     else => {
                         logger.debug("Unrecognized token {} after period.", .{after_period_token.tag});

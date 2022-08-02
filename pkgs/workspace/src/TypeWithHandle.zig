@@ -222,7 +222,12 @@ pub fn innermostContainer(handle: *Document, source_index: usize) Self {
     return Self.typeVal(handle, current);
 }
 
-pub fn resolveTypeOfNode(arena: *std.heap.ArenaAllocator, workspace: *Workspace, handle: *Document, node: Ast.Node.Index) error{OutOfMemory}!?Self {
+pub fn resolveTypeOfNode(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    handle: *Document,
+    node: Ast.Node.Index,
+) ?Self {
     var bound_type_params = BoundTypeParams.init(arena.allocator());
     return resolveTypeOfNodeInternal(arena, workspace, handle, node, &bound_type_params);
 }
@@ -241,13 +246,13 @@ pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, hand
     const token_data = tree.nodes.items(.data);
     const in_container = innermostContainer(handle, token_starts[func.ast.fn_token]);
 
-    if (try resolveTypeOfNode(arena, workspace, handle, param.type_expr)) |resolved_type| {
+    if (resolveTypeOfNode(arena, workspace, handle, param.type_expr)) |resolved_type| {
         if (std.meta.eql(in_container, resolved_type))
             return true;
     }
 
     if (isPtrType(tree, param.type_expr)) {
-        if (try resolveTypeOfNode(
+        if (resolveTypeOfNode(
             arena,
             workspace,
             handle,
@@ -268,7 +273,7 @@ pub fn resolveReturnType(arena: *std.heap.ArenaAllocator, workspace: *Workspace,
         const ret = findReturnStatement(tree, fn_decl, fn_body.?) orelse return null;
         const data = tree.nodes.items(.data)[ret];
         if (data.lhs != 0) {
-            return try resolveTypeOfNodeInternal(arena, workspace, handle, data.lhs, bound_type_params);
+            return resolveTypeOfNodeInternal(arena, workspace, handle, data.lhs, bound_type_params);
         }
 
         return null;
@@ -276,7 +281,7 @@ pub fn resolveReturnType(arena: *std.heap.ArenaAllocator, workspace: *Workspace,
 
     if (fn_decl.ast.return_type == 0) return null;
     const return_type = fn_decl.ast.return_type;
-    const child_type = (try resolveTypeOfNodeInternal(arena, workspace, handle, return_type, bound_type_params)) orelse
+    const child_type = resolveTypeOfNodeInternal(arena, workspace, handle, return_type, bound_type_params) orelse
         return null;
 
     const is_inferred_error = tree.tokens.items(.tag)[tree.firstToken(return_type) - 1] == .bang;
@@ -306,13 +311,13 @@ pub fn resolveBracketAccessType(arena: *std.heap.ArenaAllocator, workspace: *Wor
 
     if (tag == .array_type or tag == .array_type_sentinel) {
         if (rhs == .Single)
-            return ((try resolveTypeOfNodeInternal(
+            return (resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 lhs.handle,
                 data.rhs,
                 bound_type_params,
-            )) orelse return null).instanceTypeVal();
+            ) orelse return null).instanceTypeVal();
         return Self{
             .type = .{ .data = .{ .slice = data.rhs }, .is_type_val = false },
             .handle = lhs.handle,
@@ -320,13 +325,13 @@ pub fn resolveBracketAccessType(arena: *std.heap.ArenaAllocator, workspace: *Wor
     } else if (ast.ptrType(tree, lhs_node)) |ptr_type| {
         if (ptr_type.size == .Slice) {
             if (rhs == .Single) {
-                return ((try resolveTypeOfNodeInternal(
+                return (resolveTypeOfNodeInternal(
                     arena,
                     workspace,
                     lhs.handle,
                     ptr_type.ast.child_type,
                     bound_type_params,
-                )) orelse return null).instanceTypeVal();
+                ) orelse return null).instanceTypeVal();
             }
             return lhs;
         }
@@ -336,14 +341,19 @@ pub fn resolveBracketAccessType(arena: *std.heap.ArenaAllocator, workspace: *Wor
 }
 
 /// Resolves the child type of an optional type
-pub fn resolveUnwrapOptionalType(arena: *std.heap.ArenaAllocator, workspace: *Workspace, opt: Self, bound_type_params: *BoundTypeParams) !?Self {
+pub fn resolveUnwrapOptionalType(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    opt: Self,
+    bound_type_params: *BoundTypeParams,
+) ?Self {
     const opt_node = switch (opt.type.data) {
         .other => |n| n,
         else => return null,
     };
 
     if (opt.handle.ast_context.tree.nodes.items(.tag)[opt_node] == .optional_type) {
-        return ((try resolveTypeOfNodeInternal(
+        return ((resolveTypeOfNodeInternal(
             arena,
             workspace,
             opt.handle,
@@ -366,13 +376,13 @@ pub fn resolveUnwrapErrorType(arena: *std.heap.ArenaAllocator, workspace: *Works
     };
 
     if (rhs.handle.ast_context.tree.nodes.items(.tag)[rhs_node] == .error_union) {
-        return ((try resolveTypeOfNodeInternal(
+        return (resolveTypeOfNodeInternal(
             arena,
             workspace,
             rhs.handle,
             rhs.handle.ast_context.tree.nodes.items(.data)[rhs_node].rhs,
             bound_type_params,
-        )) orelse return null).instanceTypeVal();
+        ) orelse return null).instanceTypeVal();
     }
 
     return null;
@@ -390,14 +400,14 @@ pub fn resolveTypeOfNodeInternal(
     doc: *Document,
     node: Ast.Node.Index,
     bound_type_params: *BoundTypeParams,
-) error{OutOfMemory}!?Self {
+) ?Self {
     // If we were asked to resolve this node before,
     // it is self-referential and we cannot resolve it.
     for (resolve_trail.items) |i| {
         if (std.meta.eql(i, NodeWithHandle{ doc, node }))
             return null;
     }
-    try resolve_trail.append(.{ doc, node });
+    resolve_trail.append(.{ doc, node }) catch unreachable;
     defer _ = resolve_trail.pop();
 
     const tree = doc.ast_context.tree;
@@ -416,7 +426,7 @@ pub fn resolveTypeOfNodeInternal(
         => {
             const var_decl = ast.varDecl(tree, node).?;
             if (var_decl.ast.type_node != 0) {
-                if (try resolveTypeOfNodeInternal(
+                if (resolveTypeOfNodeInternal(
                     arena,
                     workspace,
                     doc,
@@ -428,7 +438,7 @@ pub fn resolveTypeOfNodeInternal(
             if (var_decl.ast.init_node == 0)
                 return null;
 
-            return try resolveTypeOfNodeInternal(
+            return resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 doc,
@@ -446,7 +456,7 @@ pub fn resolveTypeOfNodeInternal(
 
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (try lookup.lookupSymbolGlobalTokenIndex(
+            if (lookup.lookupSymbolGlobalTokenIndex(
                 arena,
                 workspace,
                 doc,
@@ -478,7 +488,7 @@ pub fn resolveTypeOfNodeInternal(
             var params: [1]Ast.Node.Index = undefined;
             const call = ast.callFull(tree, node, &params) orelse unreachable;
 
-            const decl = (try resolveTypeOfNodeInternal(arena, workspace, doc, call.ast.fn_expr, bound_type_params)) orelse
+            const decl = resolveTypeOfNodeInternal(arena, workspace, doc, call.ast.fn_expr, bound_type_params) orelse
                 return null;
 
             if (decl.type.is_type_val) return null;
@@ -509,17 +519,18 @@ pub fn resolveTypeOfNodeInternal(
                     if (!Self.isMetaType(decl.handle.ast_context.tree, decl_param.type_expr))
                         continue;
 
-                    const argument_type = (try resolveTypeOfNodeInternal(
+                    const argument_type = resolveTypeOfNodeInternal(
                         arena,
                         workspace,
                         doc,
                         call.ast.params[i],
                         bound_type_params,
-                    )) orelse
+                    ) orelse {
                         continue;
+                    };
                     if (!argument_type.type.is_type_val) continue;
 
-                    _ = try bound_type_params.put(decl_param, argument_type);
+                    _ = bound_type_params.put(decl_param, argument_type) catch unreachable;
                 }
 
                 const has_body = decl.handle.ast_context.tree.nodes.items(.tag)[decl_node] == .fn_decl;
@@ -549,7 +560,7 @@ pub fn resolveTypeOfNodeInternal(
         .@"try",
         .address_of,
         => {
-            const base_type = (try resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, bound_type_params)) orelse
+            const base_type = resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, bound_type_params) orelse
                 return null;
             return switch (node_tags[node]) {
                 .@"comptime",
@@ -569,9 +580,9 @@ pub fn resolveTypeOfNodeInternal(
                 .slice_open,
                 => try resolveBracketAccessType(arena, workspace, base_type, .Range, bound_type_params),
                 .deref => try resolveDerefType(arena, workspace, base_type, bound_type_params),
-                .unwrap_optional => try resolveUnwrapOptionalType(arena, workspace, base_type, bound_type_params),
+                .unwrap_optional => resolveUnwrapOptionalType(arena, workspace, base_type, bound_type_params),
                 .array_access => try resolveBracketAccessType(arena, workspace, base_type, .Single, bound_type_params),
-                .@"orelse" => try resolveUnwrapOptionalType(arena, workspace, base_type, bound_type_params),
+                .@"orelse" => resolveUnwrapOptionalType(arena, workspace, base_type, bound_type_params),
                 .@"catch" => try resolveUnwrapErrorType(arena, workspace, base_type, bound_type_params),
                 .@"try" => try resolveUnwrapErrorType(arena, workspace, base_type, bound_type_params),
                 .address_of => {
@@ -594,7 +605,7 @@ pub fn resolveTypeOfNodeInternal(
             const left_type = try resolveFieldAccessLhsType(
                 arena,
                 workspace,
-                (try resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, bound_type_params)) orelse return null,
+                resolveTypeOfNodeInternal(arena, workspace, doc, datas[node].lhs, bound_type_params) orelse return null,
                 bound_type_params,
             );
 
@@ -604,7 +615,7 @@ pub fn resolveTypeOfNodeInternal(
             };
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (try lookup.lookupSymbolContainer(
+            if (lookup.lookupSymbolContainer(
                 arena,
                 workspace,
                 left_type.handle,
@@ -674,14 +685,14 @@ pub fn resolveTypeOfNodeInternal(
             });
             if (cast_map.has(call_name)) {
                 if (params.len < 1) return null;
-                return ((try resolveTypeOfNodeInternal(arena, workspace, doc, params[0], bound_type_params)) orelse return null).instanceTypeVal();
+                return (resolveTypeOfNodeInternal(arena, workspace, doc, params[0], bound_type_params) orelse return null).instanceTypeVal();
             }
 
             // Almost the same as the above, return a type value though.
             // TODO Do peer type resolution, we just keep the first for now.
             if (std.mem.eql(u8, call_name, "@TypeOf")) {
                 if (params.len < 1) return null;
-                var resolved_type = (try resolveTypeOfNodeInternal(arena, workspace, doc, params[0], bound_type_params)) orelse return null;
+                var resolved_type = resolveTypeOfNodeInternal(arena, workspace, doc, params[0], bound_type_params) orelse return null;
 
                 if (resolved_type.type.is_type_val) return null;
                 resolved_type.type.is_type_val = true;
@@ -745,13 +756,13 @@ pub fn resolveDerefType(
         const ptr_type = ast.ptrType(tree, deref_node).?;
         switch (token_tag) {
             .asterisk => {
-                return ((try resolveTypeOfNodeInternal(
+                return (resolveTypeOfNodeInternal(
                     arena,
                     workspace,
                     deref.handle,
                     ptr_type.ast.child_type,
                     bound_type_params,
-                )) orelse return null).instanceTypeVal();
+                ) orelse return null).instanceTypeVal();
             },
             .l_bracket, .asterisk_asterisk => return null,
             else => unreachable,

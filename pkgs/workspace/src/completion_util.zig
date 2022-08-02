@@ -206,7 +206,7 @@ pub fn iterateSymbolsContainerInternal(
         try use_trail.append(use);
 
         const lhs = tree.nodes.items(.data)[use.*].lhs;
-        const use_expr = (try TypeWithHandle.resolveTypeOfNode(arena, workspace, handle, lhs)) orelse continue;
+        const use_expr = (TypeWithHandle.resolveTypeOfNode(arena, workspace, handle, lhs)) orelse continue;
 
         const use_expr_node = switch (use_expr.type.data) {
             .other => |n| n,
@@ -346,7 +346,7 @@ fn nodeToCompletion(
 
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (try lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+            if (lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 const context = DeclToCompletionContext{
                     .completions = list,
                     .config = config,
@@ -627,7 +627,7 @@ fn iterateSymbolsGlobalInternal(
                 if (std.mem.indexOfScalar(*const Ast.Node.Index, use_trail.items, use) != null) continue;
                 try use_trail.append(use);
 
-                const use_expr = (try TypeWithHandle.resolveTypeOfNode(
+                const use_expr = (TypeWithHandle.resolveTypeOfNode(
                     arena,
                     workspace,
                     handle,
@@ -712,7 +712,7 @@ fn completeFieldAccess(
     const tag = doc.ast_context.tree.nodes.items(.tag);
     std.log.debug("node: {}", .{tag[idx]});
 
-    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_index - 1)) |result| {
+    if (FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_index - 1)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }

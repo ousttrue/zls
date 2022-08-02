@@ -44,7 +44,7 @@ pub fn getHover(
             defer lookup.deinit();
             switch (node_tag) {
                 .identifier => {
-                    if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
+                    if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
                         const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                         return try std.fmt.allocPrint(
                             allocator,
@@ -60,7 +60,13 @@ pub fn getHover(
                     }
                 },
                 .field_access => {
-                    const decl = try lookup.getSymbolFieldAccess(arena, workspace, doc, token_index);
+                    const decl = lookup.getSymbolFieldAccess(arena, workspace, doc, token_index) orelse {
+                        return try std.fmt.allocPrint(
+                            allocator,
+                            "{s}\n* decl {s} not found",
+                            .{ context_info, name },
+                        );
+                    };
                     const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                     return try std.fmt.allocPrint(
                         allocator,
@@ -145,13 +151,13 @@ pub fn getRename(
     return switch (node_tag) {
         .field_access => if (lookup.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl|
             try decl.renameSymbol(arena, workspace)
-        else |_|
+        else
             null,
         // .label => if (try DeclWithHandle.lookupLabel(doc, byte_position)) |decl|
         //     try decl.renameLabel(arena)
         // else
         //     null,
-        else => if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl|
+        else => if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl|
             try decl.renameSymbol(arena, workspace)
         else
             null,
@@ -185,8 +191,11 @@ pub fn getGoto(
     defer lookup.deinit();
     switch (node_tag) {
         .field_access => {
-            const decl = try lookup.getSymbolFieldAccess(arena, workspace, doc, token_index);
-            return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
+            if (lookup.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl| {
+                return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
+            } else {
+                return null;
+            }
         },
         // .label => {
         //     if (try DeclWithHandle.lookupLabel(doc, token.loc.start)) |decl| {
@@ -196,7 +205,7 @@ pub fn getGoto(
         //     }
         // },
         else => {
-            if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
+            if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
                 return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
             } else {
                 return null;
@@ -225,10 +234,13 @@ pub fn getRenferences(
     defer lookup.deinit();
     switch (node_tag) {
         .field_access => {
-            const decl = try lookup.getSymbolFieldAccess(arena, workspace, doc, token_index);
-            var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
-            try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
-            return locs.items;
+            if (lookup.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl| {
+                var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
+                try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
+                return locs.items;
+            } else {
+                return null;
+            }
         },
         // .label => {
         //     if ((try DeclWithHandle.lookupLabel(doc, token.loc.start))) |decl| {
@@ -240,7 +252,7 @@ pub fn getRenferences(
         //     }
         // },
         else => {
-            if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
+            if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
                 var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
                 try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
                 return locs.items;
