@@ -8,6 +8,15 @@ len: usize = 0,
 pub fn fromFullpath(fullpath: []const u8) Self {
     var self = Self{};
     std.mem.copy(u8, &self._buffer, fullpath);
+    var i: usize = 0;
+    while (i < fullpath.len) {
+        var c = fullpath[i];
+        var len = std.unicode.utf8ByteSequenceLength(c) catch unreachable;
+        if (c == '\\') {
+            self._buffer[i] = '/';
+        }
+        i += len;
+    }
     self.len = fullpath.len;
     return self;
 }
