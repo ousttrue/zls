@@ -279,7 +279,6 @@ pub fn getSignatureInfo(
                     arena,
                     workspace,
                     doc,
-                    expr_first_token,
                     expr_last_token,
                 )) |result| {
                     const type_handle = result.unwrapped orelse result.original;

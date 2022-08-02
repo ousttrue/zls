@@ -6,37 +6,30 @@ const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const ast = @import("./ast.zig");
 const logger = std.log.scoped(.FieldAccessReturn);
-const Self = @This();
 
+const Self = @This();
 original: TypeWithHandle,
 unwrapped: ?TypeWithHandle = null,
-
 pub fn getFieldAccessType(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
-    token_begin: u32,
-    token_end: u32,
+    doc: *Document,
+    token_idx: u32,
 ) !?Self {
-    var current_type = TypeWithHandle.typeVal(handle, 0);
+    var current_type = TypeWithHandle.typeVal(doc, 0);
     var bound_type_params = TypeWithHandle.BoundTypeParams.init(arena.allocator());
-
-    // var i = token_begin;
-    // while (i <= token_end) : (i += 1) {
-    //     const tok = handle.ast_context.tokens.items[i];
-    //     logger.debug("[{}] {s}", .{ i, handle.ast_context.getTokenText(tok) });
-    // }
-
-    var token_idx = token_begin;
-    while (token_idx <= token_end) : (token_idx += 1) {
-        const tok = handle.ast_context.tokens.items[token_idx];
+    const idx = doc.ast_context.tokens_node[token_idx];
+    const token_begin = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
+    var current = token_begin;
+    while (current <= token_idx) : (current += 1) {
+        const tok = doc.ast_context.tokens.items[current];
         switch (tok.tag) {
             .identifier => {
                 if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(
                     arena,
                     workspace,
                     current_type.handle,
-                    token_idx,
+                    current,
                 )) |child| {
                     if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {
                         current_type = child_type;
@@ -50,9 +43,9 @@ pub fn getFieldAccessType(
                 }
             },
             .period => {
-                token_idx += 1;
-                const after_period = token_idx;
-                const after_period_token = handle.ast_context.tokens.items[after_period];
+                current += 1;
+                const after_period = current;
+                const after_period_token = doc.ast_context.tokens.items[after_period];
                 switch (after_period_token.tag) {
                     .eof => {
                         // function labels cannot be dot accessed
@@ -63,7 +56,7 @@ pub fn getFieldAccessType(
                         };
                     },
                     .identifier => {
-                        if (after_period == token_end) {
+                        if (after_period == token_idx) {
                             return Self{
                                 .original = current_type,
                                 .unwrapped = try TypeWithHandle.resolveDerefType(arena, workspace, current_type, &bound_type_params),
@@ -81,7 +74,7 @@ pub fn getFieldAccessType(
                             workspace,
                             current_type.handle,
                             current_type_node,
-                            handle.ast_context.getTokenText(handle.ast_context.tokenFromBytePos(after_period_token.loc.start).?.token),
+                            doc.ast_context.getTokenText(doc.ast_context.tokenFromBytePos(after_period_token.loc.start).?.token),
                             !current_type.type.is_type_val,
                         )) |child| {
                             current_type = (try child.resolveType(
@@ -135,9 +128,9 @@ pub fn getFieldAccessType(
                         current_type = ret;
                         // Skip to the right paren
                         var paren_count: usize = 1;
-                        token_idx += 1;
-                        var next = handle.ast_context.tokens.items[token_idx];
-                        while (token_idx <= token_end) : (token_idx += 1) {
+                        current += 1;
+                        var next = doc.ast_context.tokens.items[current];
+                        while (current <= token_idx) : (current += 1) {
                             if (next.tag == .r_paren) {
                                 paren_count -= 1;
                                 if (paren_count == 0) break;
@@ -150,10 +143,10 @@ pub fn getFieldAccessType(
             },
             .l_bracket => {
                 var brack_count: usize = 1;
-                token_idx += 1;
-                var next = handle.ast_context.tokens.items[token_idx];
+                current += 1;
+                var next = doc.ast_context.tokens.items[current];
                 var is_range = false;
-                while (next.tag != .eof) : (token_idx += 1) {
+                while (next.tag != .eof) : (current += 1) {
                     if (next.tag == .r_bracket) {
                         brack_count -= 1;
                         if (brack_count == 0) break;

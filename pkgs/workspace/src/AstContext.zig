@@ -5,6 +5,7 @@ const AstNodeIterator = @import("./AstNodeIterator.zig");
 const ast = @import("./ast.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const DocumentScope = @import("./DocumentScope.zig");
+const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Self = @This();
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
@@ -225,7 +226,8 @@ pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx:
     const tag = self.tree.nodes.items(.tag);
     const node_tag = tag[node_idx];
     switch (node_tag) {
-        .field_access => {},
+        .field_access => {
+        },
         .enum_literal => {},
         else => {
             var u32_2: [2]u32 = undefined;

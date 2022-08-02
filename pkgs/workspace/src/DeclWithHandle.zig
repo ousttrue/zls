@@ -363,14 +363,13 @@ pub fn getSymbolFieldAccess(
     const idx = doc.ast_context.tokens_node[token_idx];
     const tag = doc.ast_context.tree.nodes.items(.tag);
     std.debug.assert(tag[idx] == .field_access);
-    const first = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
     const result = (try FieldAccessReturn.getFieldAccessType(
         arena,
         workspace,
         doc,
-        first,
         token_idx,
     )) orelse return error.NoFieldAccessType;
+
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {
         .other => |n| n,

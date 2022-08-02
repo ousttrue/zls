@@ -56,14 +56,6 @@ pub fn getHover(
                         );
                     }
                 },
-                // .fn_proto_multi => {
-                //     const signature = ast.getFunctionSignature(doc.ast_context.tree, doc.ast_context.tree.fnProtoMulti(idx));
-                //     return try std.fmt.allocPrint(
-                //         allocator,
-                //         "# function: {s}\n\n```zig\n{s}\n```",
-                //         .{ name, signature },
-                //     );
-                // },
                 .field_access => {
                     const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
                     const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
@@ -107,6 +99,14 @@ pub fn getHover(
                     // }
                     // return buffer.items;
                 },
+                // .fn_proto_multi => {
+                //     const signature = ast.getFunctionSignature(doc.ast_context.tree, doc.ast_context.tree.fnProtoMulti(idx));
+                //     return try std.fmt.allocPrint(
+                //         allocator,
+                //         "# function: {s}\n\n```zig\n{s}\n```",
+                //         .{ name, signature },
+                //     );
+                // },
                 //     .label => {
                 //         logger.debug("[hover][label_access]", .{});
                 //         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {

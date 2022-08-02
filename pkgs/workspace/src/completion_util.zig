@@ -707,11 +707,10 @@ fn completeFieldAccess(
         }
     }
     const idx = doc.ast_context.tokens_node[token_index - 1];
-    const token_begin = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
     const tag = doc.ast_context.tree.nodes.items(.tag);
     std.log.debug("node: {}", .{tag[idx]});
 
-    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_begin, token_index - 1)) |result| {
+    if (try FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_index - 1)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
