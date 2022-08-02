@@ -4,6 +4,7 @@ const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
+const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const ast = @import("./ast.zig");
 const Self = @This();
@@ -242,4 +243,39 @@ pub fn resolveVarDeclAlias(
     }
 
     return null;
+}
+
+pub fn getSymbolFieldAccess(
+    self: *Self,
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    doc: *Document,
+    token_idx: u32,
+) !DeclWithHandle {
+    const idx = doc.ast_context.tokens_node[token_idx];
+    const tag = doc.ast_context.tree.nodes.items(.tag);
+    std.debug.assert(tag[idx] == .field_access);
+    const result = (try FieldAccessReturn.getFieldAccessType(
+        arena,
+        workspace,
+        doc,
+        token_idx,
+    )) orelse return error.NoFieldAccessType;
+
+    const container_handle = result.unwrapped orelse result.original;
+    const container_handle_node = switch (container_handle.type.data) {
+        .other => |n| n,
+        else => return error.NodeNotFound,
+    };
+    const token = doc.ast_context.tokens.items[token_idx];
+    const name = doc.ast_context.getTokenText(token);
+
+    return (try self.lookupSymbolContainer(
+        arena,
+        workspace,
+        container_handle.handle,
+        container_handle_node,
+        name,
+        true,
+    )) orelse return error.ContainerSymbolNotFound;
 }

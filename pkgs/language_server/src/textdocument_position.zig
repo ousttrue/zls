@@ -40,10 +40,10 @@ pub fn getHover(
             const tag = doc.ast_context.tree.nodes.items(.tag);
             const idx = doc.ast_context.tokens_node[token_index];
             const node_tag = tag[idx];
+            var lookup = SymbolLookup.init(arena.allocator());
+            defer lookup.deinit();
             switch (node_tag) {
                 .identifier => {
-                    var lookup = SymbolLookup.init(arena.allocator());
-                    defer lookup.deinit();
                     if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
                         const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                         return try std.fmt.allocPrint(
@@ -60,7 +60,7 @@ pub fn getHover(
                     }
                 },
                 .field_access => {
-                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
+                    const decl = try lookup.getSymbolFieldAccess(arena, workspace, doc, token_index);
                     const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                     return try std.fmt.allocPrint(
                         allocator,
@@ -143,7 +143,7 @@ pub fn getRename(
     var lookup = SymbolLookup.init(arena.allocator());
     defer lookup.deinit();
     return switch (node_tag) {
-        .field_access => if (DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl|
+        .field_access => if (lookup.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl|
             try decl.renameSymbol(arena, workspace)
         else |_|
             null,
@@ -185,7 +185,7 @@ pub fn getGoto(
     defer lookup.deinit();
     switch (node_tag) {
         .field_access => {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
+            const decl = try lookup.getSymbolFieldAccess(arena, workspace, doc, token_index);
             return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
         },
         // .label => {
@@ -221,9 +221,11 @@ pub fn getRenferences(
     const idx = doc.ast_context.tokens_node[token_index];
     const tag = doc.ast_context.tree.nodes.items(.tag);
     const node_tag = tag[idx];
+    var lookup = SymbolLookup.init(arena.allocator());
+    defer lookup.deinit();
     switch (node_tag) {
         .field_access => {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
+            const decl = try lookup.getSymbolFieldAccess(arena, workspace, doc, token_index);
             var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
             try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
             return locs.items;
@@ -238,8 +240,6 @@ pub fn getRenferences(
         //     }
         // },
         else => {
-            var lookup = SymbolLookup.init(arena.allocator());
-            defer lookup.deinit();
             if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
                 var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
                 try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);

@@ -163,43 +163,6 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
     };
 }
 
-/// Token location inside source
-pub fn getSymbolFieldAccess(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    doc: *Document,
-    token_idx: u32,
-) !Self {
-    const idx = doc.ast_context.tokens_node[token_idx];
-    const tag = doc.ast_context.tree.nodes.items(.tag);
-    std.debug.assert(tag[idx] == .field_access);
-    const result = (try FieldAccessReturn.getFieldAccessType(
-        arena,
-        workspace,
-        doc,
-        token_idx,
-    )) orelse return error.NoFieldAccessType;
-
-    const container_handle = result.unwrapped orelse result.original;
-    const container_handle_node = switch (container_handle.type.data) {
-        .other => |n| n,
-        else => return error.NodeNotFound,
-    };
-    const token = doc.ast_context.tokens.items[token_idx];
-    const name = doc.ast_context.getTokenText(token);
-
-    var lookup = SymbolLookup.init(arena.allocator());
-    defer lookup.deinit();
-    return (try lookup.lookupSymbolContainer(
-        arena,
-        workspace,
-        container_handle.handle,
-        container_handle_node,
-        name,
-        true,
-    )) orelse return error.ContainerSymbolNotFound;
-}
-
 pub fn gotoDefinitionSymbol(
     self: Self,
     workspace: *Workspace,
@@ -231,7 +194,6 @@ pub fn gotoDefinitionSymbol(
         .loc = .{ .start = byte_position, .end = byte_position },
     };
 }
-
 
 pub fn renameSymbol(
     self: Self,
