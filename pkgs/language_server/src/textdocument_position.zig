@@ -92,7 +92,9 @@ pub fn getGoto(
         .string_literal => {
             const text = doc.ast_context.getTokenText(token);
             if (text.len > 2) {
-                return workspace.gotoDefinitionString(arena, doc, text[1 .. text.len - 1]);
+                // return workspace.gotoDefinitionString(arena, doc, text[1 .. text.len - 1]);
+                const uri = try workspace.uriFromImportStrAlloc(arena.allocator(), doc, text[1 .. text.len - 1]);
+                return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
             } else {
                 return null;
             }

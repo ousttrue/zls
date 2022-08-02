@@ -481,7 +481,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     };
 
     if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, false)) |location| {
-        const goto_doc = workspace.getDocument(location.uri) orelse return error.DocumentNotFound;
+        const goto_doc = workspace.getOrLoadDocument(location.uri) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 

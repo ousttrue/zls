@@ -43,6 +43,11 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line
     try self.refreshDocument();
 }
 
+pub fn update(self: *Self, text: [:0]u8) !void {
+    self.utf8_buffer.deinit();
+    self.utf8_buffer = try Utf8Buffer.init(self.allocator, text);
+}
+
 // pub fn applySave(self: *Self, zigenv: ZigEnv) !void {
 //     if (self.is_build_file) |build_file| {
 //         build_file.loadPackages(self.allocator, null, zigenv) catch |err| {
@@ -50,7 +55,6 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line
 //         };
 //     }
 // }
-
 
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
     const token = self.ast_context.tokens.items[token_idx];

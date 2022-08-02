@@ -168,7 +168,7 @@ pub fn gotoDefinitionSymbol(
     workspace: *Workspace,
     arena: *std.heap.ArenaAllocator,
     resolve_alias: bool,
-) !?UriBytePosition {
+) ?UriBytePosition {
     var handle = self.handle;
 
     const byte_position = switch (self.decl.*) {
