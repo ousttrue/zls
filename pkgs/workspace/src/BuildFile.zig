@@ -6,14 +6,14 @@ const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
 const Pkg = struct {
     name: []const u8,
-    uri: []const u8,
+    path: FixedPath,
 };
 const Self = @This();
 
 allocator: std.mem.Allocator,
 path: FixedPath,
 packages: std.ArrayListUnmanaged(Pkg),
-builtin_uri: ?[]const u8 = null,
+builtin_path: ?FixedPath = null,
 
 pub fn new(allocator: std.mem.Allocator, path: FixedPath) !*Self {
     var self = try allocator.create(Self);
@@ -26,13 +26,8 @@ pub fn new(allocator: std.mem.Allocator, path: FixedPath) !*Self {
 }
 
 pub fn delete(self: *Self) void {
-    if (self.builtin_uri) |builtin_uri| {
-        self.allocator.free(builtin_uri);
-    }
-
     for (self.packages.items) |pkg| {
         self.allocator.free(pkg.name);
-        self.allocator.free(pkg.uri);
     }
     self.packages.deinit(self.allocator);
     self.allocator.destroy(self);
@@ -62,7 +57,7 @@ fn loadBuildAssociatedConfiguration(self: *Self, allocator: std.mem.Allocator) !
     if (build_associated_config.relative_builtin_path) |relative_builtin_path| {
         var absolute_builtin_path = try std.mem.concat(allocator, u8, &.{ directory_path.slice(), relative_builtin_path });
         defer allocator.free(absolute_builtin_path);
-        self.builtin_uri = try URI.fromPath(allocator, absolute_builtin_path);
+        self.builtin_path = FixedPath.fromFullpath(absolute_builtin_path);
     }
 }
 
@@ -96,7 +91,6 @@ pub fn loadPackages(self: *Self, allocator: std.mem.Allocator, zigenv: ZigEnv) !
             if (exit_code == 0) {
                 for (self.packages.items) |old_pkg| {
                     allocator.free(old_pkg.name);
-                    allocator.free(old_pkg.uri);
                 }
 
                 self.packages.shrinkAndFree(allocator, 0);
@@ -117,7 +111,7 @@ pub fn loadPackages(self: *Self, allocator: std.mem.Allocator, zigenv: ZigEnv) !
 
                         (try self.packages.addOne(allocator)).* = .{
                             .name = duped_name,
-                            .uri = pkg_uri,
+                            .path = FixedPath.fromFullpath(pkg_abs_path),
                         };
                     }
                 }
@@ -143,9 +137,9 @@ pub fn extractPackages(allocator: std.mem.Allocator, path: FixedPath, zigenv: Zi
         logger.debug("loadBuildAssociatedConfiguration: {s} {}", .{ build_file.path.slice(), err });
     }
 
-    if (build_file.builtin_uri == null) {
-        build_file.builtin_uri = try URI.fromPath(allocator, zigenv.builtin_path.slice());
-        logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_uri});
+    if (build_file.builtin_path == null) {
+        build_file.builtin_path = zigenv.builtin_path;
+        logger.info("builtin config not found, falling back to default: {s}", .{build_file.builtin_path.?.slice()});
     }
 
     // TODO: Do this in a separate thread?

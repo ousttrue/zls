@@ -6,7 +6,6 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const ast = @import("./ast.zig");
 const FixedPath = @import("./FixedPath.zig");
-const URI = @import("./uri.zig");
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
@@ -85,49 +84,37 @@ pub fn getOrLoadDocument(self: *Self, path: FixedPath) ?*Document {
     return self.openDocument(path, contents) catch unreachable;
 }
 
-pub fn uriFromImportStrAlloc(
+pub fn resolveImportPath(
     self: Self,
-    allocator: std.mem.Allocator,
     doc: *Document,
     import_str: []const u8,
-) ![]const u8 {
+) !FixedPath {
     if (std.mem.eql(u8, import_str, "std")) {
         // special path
-        return try allocator.dupe(u8, self.zigenv.std_uri);
+        return self.zigenv.std_path;
     } else if (std.mem.eql(u8, import_str, "builtin")) {
         // special path
-        if (self.build_file.builtin_uri) |builtin_uri| {
-            return try allocator.dupe(u8, builtin_uri);
+        if (self.build_file.builtin_path) |builtin_path| {
+            return builtin_path;
         }
-        return try URI.fromPath(allocator, self.zigenv.builtin_path.slice());
+        return self.zigenv.builtin_path;
     } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
         // std.build.Pkg
         for (self.build_file.packages.items) |pkg| {
             if (std.mem.eql(u8, import_str, pkg.name)) {
-                return try allocator.dupe(u8, pkg.uri);
+                return pkg.path;
             }
         }
         return error.PkgNotFound;
     } else {
-        // "./relative/path_to.zig"
-        // const base = doc.uri;
-        // var base_len = base.len;
-        // while (base[base_len - 1] != '/' and base_len > 0) {
-        //     base_len -= 1;
-        // }
-        // base_len -= 1;
-        // if (base_len <= 0) {
-        //     return error.UriBadScheme;
-        // }
-        const path = doc.path.parent().?.child(import_str);
-        return try URI.fromPath(allocator, path.slice());
+        // relative path
+        const resolved = doc.path.parent().?.child(import_str);
+        logger.debug("{s}", .{resolved.slice()});
+        return resolved;
     }
 }
 
 pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) ?*Document {
-    const allocator = self.allocator;
-    const final_uri = self.uriFromImportStrAlloc(allocator, doc, import_str) catch return null;
-    defer allocator.free(final_uri);
-    const path = FixedPath.fromUri(final_uri) catch return null;
+    const path = self.resolveImportPath(doc, import_str) catch return null;
     return self.getOrLoadDocument(path);
 }

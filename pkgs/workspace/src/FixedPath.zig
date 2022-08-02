@@ -92,6 +92,9 @@ pub fn child(self: Self, name: []const u8) Self {
     copy._buffer[copy.len] = '/';
     std.mem.copy(u8, copy._buffer[(copy.len + 1)..], name);
     copy.len += 1 + name.len;
+
+    logger.debug("child: {s} + {s} = {s}", .{self.slice(), name, copy.slice()});
+
     return copy;
 }
 

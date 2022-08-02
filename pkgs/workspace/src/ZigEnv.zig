@@ -1,18 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const known_folders = @import("known-folders");
-const URI = @import("./uri.zig");
 const FixedPath = @import("./FixedPath.zig");
 const logger = std.log.scoped(.ZigEnv);
-
-fn stdUriFromLibPath(allocator: std.mem.Allocator, zpath: []const u8) ![]const u8 {
-    const std_path = try std.fs.path.resolve(allocator, &[_][]const u8{
-        zpath, "./std/std.zig",
-    });
-    defer allocator.free(std_path);
-    // Get the std_path as a URI, so we can just append to it!
-    return try URI.fromPath(allocator, std_path);
-}
 
 pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
     const env_path = std.process.getEnvVarOwned(allocator, "PATH") catch |err| switch (err) {
@@ -114,7 +104,7 @@ const Self = @This();
 allocator: std.mem.Allocator,
 exe: FixedPath,
 lib: FixedPath,
-std_uri: []const u8,
+std_path: FixedPath,
 builtin_path: FixedPath,
 build_runner_path: FixedPath,
 build_runner_cache_path: FixedPath,
@@ -198,17 +188,13 @@ pub fn init(
         .allocator = allocator,
         .exe = zig_exe_path,
         .lib = zig_lib_path,
-        .std_uri = try stdUriFromLibPath(allocator, zig_lib_path.slice()),
+        .std_path = zig_lib_path.child("std/std.zig"),
         .builtin_path = builtin_path,
         .build_runner_path = build_runner_path,
         .build_runner_cache_path = build_runner_cache_path,
         .cache_root = FixedPath.fromFullpath(cache_root),
         .global_cache_root = FixedPath.fromFullpath(global_cache_root),
     };
-}
-
-pub fn deinit(self: *Self) void {
-    self.allocator.free(self.std_uri);
 }
 
 pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![]const u8 {

@@ -167,7 +167,6 @@ pub fn main() anyerror!void {
         // files there this path can be ignored
         "ZLS_DONT_CARE",
     );
-    defer zigenv.deinit();
 
     ws.init(allocator, &data.builtins, &config);
     defer ws.deinit();
