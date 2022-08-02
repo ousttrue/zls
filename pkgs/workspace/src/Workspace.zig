@@ -104,7 +104,6 @@ pub fn resolveImportPath(
     } else {
         // relative path
         const resolved = doc.path.parent().?.child(import_str);
-        logger.debug("{s}", .{resolved.slice()});
         return resolved;
     }
 }
