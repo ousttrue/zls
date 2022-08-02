@@ -358,10 +358,9 @@ pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    byte_position: usize,
+    token_idx: u32,
 ) !Self {
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse return error.NoToken;
-    const idx = doc.ast_context.tokens_node[token_with_index.index];
+    const idx = doc.ast_context.tokens_node[token_idx];
     const tag = doc.ast_context.tree.nodes.items(.tag);
     std.debug.assert(tag[idx] == .field_access);
     const first = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
@@ -370,14 +369,15 @@ pub fn getSymbolFieldAccess(
         workspace,
         doc,
         first,
-        token_with_index.index,
+        token_idx,
     )) orelse return error.NoFieldAccessType;
     const container_handle = result.unwrapped orelse result.original;
     const container_handle_node = switch (container_handle.type.data) {
         .other => |n| n,
         else => return error.NodeNotFound,
     };
-    const name = doc.ast_context.getTokenTextFromBytePosition(byte_position) orelse return error.NoIdentifier;
+    const token = doc.ast_context.tokens.items[token_idx];
+    const name = doc.ast_context.getTokenText(token);
     return (try Self.lookupSymbolContainer(
         arena,
         workspace,

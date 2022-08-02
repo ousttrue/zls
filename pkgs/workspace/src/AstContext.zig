@@ -218,10 +218,23 @@ fn writePath(self: Self, buffer: *std.ArrayList(u8), node_idx: u32) anyerror!voi
 pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx: usize) ![]const u8 {
     var buffer = std.ArrayList(u8).init(allocator);
 
-    // ast path
     const w = buffer.writer();
-    try w.print("", .{});
+
+    // node
     const node_idx = self.tokens_node[token_idx];
+    const tag = self.tree.nodes.items(.tag);
+    const node_tag = tag[node_idx];
+    switch (node_tag) {
+        .field_access => {},
+        .enum_literal => {},
+        else => {
+            var u32_2: [2]u32 = undefined;
+            const children = AstNodeIterator.NodeChildren.init(self.tree, node_idx, &u32_2);
+            try children.debugPrint(w);
+        },
+    }
+
+    // ast path
     try self.writePath(&buffer, node_idx);
     try w.print(" => ", .{});
 

@@ -65,7 +65,7 @@ pub fn getHover(
                 //     );
                 // },
                 .field_access => {
-                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token.loc.start);
+                    const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
                     const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                     return try std.fmt.allocPrint(
                         allocator,
@@ -140,7 +140,7 @@ pub fn getRename(
     const tag = doc.ast_context.tree.nodes.items(.tag);
     const node_tag = tag[idx];
     return switch (node_tag) {
-        .field_access => if (DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token.loc.start)) |decl|
+        .field_access => if (DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index)) |decl|
             try decl.renameSymbol(arena, workspace)
         else |_|
             null,
@@ -181,7 +181,7 @@ pub fn getGoto(
     const node_tag = tag[idx];
     switch (node_tag) {
         .field_access => {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token.loc.start);
+            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
             return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
         },
         // .label => {
@@ -220,7 +220,7 @@ pub fn getRenferences(
     const node_tag = tag[idx];
     switch (node_tag) {
         .field_access => {
-            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token.loc.start);
+            const decl = try DeclWithHandle.getSymbolFieldAccess(arena, workspace, doc, token_index);
             var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
             try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
             return locs.items;

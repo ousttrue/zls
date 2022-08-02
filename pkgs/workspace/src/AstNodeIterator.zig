@@ -51,6 +51,7 @@ pub const NodeChildren = union(enum) {
         idx: Ast.Node.Index,
         buffer: []Ast.Node.Index,
     ) NodeChildren {
+        std.debug.assert(idx<tree.nodes.len);
         std.debug.assert(buffer.len >= 2);
         const tag = tree.nodes.items(.tag);
         const node_tag = tag[idx];
@@ -158,6 +159,31 @@ pub const NodeChildren = union(enum) {
             .asm_output, .asm_input, .error_value => .none,
             .error_union => .{ .two = node_data },
         };
+    }
+
+    pub fn debugPrint(self: NodeChildren, w: anytype) !void {
+        try w.print("\n* NodeChildren: {s}\n\n", .{@tagName(self)});
+        switch (self) {
+            .none => {},
+            .one => {},
+            .two => {},
+            .nodes => {},
+            .var_decl => {},
+            .array_type => {},
+            .ptr_type => {},
+            .slice => {},
+            .array_init => {},
+            .struct_init => {},
+            .call => {},
+            .@"switch" => {},
+            .switch_case => {},
+            .@"while" => {},
+            .@"if" => {},
+            .fn_proto => {},
+            .container_decl => {},
+            .container_field => {},
+            .@"asm" => {},
+        }
     }
 };
 
