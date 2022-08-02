@@ -3,11 +3,15 @@
 ///    * uri: Document
 ///
 const std = @import("std");
+const Ast = std.zig.Ast;
+const ast = @import("./ast.zig");
 const FixedPath = @import("./FixedPath.zig");
 const URI = @import("./uri.zig");
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
+const ImportStrIterator = @import("./ImportStrIterator.zig");
+const UriBytePosition = @import("./UriBytePosition.zig");
 const logger = std.log.scoped(.Workspace);
 const Self = @This();
 
@@ -244,4 +248,51 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) !?*Doc
     const duped_final_uri = try allocator.dupe(u8, final_uri);
     errdefer allocator.free(duped_final_uri);
     return try self.newDocument(duped_final_uri, file_contents);
+}
+
+fn nodeContainsSourceIndex(tree: Ast, node: Ast.Node.Index, token_idx: u32) bool {
+    const first_token = tree.firstToken(node);
+    const last_token = ast.lastToken(tree, node);
+    return token_idx >= first_token and token_idx <= last_token;
+}
+
+fn importStr(tree: std.zig.Ast, node: usize) ?[]const u8 {
+    const node_tags = tree.nodes.items(.tag);
+    const data = tree.nodes.items(.data)[node];
+    const params = switch (node_tags[node]) {
+        .builtin_call, .builtin_call_comma => tree.extra_data[data.lhs..data.rhs],
+        .builtin_call_two, .builtin_call_two_comma => if (data.lhs == 0)
+            &[_]Ast.Node.Index{}
+        else if (data.rhs == 0)
+            &[_]Ast.Node.Index{data.lhs}
+        else
+            &[_]Ast.Node.Index{ data.lhs, data.rhs },
+        else => unreachable,
+    };
+
+    if (params.len != 1) return null;
+
+    const import_str = tree.tokenSlice(tree.nodes.items(.main_token)[params[0]]);
+    return import_str[1 .. import_str.len - 1];
+}
+
+pub fn gotoDefinitionString(
+    self: *Self,
+    arena: *std.heap.ArenaAllocator,
+    doc: *Document,
+    token_idx: u32,
+) !?UriBytePosition {
+    const tree = doc.ast_context.tree;
+    var it = ImportStrIterator.init(tree);
+    while (it.next()) |node| {
+        if (nodeContainsSourceIndex(tree, node, token_idx)) {
+            if (importStr(tree, node)) |import_str| {
+                if (try self.uriFromImportStrAlloc(arena.allocator(), doc, import_str)) |uri| {
+                    // logger.debug("gotoDefinitionString: {s}", .{uri});
+                    return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
+                }
+            }
+        }
+    }
+    return null;
 }
