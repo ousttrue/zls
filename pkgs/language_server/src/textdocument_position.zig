@@ -90,7 +90,12 @@ pub fn getGoto(
     const token = doc.ast_context.tokens.items[token_index];
     switch (token.tag) {
         .string_literal => {
-            return workspace.gotoDefinitionString(arena, doc, token_index);
+            const text = doc.ast_context.getTokenText(token);
+            if (text.len > 2) {
+                return workspace.gotoDefinitionString(arena, doc, text[1 .. text.len - 1]);
+            } else {
+                return null;
+            }
         },
         .identifier => {
             // continue;
