@@ -163,105 +163,6 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
     };
 }
 
-
-fn resolveVarDeclAliasInternal(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    handle: *Document,
-    node: Ast.Node.Index,
-    root: bool,
-) error{OutOfMemory}!?Self {
-    _ = root;
-    const tree = handle.ast_context.tree;
-    const node_tags = tree.nodes.items(.tag);
-    const main_tokens = tree.nodes.items(.main_token);
-    const datas = tree.nodes.items(.data);
-
-    if (node_tags[node] == .identifier) {
-        const token = main_tokens[node];
-        return try lookupSymbolGlobalTokenIndex(
-            arena,
-            workspace,
-            handle,
-            token,
-        );
-    }
-
-    if (node_tags[node] == .field_access) {
-        const lhs = datas[node].lhs;
-
-        var container_node: Ast.Node.Index = undefined;
-        var container_handle: *Document = undefined;
-        if (ast.isBuiltinCall(tree, lhs)) {
-            if (!std.mem.eql(u8, tree.tokenSlice(main_tokens[lhs]), "@import"))
-                return null;
-
-            const inner_node = (try TypeWithHandle.resolveTypeOfNode(arena, workspace, handle, lhs)) orelse return null;
-            // assert root node
-            std.debug.assert(inner_node.type.data.other == 0);
-            container_handle = inner_node.handle;
-            container_node = inner_node.type.data.other;
-        } else if (try resolveVarDeclAliasInternal(arena, workspace, handle, lhs, false)) |decl_handle| {
-            if (decl_handle.decl.* != .ast_node) return null;
-            const resolved = (try TypeWithHandle.resolveTypeOfNode(arena, workspace, decl_handle.handle, decl_handle.decl.ast_node)) orelse return null;
-            const resolved_node = switch (resolved.type.data) {
-                .other => |n| n,
-                else => return null,
-            };
-            if (!ast.isContainer(resolved.handle.ast_context.tree, resolved_node)) return null;
-            container_handle = resolved.handle;
-            container_node = resolved_node;
-        } else {
-            return null;
-        }
-
-        var lookup = SymbolLookup.init(arena.allocator());
-        defer lookup.deinit();
-        return try lookup.lookupSymbolContainer(
-            arena,
-            workspace,
-            container_handle,
-            container_node,
-            tree.tokenSlice(datas[node].rhs),
-            false,
-        );
-    }
-    return null;
-}
-
-/// Resolves variable declarations consisting of chains of imports and field accesses of containers, ending with the same name as the variable decl's name
-/// Examples:
-///```zig
-/// const decl = @import("decl-file.zig").decl;
-/// const other = decl.middle.other;
-///```
-pub fn resolveVarDeclAlias(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    handle: *Document,
-    decl: Ast.Node.Index,
-) !?Self {
-    const tree = handle.ast_context.tree;
-    const token_tags = tree.tokens.items(.tag);
-    const node_tags = tree.nodes.items(.tag);
-
-    if (ast.varDecl(handle.ast_context.tree, decl)) |var_decl| {
-        if (var_decl.ast.init_node == 0) return null;
-        const base_exp = var_decl.ast.init_node;
-        if (token_tags[var_decl.ast.mut_token] != .keyword_const) return null;
-
-        if (node_tags[base_exp] == .field_access) {
-            const name = tree.tokenSlice(tree.nodes.items(.data)[base_exp].rhs);
-            if (!std.mem.eql(u8, tree.tokenSlice(var_decl.ast.mut_token + 1), name))
-                return null;
-
-            return try resolveVarDeclAliasInternal(arena, workspace, handle, base_exp, true);
-        }
-    }
-
-    return null;
-}
-
 /// Token location inside source
 pub fn getSymbolFieldAccess(
     arena: *std.heap.ArenaAllocator,
@@ -310,7 +211,9 @@ pub fn gotoDefinitionSymbol(
     const byte_position = switch (self.decl.*) {
         .ast_node => |node| block: {
             if (resolve_alias) {
-                if (try resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+                var lookup = SymbolLookup.init(arena.allocator());
+                defer lookup.deinit();
+                if (try lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                     handle = result.handle;
                     break :block result.bytePosition();
                 }
@@ -329,43 +232,6 @@ pub fn gotoDefinitionSymbol(
     };
 }
 
-pub fn lookupSymbolGlobalTokenIndex(
-    arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
-    handle: *Document,
-    token_idx: u32,
-) error{OutOfMemory}!?Self {
-    // const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
-    const token = handle.ast_context.tokens.items[token_idx];
-    const symbol = handle.ast_context.getTokenText(token);
-    const innermost_scope_idx = handle.ast_context.document_scope.innermostBlockScopeIndex(token.loc.start);
-
-    var curr = innermost_scope_idx;
-    while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.ast_context.document_scope.scopes[curr];
-        if (token.loc.start >= scope.range.start and token.loc.end <= scope.range.end) blk: {
-            if (scope.decls.getEntry(symbol)) |candidate| {
-                switch (candidate.value_ptr.*) {
-                    .ast_node => |node| {
-                        if (handle.ast_context.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
-                    },
-                    .label_decl => break :blk,
-                    else => {},
-                }
-                return Self{
-                    .decl = candidate.value_ptr,
-                    .handle = handle,
-                };
-            }
-
-            var lookup = SymbolLookup.init(arena.allocator());
-            defer lookup.deinit();
-            if (try lookup.resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| return result;
-        }
-        if (curr == 0) break;
-    }
-    return null;
-}
 
 pub fn renameSymbol(
     self: Self,
@@ -540,7 +406,9 @@ fn symbolReferencesInternal(
             }
         },
         .identifier => {
-            if (try lookupSymbolGlobalTokenIndex(arena, workspace, doc, main_tokens[node])) |child| {
+            var lookup = SymbolLookup.init(arena.allocator());
+            defer lookup.deinit();
+            if (try lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, main_tokens[node])) |child| {
                 if (std.meta.eql(self, child)) {
                     try locations.append(doc.tokenReference(main_tokens[node]));
                 }
@@ -1011,7 +879,9 @@ pub fn hoverSymbol(
 
     const def_str = switch (self.decl.*) {
         .ast_node => |node| def: {
-            if (try Self.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+            var lookup = SymbolLookup.init(arena.allocator());
+            defer lookup.deinit();
+            if (try lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 return try result.hoverSymbol(arena, workspace, hover_kind);
             }
             doc_str = try ast.getDocComments(arena.allocator(), tree, node, hover_kind);

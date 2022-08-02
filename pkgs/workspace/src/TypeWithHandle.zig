@@ -444,7 +444,9 @@ pub fn resolveTypeOfNodeInternal(
                 };
             }
 
-            if (try DeclWithHandle.lookupSymbolGlobalTokenIndex(
+            var lookup = SymbolLookup.init(arena.allocator());
+            defer lookup.deinit();
+            if (try lookup.lookupSymbolGlobalTokenIndex(
                 arena,
                 workspace,
                 doc,

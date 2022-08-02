@@ -8,6 +8,7 @@ const Config = @import("./Config.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
+const SymbolLookup = @import("./SymbolLookup.zig");
 const ast = @import("./ast.zig");
 const Ast = std.zig.Ast;
 const builtin_completions = @import("./builtin_completions.zig");
@@ -343,7 +344,9 @@ fn nodeToCompletion(
             const var_decl = ast.varDecl(tree, node).?;
             const is_const = token_tags[var_decl.ast.mut_token] == .keyword_const;
 
-            if (try DeclWithHandle.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
+            var lookup = SymbolLookup.init(arena.allocator());
+            defer lookup.deinit();
+            if (try lookup.resolveVarDeclAlias(arena, workspace, handle, node)) |result| {
                 const context = DeclToCompletionContext{
                     .completions = list,
                     .config = config,
@@ -700,9 +703,8 @@ fn completeFieldAccess(
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
     {
         const token = doc.ast_context.tokens.items[token_index];
-        if(token.tag != .period)
-        {
-            logger.warn("not period: {} => {s}", .{token.tag, doc.ast_context.getTokenText(token)});
+        if (token.tag != .period) {
+            logger.warn("not period: {} => {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
             return completions.items;
         }
     }
@@ -776,7 +778,6 @@ pub fn process(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
-
     const token = doc.ast_context.tokens.items[token_index];
     logger.debug("prev: {}: {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
 

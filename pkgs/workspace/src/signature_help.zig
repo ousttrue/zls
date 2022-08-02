@@ -332,7 +332,7 @@ pub fn getSignatureInfo(
                         },
                     };
 
-                    if (try DeclWithHandle.resolveVarDeclAlias(
+                    if (try lookup.resolveVarDeclAlias(
                         arena,
                         workspace,
                         decl_handle.handle,
