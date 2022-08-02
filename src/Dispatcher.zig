@@ -1,7 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp");
 const language_server = @import("language_server");
-const logger = std.log.scoped(.Didpatcher);
+const logger = std.log.scoped(.Dispatcher);
 
 const RequestProto = fn (self: *language_server.LanguageServer, arena: *std.heap.ArenaAllocator, id: i64, params: ?std.json.Value) anyerror!lsp.Response;
 const RequestFunctor = struct {
