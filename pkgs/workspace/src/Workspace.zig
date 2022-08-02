@@ -60,7 +60,7 @@ pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
         // new document
         const duped_uri = try self.allocator.dupeZ(u8, uri);
         errdefer self.allocator.free(duped_uri);
-        const doc = try Document.new(self.allocator, uri, duped_text);
+        const doc = try Document.new(self.allocator, try FixedPath.fromUri(uri), duped_text);
         errdefer doc.delete();
         logger.debug("new document: {s}", .{duped_uri});
         try self.handles.putNoClobber(duped_uri, doc);
@@ -129,16 +129,17 @@ pub fn uriFromImportStrAlloc(
         return error.PkgNotFound;
     } else {
         // "./relative/path_to.zig"
-        const base = doc.uri;
-        var base_len = base.len;
-        while (base[base_len - 1] != '/' and base_len > 0) {
-            base_len -= 1;
-        }
-        base_len -= 1;
-        if (base_len <= 0) {
-            return error.UriBadScheme;
-        }
-        return try URI.pathRelative(allocator, base[0..base_len], import_str);
+        // const base = doc.uri;
+        // var base_len = base.len;
+        // while (base[base_len - 1] != '/' and base_len > 0) {
+        //     base_len -= 1;
+        // }
+        // base_len -= 1;
+        // if (base_len <= 0) {
+        //     return error.UriBadScheme;
+        // }
+        const path = doc.path.parent().?.child(import_str);
+        return try URI.fromPath(allocator, path.slice());
     }
 }
 

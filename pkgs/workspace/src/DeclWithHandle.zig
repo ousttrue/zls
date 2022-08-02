@@ -190,7 +190,7 @@ pub fn gotoDefinitionSymbol(
     };
 
     return UriBytePosition{
-        .uri = handle.uri,
+        .path = handle.path,
         .loc = .{ .start = byte_position, .end = byte_position },
     };
 }

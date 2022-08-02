@@ -1,5 +1,6 @@
 const std = @import("std");
+const FixedPath = @import("./FixedPath.zig");
 const Self = @This();
 
-uri: []const u8,
+path: FixedPath,
 loc: std.zig.Token.Loc,

@@ -17,6 +17,7 @@ const SymbolTree = ws.SymbolTree;
 const AstNodeIterator = ws.AstNodeIterator;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
+const URI = ws.URI;
 const builtin_completions = ws.builtin_completions;
 const getSignatureInfo = ws.signature_help.getSignatureInfo;
 
@@ -480,8 +481,9 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, false)) |location| {
-        const goto_doc = workspace.getOrLoadDocument(location.uri) orelse return error.DocumentNotFound;
+    if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, false)) |location| {        
+        const uri = try URI.fromPath(arena.allocator(), location.path.slice());
+        const goto_doc = workspace.getOrLoadDocument(uri) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 
@@ -489,7 +491,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
             .id = id,
             .result = .{
                 .Location = .{
-                    .uri = location.uri,
+                    .uri = uri,
                     .range = .{
                         .start = goto_pos,
                         .end = goto_pos,
@@ -519,7 +521,8 @@ pub fn @"textDocument/typeDefinition"(self: *Self, arena: *std.heap.ArenaAllocat
     };
 
     if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, true)) |location| {
-        const goto_doc = workspace.getDocument(location.uri) orelse return error.DocumentNotFound;
+        const uri = try URI.fromPath(arena.allocator(), location.path.slice());
+        const goto_doc = workspace.getDocument(uri) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 
@@ -527,7 +530,7 @@ pub fn @"textDocument/typeDefinition"(self: *Self, arena: *std.heap.ArenaAllocat
             .id = id,
             .result = .{
                 .Location = .{
-                    .uri = location.uri,
+                    .uri = uri,
                     .range = .{
                         .start = goto_pos,
                         .end = goto_pos,
@@ -615,14 +618,15 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     if (try textdocument_position.getRename(arena, workspace, doc, token_with_index.index)) |locations| {
         var changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator());
         const allocator = arena.allocator();
-        for (locations) |loc| {
-            var text_edits = if (changes.get(loc.uri)) |slice|
+        for (locations) |location| {
+            const uri = try URI.fromPath(arena.allocator(), location.path.slice());
+            var text_edits = if (changes.get(uri)) |slice|
                 std.ArrayList(lsp.TextEdit).fromOwnedSlice(allocator, slice)
             else
                 std.ArrayList(lsp.TextEdit).init(allocator);
 
-            var start = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.start, self.encoding);
-            var end = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.end, self.encoding);
+            var start = try doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
+            var end = try doc.utf8_buffer.getPositionFromBytePosition(location.loc.end, self.encoding);
 
             (try text_edits.addOne()).* = .{
                 .range = .{
@@ -631,7 +635,7 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
                 },
                 .newText = params.newName,
             };
-            try changes.put(loc.uri, text_edits.toOwnedSlice());
+            try changes.put(uri, text_edits.toOwnedSlice());
         }
 
         return lsp.Response{
@@ -667,15 +671,16 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
         self.config,
     )) |src| {
         var locations = std.ArrayList(lsp.Location).init(arena.allocator());
-        for (src) |loc| {
-            var start = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.start, self.encoding);
-            var end = try doc.utf8_buffer.getPositionFromBytePosition(loc.loc.end, self.encoding);
+        for (src) |location| {
+            const uri = try URI.fromPath(arena.allocator(), location.path.slice());
+            var start = try doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
+            var end = try doc.utf8_buffer.getPositionFromBytePosition(location.loc.end, self.encoding);
             if (self.encoding == .utf16) {
                 start = try doc.utf8_buffer.utf8PositionToUtf16(start);
                 end = try doc.utf8_buffer.utf8PositionToUtf16(end);
             }
             try locations.append(.{
-                .uri = loc.uri,
+                .uri = uri,
                 .range = .{
                     .start = .{ .line = start.line, .character = start.x },
                     .end = .{ .line = end.line, .character = end.x },

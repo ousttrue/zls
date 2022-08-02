@@ -6,20 +6,21 @@ const ast = @import("./ast.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const AstContext = @import("./AstContext.zig");
 const UriBytePosition = @import("./UriBytePosition.zig");
+const FixedPath = @import("./FixedPath.zig");
 const logger = std.log.scoped(.Document);
 
 const Self = @This();
 allocator: std.mem.Allocator,
-uri: []const u8,
+path: FixedPath,
 utf8_buffer: Utf8Buffer,
 ast_context: *AstContext,
 
-pub fn new(allocator: std.mem.Allocator, uri: []const u8, text: [:0]u8) !*Self {
+pub fn new(allocator: std.mem.Allocator, path: FixedPath, text: [:0]u8) !*Self {
     var self = try allocator.create(Self);
     errdefer allocator.destroy(self);
     self.* = Self{
         .allocator = allocator,
-        .uri = uri,
+        .path = path,
         .utf8_buffer = try Utf8Buffer.init(allocator, text),
         .ast_context = try AstContext.new(allocator, text),
     };
@@ -59,7 +60,7 @@ pub fn update(self: *Self, text: [:0]u8) !void {
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
     const token = self.ast_context.tokens.items[token_idx];
     return UriBytePosition{
-        .uri = self.uri,
+        .path = self.path,
         .loc = token.loc,
     };
 }

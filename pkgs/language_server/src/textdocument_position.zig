@@ -6,6 +6,7 @@ const Document = ws.Document;
 const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const SymbolLookup = ws.SymbolLookup;
+const FixedPath = ws.FixedPath;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 
@@ -94,7 +95,7 @@ pub fn getGoto(
             if (text.len > 2) {
                 // return workspace.gotoDefinitionString(arena, doc, text[1 .. text.len - 1]);
                 const uri = try workspace.uriFromImportStrAlloc(arena.allocator(), doc, text[1 .. text.len - 1]);
-                return UriBytePosition{ .uri = uri, .loc = .{ .start = 0, .end = 0 } };
+                return UriBytePosition{ .path = try FixedPath.fromUri(uri), .loc = .{ .start = 0, .end = 0 } };
             } else {
                 return null;
             }
