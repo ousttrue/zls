@@ -4,6 +4,7 @@ const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
+const SymbolLookup = @import("./SymbolLookup.zig");
 const ast = @import("./ast.zig");
 const logger = std.log.scoped(.FieldAccessReturn);
 
@@ -69,7 +70,9 @@ pub fn getFieldAccessType(
                             else => return null,
                         };
 
-                        if (try DeclWithHandle.lookupSymbolContainer(
+                        var lookup = SymbolLookup.init(arena.allocator());
+                        defer lookup.deinit();
+                        if (try lookup.lookupSymbolContainer(
                             arena,
                             workspace,
                             current_type.handle,

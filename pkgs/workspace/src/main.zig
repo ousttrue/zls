@@ -20,12 +20,10 @@ pub const AstNodeIterator = @import("./AstNodeIterator.zig");
 
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
     TypeWithHandle.init(allocator);
-    DeclWithHandle.init(allocator);
     builtin_completions.init(allocator, builtins, config);
 }
 
 pub fn deinit() void {
     builtin_completions.deinit();
     TypeWithHandle.deinit();
-    DeclWithHandle.deinit();
 }

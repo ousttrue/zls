@@ -5,6 +5,7 @@ const Document = @import("./Document.zig");
 const ast = @import("./ast.zig");
 pub const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, Self);
 const DeclWithHandle = @import("./DeclWithHandle.zig");
+const SymbolLookup = @import("./SymbolLookup.zig");
 const logger = std.log.scoped(.TypeWithHandle);
 
 pub fn getDeclName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
@@ -599,7 +600,9 @@ pub fn resolveTypeOfNodeInternal(
                 .other => |n| n,
                 else => return null,
             };
-            if (try DeclWithHandle.lookupSymbolContainer(
+            var lookup = SymbolLookup.init(arena.allocator());
+            defer lookup.deinit();
+            if (try lookup.lookupSymbolContainer(
                 arena,
                 workspace,
                 left_type.handle,

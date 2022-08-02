@@ -9,6 +9,7 @@ const Ast = std.zig.Ast;
 const Token = std.zig.Token;
 const ast = @import("./ast.zig");
 const Builtin = @import("./Builtin.zig");
+const SymbolLookup = @import("./SymbolLookup.zig");
 
 fn fnProtoToSignatureInfo(
     arena: *std.heap.ArenaAllocator,
@@ -309,7 +310,9 @@ pub fn getSignatureInfo(
                     };
 
                     const skip_self_param = !type_handle.type.is_type_val;
-                    const decl_handle = (try DeclWithHandle.lookupSymbolContainer(
+                    var lookup = SymbolLookup.init(arena.allocator());
+                    defer lookup.deinit();
+                    const decl_handle = (try lookup.lookupSymbolContainer(
                         arena,
                         workspace,
                         type_handle.handle,
