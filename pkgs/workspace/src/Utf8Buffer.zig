@@ -10,12 +10,15 @@ text: [:0]u8,
 mem: []u8,
 line_heads: std.ArrayList(u32),
 
-pub fn init(allocator: std.mem.Allocator, text: [:0]u8) !Self {
+pub fn init(allocator: std.mem.Allocator, text: []const u8) !Self {
+    const duped_text = try allocator.dupeZ(u8, text);
+    errdefer allocator.free(duped_text);
+
     var self = Self{
         .allocator = allocator,
-        .text = text,
+        .text = duped_text,
         // Extra +1 to include the null terminator
-        .mem = text.ptr[0 .. text.len + 1],
+        .mem = duped_text.ptr[0 .. duped_text.len + 1],
         .line_heads = std.ArrayList(u32).init(allocator),
     };
     try self.resetLines();
@@ -24,7 +27,7 @@ pub fn init(allocator: std.mem.Allocator, text: [:0]u8) !Self {
 
 pub fn deinit(self: Self) void {
     self.line_heads.deinit();
-    // self.allocator.free(self.utf8_buffer.mem);
+    self.allocator.free(self.text);
 }
 
 fn resetLines(self: *Self) !void {

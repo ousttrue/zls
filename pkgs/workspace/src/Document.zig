@@ -15,25 +15,27 @@ path: FixedPath,
 utf8_buffer: Utf8Buffer,
 ast_context: *AstContext,
 
-pub fn new(allocator: std.mem.Allocator, path: FixedPath, text: [:0]u8) !*Self {
+pub fn new(allocator: std.mem.Allocator, path: FixedPath, text: []const u8) !*Self {
+    const utf8_buffer = try Utf8Buffer.init(allocator, text);
+
     var self = try allocator.create(Self);
     errdefer allocator.destroy(self);
     self.* = Self{
         .allocator = allocator,
         .path = path,
-        .utf8_buffer = try Utf8Buffer.init(allocator, text),
-        .ast_context = try AstContext.new(allocator, text),
+        .utf8_buffer = utf8_buffer,
+        .ast_context = try AstContext.new(allocator, utf8_buffer.text),
     };
     return self;
 }
 
 pub fn delete(self: *Self) void {
-    self.utf8_buffer.deinit();
     self.ast_context.delete();
+    self.utf8_buffer.deinit();
     self.allocator.destroy(self);
 }
 
-pub fn refreshDocument(self: *Self) !void {
+fn refreshDocument(self: *Self) !void {
     self.ast_context.delete();
     self.ast_context = try AstContext.new(self.allocator, self.utf8_buffer.text);
     errdefer self.ast_context.delete();
@@ -44,9 +46,10 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line
     try self.refreshDocument();
 }
 
-pub fn update(self: *Self, text: [:0]u8) !void {
+pub fn update(self: *Self, text: []const u8) !void {
     self.utf8_buffer.deinit();
     self.utf8_buffer = try Utf8Buffer.init(self.allocator, text);
+    try self.refreshDocument();
 }
 
 // pub fn applySave(self: *Self, zigenv: ZigEnv) !void {

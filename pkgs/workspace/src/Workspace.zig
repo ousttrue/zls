@@ -47,17 +47,13 @@ pub fn delete(self: *Self) void {
 }
 
 pub fn openDocument(self: *Self, path: FixedPath, text: []const u8) !*Document {
-    const duped_text = try self.allocator.dupeZ(u8, text);
-    errdefer self.allocator.free(duped_text);
-
     if (self.handles.get(path.slice())) |doc| {
         // update document
-        try doc.update(duped_text);
-        try doc.refreshDocument();
+        try doc.update(text);
         return doc;
     } else {
         // new document
-        const doc = try Document.new(self.allocator, path, duped_text);
+        const doc = try Document.new(self.allocator, path, text);
         errdefer doc.delete();
         try self.handles.putNoClobber(doc.path.slice(), doc);
         return doc;

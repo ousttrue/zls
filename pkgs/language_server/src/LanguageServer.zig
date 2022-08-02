@@ -414,16 +414,10 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
         }
     }
 
-    const res= lsp.Response{
+    return lsp.Response{
         .id = id,
         .result = .{ .CodeLens = data.items },
     };
-
-    var json_buffer = std.ArrayList(u8).init(allocator);
-    try std.json.stringify(res, .{ .emit_null_optional_fields = false }, json_buffer.writer());
-    logger.debug("{s}", .{json_buffer.items});
-
-    return res;
 }
 
 pub fn @"codeLens/resolve"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
