@@ -103,8 +103,6 @@ pub fn child(self: Self, name: []const u8) Self {
         copy.len += name.len;
     }
 
-    logger.debug("child: {s} + {s} = {s}", .{ self.slice(), name, copy.slice() });
-
     return copy;
 }
 

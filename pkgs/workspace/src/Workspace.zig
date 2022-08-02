@@ -24,7 +24,6 @@ pub fn new(
     zigenv: ZigEnv,
     root: FixedPath,
 ) !*Self {
-    logger.info("{s}", .{root.slice()});
     var self = try allocator.create(Self);
     self.* = Self{
         .allocator = allocator,
