@@ -888,3 +888,17 @@ pub fn innermostBlockScopeIndex(self: Self, source_index: usize) usize {
 pub fn innermostBlockScope(self: Self, source_index: usize) Ast.Node.Index {
     return self.scopes[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
 }
+
+pub fn findContainerScope(self: Self, container: Ast.Node.Index) ?*Scope {
+    // if (!ast.isContainer(handle.ast_context.tree, container)) return null;
+
+    // Find the container scope.
+    return for (self.scopes) |*scope| {
+        switch (scope.data) {
+            .container => |node| if (node == container) {
+                break scope;
+            },
+            else => {},
+        }
+    } else null;
+}

@@ -137,7 +137,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
                 return null;
 
             if (node_tags[pay.items[0]] == .enum_literal) {
-                const scope = Scope.findContainerScope(switch_expr_type.handle, switch_expr_type.type.data.other) orelse return null;
+                const scope = switch_expr_type.handle.ast_context.document_scope.findContainerScope(switch_expr_type.type.data.other) orelse return null;
                 if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
                     switch (candidate.value_ptr.*) {
                         .ast_node => |node| {

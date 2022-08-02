@@ -76,21 +76,21 @@ pub fn lookupSymbolContainer(
     self: *Self,
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-    handle: *Document,
+    doc: *Document,
     container: Ast.Node.Index,
     symbol: []const u8,
     /// If true, we are looking up the symbol like we are accessing through a field access
     /// of an instance of the type, otherwise as a field access of the type value itself.
     instance_access: bool,
 ) ?DeclWithHandle {
-    const tree = handle.ast_context.tree;
+    const tree = doc.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
     const main_token = tree.nodes.items(.main_token)[container];
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    if (Scope.findContainerScope(handle, container)) |container_scope| {
+    if (doc.ast_context.document_scope.findContainerScope(container)) |container_scope| {
         if (container_scope.decls.getEntry(symbol)) |candidate| {
             switch (candidate.value_ptr.*) {
                 .ast_node => |node| {
@@ -102,10 +102,10 @@ pub fn lookupSymbolContainer(
                 .label_decl => unreachable,
                 else => {},
             }
-            return DeclWithHandle{ .decl = candidate.value_ptr, .handle = handle };
+            return DeclWithHandle{ .decl = candidate.value_ptr, .handle = doc };
         }
 
-        if (self.resolveUse(arena, workspace, container_scope.uses, symbol, handle)) |result| {
+        if (self.resolveUse(arena, workspace, container_scope.uses, symbol, doc)) |result| {
             return result;
         }
         return null;

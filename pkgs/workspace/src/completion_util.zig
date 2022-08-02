@@ -172,7 +172,7 @@ pub fn iterateSymbolsContainerInternal(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    const container_scope = Scope.findContainerScope(handle, container) orelse return;
+    const container_scope = handle.ast_context.document_scope.findContainerScope(container) orelse return;
 
     var decl_it = container_scope.decls.iterator();
     while (decl_it.next()) |entry| {

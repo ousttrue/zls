@@ -40,21 +40,6 @@ tests: []const Ast.Node.Index = &.{},
 uses: []const *const Ast.Node.Index = &.{},
 
 data: Data,
-
-pub fn findContainerScope(handle: *Document, container: Ast.Node.Index) ?*Self {
-    if (!ast.isContainer(handle.ast_context.tree, container)) return null;
-
-    // Find the container scope.
-    return for (handle.ast_context.document_scope.scopes) |*scope| {
-        switch (scope.data) {
-            .container => |node| if (node == container) {
-                break scope;
-            },
-            else => {},
-        }
-    } else null;
-}
-
 pub fn toNodeIndex(self: Self) ?Ast.Node.Index {
     return switch (self.data) {
         .container, .function, .block => |idx| idx,
