@@ -292,3 +292,20 @@ pub fn getSymbolFieldAccess(
         true,
     );
 }
+
+pub fn lookupIdentifier(
+    self: *Self,
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    doc: *Document,
+    token_index: u32,
+) ?DeclWithHandle {
+    const tag = doc.ast_context.tree.nodes.items(.tag);
+    const idx = doc.ast_context.tokens_node[token_index];
+    const node_tag = tag[idx];
+    return switch (node_tag) {
+        .identifier => self.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index),
+        .field_access => self.getSymbolFieldAccess(arena, workspace, doc, token_index),
+        else => null,
+    };
+}

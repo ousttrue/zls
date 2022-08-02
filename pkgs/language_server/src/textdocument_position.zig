@@ -37,93 +37,21 @@ pub fn getHover(
             }
         },
         .identifier => {
-            const tag = doc.ast_context.tree.nodes.items(.tag);
-            const idx = doc.ast_context.tokens_node[token_index];
-            const node_tag = tag[idx];
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            switch (node_tag) {
-                .identifier => {
-                    if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index)) |decl| {
-                        const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
-                        return try std.fmt.allocPrint(
-                            allocator,
-                            "# {s}\n\n{s}\n\n{s}",
-                            .{ name, context_info, hover },
-                        );
-                    } else {
-                        return try std.fmt.allocPrint(
-                            allocator,
-                            "{s}\n* decl {s} not found",
-                            .{ context_info, name },
-                        );
-                    }
-                },
-                .field_access => {
-                    const decl = lookup.getSymbolFieldAccess(arena, workspace, doc, token_index) orelse {
-                        return try std.fmt.allocPrint(
-                            allocator,
-                            "{s}\n* decl {s} not found",
-                            .{ context_info, name },
-                        );
-                    };
-                    const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
-                    return try std.fmt.allocPrint(
-                        allocator,
-                        "# {s}\n\n{s}\n\n{s}",
-                        .{ name, context_info, hover },
-                    );
-
-                    // var buffer = std.ArrayList(u8).init(arena.allocator());
-                    // const first_token = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
-                    // // const last_token = doc.ast_context.tree.lastToken(idx);
-                    // for(doc.ast_context.tokens.items[first_token..token_index + 1])|token|
-                    // {
-                    //     try buffer.writer().print(" {s}", .{doc.ast_context.getTokenText(token)});
-                    // }
-                    // return try std.fmt.allocPrint(
-                    //     allocator,
-                    //     "# {s}\n\n{s}\n\n{s}",
-                    //     .{ name, context_info, buffer.items },
-                    // );
-
-                    // return try std.fmt.allocPrint(
-                    //     allocator,
-                    //     "# {s}\n\n{s}\n\n{s}",
-                    //     .{ name, context_info, hover },
-                    // );
-
-                    // var buffer = std.ArrayList(u8).init(arena.allocator());
-                    // const w = buffer.writer();
-                    // try w.print("# field_access: {s}\n\n{s}\n\n", .{name, context_info});
-                    // var current = doc.ast_context.nodes_parent[idx];
-                    // var i: u32 = 1;
-                    // while (current != 0) : ({
-                    //     current = doc.ast_context.nodes_parent[current];
-                    //     i += 1;
-                    // }) {
-                    //     const current_tag = tag[current];
-                    //     try w.print("* [{}]{}\n", .{ i, current_tag });
-                    // }
-                    // return buffer.items;
-                },
-                // .fn_proto_multi => {
-                //     const signature = ast.getFunctionSignature(doc.ast_context.tree, doc.ast_context.tree.fnProtoMulti(idx));
-                //     return try std.fmt.allocPrint(
-                //         allocator,
-                //         "# function: {s}\n\n```zig\n{s}\n```",
-                //         .{ name, signature },
-                //     );
-                // },
-                //     .label => {
-                //         logger.debug("[hover][label_access]", .{});
-                //         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
-                //             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
-                //         }
-                //     },
-                else => {
-                    return context_info;
-                },
+            if (lookup.lookupIdentifier(arena, workspace, doc, token_index)) |decl| {
+                const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
+                return try std.fmt.allocPrint(
+                    allocator,
+                    "# {s}\n\n{s}\n\n{s}",
+                    .{ name, context_info, hover },
+                );
+            } else {
+                return try std.fmt.allocPrint(
+                    allocator,
+                    "{s}\n* decl {s} not found",
+                    .{ context_info, name },
+                );
             }
         },
         else => {
@@ -131,6 +59,21 @@ pub fn getHover(
         },
     }
 }
+
+// .fn_proto_multi => {
+//     const signature = ast.getFunctionSignature(doc.ast_context.tree, doc.ast_context.tree.fnProtoMulti(idx));
+//     return try std.fmt.allocPrint(
+//         allocator,
+//         "# function: {s}\n\n```zig\n{s}\n```",
+//         .{ name, signature },
+//     );
+// },
+//     .label => {
+//         logger.debug("[hover][label_access]", .{});
+//         if (try offsets.getLabelGlobal(doc_position.absolute_index, doc)) |decl| {
+//             return try hoverSymbol(arena, workspace, id, decl, client_capabilities);
+//         }
+//     },
 
 pub fn getRename(
     arena: *std.heap.ArenaAllocator,
