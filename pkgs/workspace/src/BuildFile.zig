@@ -1,6 +1,5 @@
 const std = @import("std");
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
-const URI = @import("./uri.zig");
 const FixedPath = @import("./FixedPath.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
@@ -62,10 +61,7 @@ fn loadBuildAssociatedConfiguration(self: *Self, allocator: std.mem.Allocator) !
 }
 
 pub fn loadPackages(self: *Self, allocator: std.mem.Allocator, zigenv: ZigEnv) !void {
-    // const build_file_path = _build_file_path orelse try URI.parse(allocator, self.uri);
-    // defer if (_build_file_path == null) allocator.free(build_file_path);
     const directory_path = self.path.parent().?;
-
     const zig_run_result = try zigenv.exe.exec(allocator, &.{
         "run",
         zigenv.build_runner_path.slice(),
@@ -102,9 +98,6 @@ pub fn loadPackages(self: *Self, allocator: std.mem.Allocator, zigenv: ZigEnv) !
 
                         const pkg_abs_path = try std.fs.path.resolve(allocator, &[_][]const u8{ self.path.parent().?.slice(), rel_path });
                         defer allocator.free(pkg_abs_path);
-
-                        const pkg_uri = try URI.fromPath(allocator, pkg_abs_path);
-                        errdefer allocator.free(pkg_uri);
 
                         const duped_name = try allocator.dupe(u8, name);
                         errdefer allocator.free(duped_name);

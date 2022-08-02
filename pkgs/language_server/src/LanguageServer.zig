@@ -17,7 +17,7 @@ const SymbolTree = ws.SymbolTree;
 const AstNodeIterator = ws.AstNodeIterator;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
-const URI = ws.URI;
+pub const URI = @import("./uri.zig");
 const builtin_completions = ws.builtin_completions;
 const getSignatureInfo = ws.signature_help.getSignatureInfo;
 
