@@ -389,7 +389,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
                 const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token_idx, true, self.config)) |refs| refs.len else 0;
                 const start = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.start, self.encoding);
                 const end = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.end, self.encoding);
-                const text = try std.fmt.allocPrint(allocator, "{}", .{n});
+                const text = try std.fmt.allocPrint(allocator, "references {}", .{n});
                 _ = text;
                 // const arg = try std.fmt.allocPrint(allocator, "{}", .{token_idx});
                 // logger.debug("{s}", .{text});
@@ -406,7 +406,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
                     },
                     .command = .{
                         .title = text,
-                        .command = "",
+                        .command = "zls.refrences",
                     },
                 });
             },
@@ -414,10 +414,16 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
         }
     }
 
-    return lsp.Response{
+    const res= lsp.Response{
         .id = id,
         .result = .{ .CodeLens = data.items },
     };
+
+    var json_buffer = std.ArrayList(u8).init(allocator);
+    try std.json.stringify(res, .{ .emit_null_optional_fields = false }, json_buffer.writer());
+    logger.debug("{s}", .{json_buffer.items});
+
+    return res;
 }
 
 pub fn @"codeLens/resolve"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
@@ -480,7 +486,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, false)) |location| {        
+    if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, false)) |location| {
         const goto_doc = workspace.getOrLoadDocument(location.path) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };

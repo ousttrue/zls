@@ -163,9 +163,9 @@ pub const MaybeStringArray = Default([]const []const u8, &.{});
 
 pub const CodeLens = struct {
     range: Range,
-    command: ?struct {
+    command: struct {
         title: string,
         command: string,
         arguments: ?[]string = null,
-    } = null,
+    },
 };
