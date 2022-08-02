@@ -22,6 +22,60 @@ pub const Switch = struct {
     }
 };
 
+pub const Block = struct {
+    ast: Components,
+    pub const Components = struct {
+        statements: []const Ast.Node.Index,
+    };
+
+    pub fn init(tree: Ast, idx: Ast.Node.Index) Block {
+        const data = tree.nodes.items(.data);
+        const node_data = data[idx];
+        const tag = tree.nodes.items(.tag);
+        const node_tag = tag[idx];
+        return switch (node_tag) {
+            .block_two, .block_two_semicolon => Block{
+                .ast = .{
+                    .statements = @ptrCast([*]const Ast.Node.Index, &data[idx].lhs)[0..2],
+                },
+            },
+            .block, .block_semicolon => Block{
+                .ast = .{
+                    .statements = tree.extra_data[node_data.lhs..node_data.rhs],
+                },
+            },
+            else => unreachable,
+        };
+    }
+};
+
+pub const BuiltinCall = struct {
+    ast: Components,
+    pub const Components = struct {
+        params: []const Ast.Node.Index,
+    };
+
+    pub fn init(tree: Ast, idx: Ast.Node.Index) BuiltinCall {
+        const data = tree.nodes.items(.data);
+        const node_data = data[idx];
+        const tag = tree.nodes.items(.tag);
+        const node_tag = tag[idx];
+        return switch (node_tag) {
+            .builtin_call_two, .builtin_call_two_comma => BuiltinCall{
+                .ast = .{
+                    .params = @ptrCast([*]const Ast.Node.Index, &data[idx].lhs)[0..2],
+                },
+            },
+            .builtin_call, .builtin_call_comma => BuiltinCall{
+                .ast = .{
+                    .params = tree.extra_data[node_data.lhs..node_data.rhs],
+                },
+            },
+            else => unreachable,
+        };
+    }
+};
+
 pub const NodeChildren = union(enum) {
     none,
     one: Ast.Node.Index,
@@ -42,6 +96,8 @@ pub const NodeChildren = union(enum) {
     container_decl: Ast.full.ContainerDecl,
     container_field: Ast.full.ContainerField,
     @"asm": Ast.full.Asm,
+    block: Block,
+    builtin_call: BuiltinCall,
 
     ///
     /// see: lib/std/zig/Ast.zig Node.Tag
@@ -51,7 +107,7 @@ pub const NodeChildren = union(enum) {
         idx: Ast.Node.Index,
         buffer: []Ast.Node.Index,
     ) NodeChildren {
-        std.debug.assert(idx<tree.nodes.len);
+        std.debug.assert(idx < tree.nodes.len);
         std.debug.assert(buffer.len >= 2);
         const tag = tree.nodes.items(.tag);
         const node_tag = tag[idx];
@@ -138,8 +194,7 @@ pub const NodeChildren = union(enum) {
             .anyframe_type => .{ .one = node_data.rhs },
             .anyframe_literal, .char_literal, .integer_literal, .float_literal, .unreachable_literal, .identifier, .enum_literal, .string_literal, .multiline_string_literal => .none,
             .grouped_expression => .{ .one = node_data.lhs },
-            .builtin_call_two, .builtin_call_two_comma => .{ .two = node_data },
-            .builtin_call, .builtin_call_comma => .{ .nodes = tree.extra_data[node_data.lhs..node_data.rhs] },
+            .builtin_call_two, .builtin_call_two_comma, .builtin_call, .builtin_call_comma => .{ .builtin_call = BuiltinCall.init(tree, idx) },
             .error_set_decl => .none,
             .container_decl, .container_decl_trailing => .{ .container_decl = tree.containerDecl(idx) },
             .container_decl_two, .container_decl_two_trailing => .{ .container_decl = tree.containerDeclTwo(buffer[0..2], idx) },
@@ -152,8 +207,7 @@ pub const NodeChildren = union(enum) {
             .container_field => .{ .container_field = tree.containerField(idx) },
             .@"comptime" => .{ .one = node_data.lhs },
             .@"nosuspend" => .{ .one = node_data.lhs },
-            .block_two, .block_two_semicolon => .{ .two = node_data },
-            .block, .block_semicolon => .{ .nodes = tree.extra_data[node_data.lhs..node_data.rhs] },
+            .block_two, .block_two_semicolon, .block, .block_semicolon => .{ .block = Block.init(tree, idx) },
             .asm_simple => .{ .@"asm" = tree.asmSimple(idx) },
             .@"asm" => .{ .@"asm" = tree.asmFull(idx) },
             .asm_output, .asm_input, .error_value => .none,
@@ -183,6 +237,8 @@ pub const NodeChildren = union(enum) {
             .container_decl => {},
             .container_field => {},
             .@"asm" => {},
+            .block => {},
+            .builtin_call => {},
         }
     }
 };
@@ -232,6 +288,8 @@ pub fn iterateAsync(self: *Self, tree: Ast) void {
         .container_decl => |value| self.addChildren(Ast.full.ContainerDecl.Components, value.ast),
         .container_field => |value| self.addChildren(Ast.full.ContainerField.Components, value.ast),
         .@"asm" => |value| self.addChildren(Ast.full.Asm.Components, value.ast),
+        .block => |value| self.addChildren(Block.Components, value.ast),
+        .builtin_call => |value| self.addChildren(BuiltinCall.Components, value.ast),
     }
     self.value = null;
 }

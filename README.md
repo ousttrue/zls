@@ -10,3 +10,4 @@ This is an experimental modified version
 * [ ] remove workspace dependency to lsp
 * [ ] goto: .enum_literal
 * [ ] diagnostics: when format error
+* [ ] add keywords to global completin(undefined, unreachable... etc)
