@@ -48,60 +48,41 @@ pub fn delete(self: *Self) void {
     self.allocator.destroy(self);
 }
 
-pub fn openDocument(self: *Self, uri: []const u8, text: []const u8) !*Document {
+pub fn openDocument(self: *Self, path: FixedPath, text: []const u8) !*Document {
     const duped_text = try self.allocator.dupeZ(u8, text);
     errdefer self.allocator.free(duped_text);
-    if (self.getDocument(uri)) |doc| {
+    if (self.getDocument(path)) |doc| {
         // update document
         try doc.update(duped_text);
         try doc.refreshDocument();
         return doc;
     } else {
         // new document
-        const duped_uri = try self.allocator.dupeZ(u8, uri);
-        errdefer self.allocator.free(duped_uri);
-        const doc = try Document.new(self.allocator, try FixedPath.fromUri(uri), duped_text);
+        const doc = try Document.new(self.allocator, path, duped_text);
         errdefer doc.delete();
-        logger.debug("new document: {s}", .{duped_uri});
-        try self.handles.putNoClobber(duped_uri, doc);
+        logger.debug("new document: {s}", .{path.slice()});
+        try self.handles.putNoClobber(doc.path.slice(), doc);
         return doc;
     }
 }
 
-pub fn getDocument(self: *Self, uri: []const u8) ?*Document {
-    if (self.handles.getEntry(uri)) |entry| {
-        return entry.value_ptr.*;
-    }
-
-    logger.warn("not found: {s}", .{uri});
-    return null;
-}
-
-pub fn getOrLoadDocument(self: *Self, uri: []const u8) ?*Document {
-    if (self.handles.get(uri)) |found| {
+pub fn getDocument(self: *Self, path: FixedPath) ?*Document {
+    if (self.handles.get(path.slice())) |found| {
         return found;
     }
 
-    const file_path = URI.parse(self.allocator, uri) catch {
-        return null;
-    };
-    defer self.allocator.free(file_path);
-    var file = std.fs.cwd().openFile(file_path, .{}) catch {
-        logger.debug("Cannot open import file {s}", .{file_path});
-        return null;
-    };
-    defer file.close();
+    logger.warn("not found: {s}", .{path.slice()});
+    return null;
+}
 
-    const file_contents = file.readToEndAllocOptions(
-        self.allocator,
-        std.math.maxInt(usize),
-        null,
-        @alignOf(u8),
-        0,
-    ) catch return null;
-    errdefer self.allocator.free(file_contents);
+pub fn getOrLoadDocument(self: *Self, path: FixedPath) ?*Document {
+    if (self.handles.get(path.slice())) |found| {
+        return found;
+    }
 
-    return self.openDocument(uri, file_contents) catch unreachable;
+    const contents = path.readContents(self.allocator) catch return null;
+    defer self.allocator.free(contents);
+    return self.openDocument(path, contents) catch unreachable;
 }
 
 pub fn uriFromImportStrAlloc(
@@ -147,8 +128,6 @@ pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) ?*Docu
     const allocator = self.allocator;
     const final_uri = self.uriFromImportStrAlloc(allocator, doc, import_str) catch return null;
     defer allocator.free(final_uri);
-
-    const file_path = URI.parse(allocator, final_uri) catch return null;
-    defer allocator.free(file_path);
-    return self.getOrLoadDocument(file_path);
+    const path = FixedPath.fromUri(final_uri) catch return null;
+    return self.getOrLoadDocument(path);
 }

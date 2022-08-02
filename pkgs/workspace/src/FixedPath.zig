@@ -126,3 +126,17 @@ pub fn exec(self: Self, allocator: std.mem.Allocator, args: []const []const u8) 
         .max_output_bytes = 1024 * 1024 * 50,
     });
 }
+
+pub fn readContents(self: Self, allocator: std.mem.Allocator) ![]const u8
+{ 
+    var file = try std.fs.cwd().openFile(self.slice(), .{});
+    defer file.close();
+
+    return try file.readToEndAllocOptions(
+        allocator,
+        std.math.maxInt(usize),
+        null,
+        @alignOf(u8),
+        0,
+    );
+}
