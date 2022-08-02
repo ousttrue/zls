@@ -27,11 +27,8 @@ fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayLis
     return tokens;
 }
 
-pub fn traverse(context: *Self, stack: *std.ArrayList(u32), idx: Ast.Node.Index) void {
+pub fn traverse(context: *Self, parent_idx: Ast.Node.Index, idx: Ast.Node.Index) void {
     const tree = context.tree;
-    std.debug.assert(stack.items.len > 0);
-    const parent_idx = stack.items[stack.items.len - 1];
-    stack.append(idx) catch unreachable;
 
     context.nodes_parent[idx] = parent_idx;
     const token_start = tree.firstToken(idx);
@@ -50,7 +47,7 @@ pub fn traverse(context: *Self, stack: *std.ArrayList(u32), idx: Ast.Node.Index)
             std.log.err("{}: {}>=nodes_parent.len", .{ node_tag, child });
             unreachable;
         }
-        traverse(context, stack, child);
+        traverse(context, idx, child);
     }
 }
 
@@ -81,14 +78,10 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
         x.* = 0;
     }
 
-    var stack = std.ArrayList(u32).init(allocator);
-    defer stack.deinit();
-
     // root
-    stack.append(0) catch unreachable;
     for (tree.rootDecls()) |decl| {
         // top level
-        traverse(self, &stack, decl);
+        traverse(self, 0, decl);
     }
 
     return self;
@@ -223,8 +216,7 @@ pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx:
     const tag = self.tree.nodes.items(.tag);
     const node_tag = tag[node_idx];
     switch (node_tag) {
-        .field_access => {
-        },
+        .field_access => {},
         .enum_literal => {},
         else => {
             var u32_2: [2]u32 = undefined;
