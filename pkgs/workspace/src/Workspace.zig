@@ -50,7 +50,8 @@ pub fn delete(self: *Self) void {
 pub fn openDocument(self: *Self, path: FixedPath, text: []const u8) !*Document {
     const duped_text = try self.allocator.dupeZ(u8, text);
     errdefer self.allocator.free(duped_text);
-    if (self.getDocument(path)) |doc| {
+
+    if (self.handles.get(path.slice())) |doc| {
         // update document
         try doc.update(duped_text);
         try doc.refreshDocument();
@@ -59,7 +60,6 @@ pub fn openDocument(self: *Self, path: FixedPath, text: []const u8) !*Document {
         // new document
         const doc = try Document.new(self.allocator, path, duped_text);
         errdefer doc.delete();
-        logger.debug("new document: {s}", .{path.slice()});
         try self.handles.putNoClobber(doc.path.slice(), doc);
         return doc;
     }

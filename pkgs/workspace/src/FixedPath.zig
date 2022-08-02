@@ -90,10 +90,20 @@ pub fn parent(self: Self) ?Self {
 pub fn child(self: Self, name: []const u8) Self {
     var copy = fromFullpath(self.slice());
     copy._buffer[copy.len] = '/';
-    std.mem.copy(u8, copy._buffer[(copy.len + 1)..], name);
-    copy.len += 1 + name.len;
+    copy.len += 1;
 
-    logger.debug("child: {s} + {s} = {s}", .{self.slice(), name, copy.slice()});
+    if (std.mem.startsWith(u8, name, "./")) {
+        std.mem.copy(u8, copy._buffer[copy.len..], name[2..]);
+        copy.len += (name.len - 2);
+    } else if (name[0] == '/') {
+        std.mem.copy(u8, copy._buffer[copy.len..], name[1..]);
+        copy.len += (name.len - 1);
+    } else {
+        std.mem.copy(u8, copy._buffer[copy.len..], name);
+        copy.len += name.len;
+    }
+
+    logger.debug("child: {s} + {s} = {s}", .{ self.slice(), name, copy.slice() });
 
     return copy;
 }
@@ -130,8 +140,7 @@ pub fn exec(self: Self, allocator: std.mem.Allocator, args: []const []const u8) 
     });
 }
 
-pub fn readContents(self: Self, allocator: std.mem.Allocator) ![]const u8
-{ 
+pub fn readContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     var file = try std.fs.cwd().openFile(self.slice(), .{});
     defer file.close();
 
