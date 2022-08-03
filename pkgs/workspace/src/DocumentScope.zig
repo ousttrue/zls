@@ -40,132 +40,50 @@ comptime {
     std.debug.assert(@sizeOf(lsp.CompletionItem) == @sizeOf(CompletionSet.Data));
 }
 
-const ScopeContext = struct {
-    scopes: *std.ArrayListUnmanaged(Scope),
-    enums: *CompletionSet,
-    errors: *CompletionSet,
-    tree: Ast,
-};
+const Self = @This();
 
-fn makeInnerScope(allocator: std.mem.Allocator, context: ScopeContext, node_idx: Ast.Node.Index) error{OutOfMemory}!void {
-    const scopes = context.scopes;
-    const tree = context.tree;
-    const tags = tree.nodes.items(.tag);
-    const token_tags = tree.tokens.items(.tag);
-    const data = tree.nodes.items(.data);
-    const main_tokens = tree.nodes.items(.main_token);
-    const node_tag = tags[node_idx];
+allocator: std.mem.Allocator,
+/// Whether we have already visited the root node.
+had_root: bool = false,
+scopes: std.ArrayList(Scope),
+errors: CompletionSet = .{},
+enums: CompletionSet = .{},
 
-    var buf: [2]Ast.Node.Index = undefined;
-    const ast_decls = ast.declMembers(tree, node_idx, &buf);
-
-    (try scopes.addOne(allocator)).* = .{
-        .range = nodeSourceRange(tree, node_idx),
-        .decls = std.StringHashMap(Declaration).init(allocator),
-        .data = .{ .container = node_idx },
+pub fn init(allocator: std.mem.Allocator, tree: Ast) !Self {
+    var self = Self{        
+        .allocator = allocator,
+        .scopes = std.ArrayList(Scope).init(allocator),
     };
-    const scope_idx = scopes.items.len - 1;
-    var uses = std.ArrayListUnmanaged(*const Ast.Node.Index){};
-    var tests = std.ArrayListUnmanaged(Ast.Node.Index){};
-
-    errdefer {
-        scopes.items[scope_idx].decls.deinit();
-        uses.deinit(allocator);
-        tests.deinit(allocator);
-    }
-
-    if (node_tag == .error_set_decl) {
-        // All identifiers in main_token..data.lhs are error fields.
-        var i = main_tokens[node_idx];
-        while (i < data[node_idx].rhs) : (i += 1) {
-            if (token_tags[i] == .identifier) {
-                try context.errors.put(allocator, .{
-                    .label = tree.tokenSlice(i),
-                    .kind = .Constant,
-                    .insertText = tree.tokenSlice(i),
-                    .insertTextFormat = .PlainText,
-                }, {});
-            }
-        }
-    }
-
-    const container_decl = switch (node_tag) {
-        .container_decl, .container_decl_trailing => tree.containerDecl(node_idx),
-        .container_decl_arg, .container_decl_arg_trailing => tree.containerDeclArg(node_idx),
-        .container_decl_two, .container_decl_two_trailing => blk: {
-            var buffer: [2]Ast.Node.Index = undefined;
-            break :blk tree.containerDeclTwo(&buffer, node_idx);
-        },
-        .tagged_union, .tagged_union_trailing => tree.taggedUnion(node_idx),
-        .tagged_union_enum_tag, .tagged_union_enum_tag_trailing => tree.taggedUnionEnumTag(node_idx),
-        .tagged_union_two, .tagged_union_two_trailing => blk: {
-            var buffer: [2]Ast.Node.Index = undefined;
-            break :blk tree.taggedUnionTwo(&buffer, node_idx);
-        },
-        else => null,
-    };
-
-    // Only tagged unions and enums should pass this
-    const can_have_enum_completions = if (container_decl) |container| blk: {
-        const kind = token_tags[container.ast.main_token];
-        break :blk kind != .keyword_struct and
-            (kind != .keyword_union or container.ast.enum_token != null or container.ast.arg != 0);
-    } else false;
-
-    for (ast_decls) |*ptr_decl| {
-        const decl = ptr_decl.*;
-        if (tags[decl] == .@"usingnamespace") {
-            try uses.append(allocator, ptr_decl);
-            continue;
-        }
-
-        try makeScopeInternal(allocator, context, decl);
-        const name = TypeWithHandle.getDeclName(tree, decl) orelse continue;
-
-        if (tags[decl] == .test_decl) {
-            try tests.append(allocator, decl);
-            continue;
-        }
-        if (try scopes.items[scope_idx].decls.fetchPut(name, .{ .ast_node = decl })) |existing| {
-            _ = existing;
-            // TODO Record a redefinition error.
-        }
-
-        if (!can_have_enum_completions)
-            continue;
-
-        const container_field = switch (tags[decl]) {
-            .container_field => tree.containerField(decl),
-            .container_field_align => tree.containerFieldAlign(decl),
-            .container_field_init => tree.containerFieldInit(decl),
-            else => null,
-        };
-
-        if (container_field) |_| {
-            if (!std.mem.eql(u8, name, "_")) {
-                try context.enums.put(allocator, .{
-                    .label = name,
-                    .kind = .Constant,
-                    .insertText = name,
-                    .insertTextFormat = .PlainText,
-                    .documentation = if (try ast.getDocComments(allocator, tree, decl, .Markdown)) |docs|
-                        lsp.MarkupContent{ .kind = .Markdown, .value = docs }
-                    else
-                        null,
-                }, {});
-            }
-        }
-    }
-
-    scopes.items[scope_idx].tests = tests.toOwnedSlice(allocator);
-    scopes.items[scope_idx].uses = uses.toOwnedSlice(allocator);
+    try self.makeScopeInternal(tree, 0);
+    return self;
 }
 
-// Whether we have already visited the root node.
-var had_root = true;
-fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_idx: Ast.Node.Index) error{OutOfMemory}!void {
-    const scopes = context.scopes;
-    const tree = context.tree;
+pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+    for (self.scopes.items) |*scope| {
+        scope.decls.deinit();
+        allocator.free(scope.uses);
+        allocator.free(scope.tests);
+    }
+    self.scopes.deinit();
+
+    for (self.errors.entries.items(.key)) |item| {
+        if (item.documentation) |doc| allocator.free(doc.value);
+    }
+    self.errors.deinit(allocator);
+
+    for (self.enums.entries.items(.key)) |item| {
+        if (item.documentation) |doc| allocator.free(doc.value);
+    }
+    self.enums.deinit(allocator);
+}
+
+fn makeScopeInternal(
+    self: *Self,
+    tree: Ast,
+    /// decl
+    node_idx: Ast.Node.Index,
+) error{OutOfMemory}!void {
+    const allocator = self.allocator;
     const tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
     const data = tree.nodes.items(.data);
@@ -173,10 +91,10 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
     const node_tag = tags[node_idx];
 
     if (node_idx == 0) {
-        if (had_root)
+        if (self.had_root)
             return
         else
-            had_root = true;
+            self.had_root = true;
     }
 
     switch (node_tag) {
@@ -195,7 +113,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         .root,
         .error_set_decl,
         => {
-            try makeInnerScope(allocator, context, node_idx);
+            try self.makeInnerScope(tree, node_idx);
         },
         .array_type_sentinel => {
             // TODO: ???
@@ -210,19 +128,19 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             var buf: [1]Ast.Node.Index = undefined;
             const func = ast.fnProto(tree, node_idx, &buf).?;
 
-            (try scopes.addOne(allocator)).* = .{
+            (try self.scopes.addOne()).* = .{
                 .range = nodeSourceRange(tree, node_idx),
                 .decls = std.StringHashMap(Declaration).init(allocator),
                 .data = .{ .function = node_idx },
             };
-            var scope_idx = scopes.items.len - 1;
-            errdefer scopes.items[scope_idx].decls.deinit();
+            var scope_idx = self.scopes.items.len - 1;
+            errdefer self.scopes.items[scope_idx].decls.deinit();
 
             var it = func.iterate(&tree);
             while (it.next()) |param| {
                 // Add parameter decls
                 if (param.name_token) |name_token| {
-                    if (try scopes.items[scope_idx].decls.fetchPut(
+                    if (try self.scopes.items[scope_idx].decls.fetchPut(
                         tree.tokenSlice(name_token),
                         .{ .param_decl = param },
                     )) |existing| {
@@ -232,7 +150,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 }
                 // Visit parameter types to pick up any error sets and enum
                 //   completions
-                try makeScopeInternal(allocator, context, param.type_expr);
+                try self.makeScopeInternal(tree, param.type_expr);
             }
 
             if (fn_tag == .fn_decl) blk: {
@@ -240,14 +158,14 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 const return_type_node = data[data[node_idx].lhs].rhs;
 
                 // Visit the return type
-                try makeScopeInternal(allocator, context, return_type_node);
+                try self.makeScopeInternal(tree, return_type_node);
             }
 
             // Visit the function body
-            try makeScopeInternal(allocator, context, data[node_idx].rhs);
+            try self.makeScopeInternal(tree, data[node_idx].rhs);
         },
         .test_decl => {
-            return try makeScopeInternal(allocator, context, data[node_idx].rhs);
+            return try self.makeScopeInternal(tree, data[node_idx].rhs);
         },
         .block,
         .block_semicolon,
@@ -259,7 +177,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
 
             // if labeled block
             if (token_tags[first_token] == .identifier) {
-                const scope = try scopes.addOne(allocator);
+                const scope = try self.scopes.addOne();
                 scope.* = .{
                     .range = .{
                         .start = ast.tokenLocation(tree, main_tokens[node_idx]).start,
@@ -272,16 +190,16 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 try scope.decls.putNoClobber(tree.tokenSlice(first_token), .{ .label_decl = first_token });
             }
 
-            (try scopes.addOne(allocator)).* = .{
+            (try self.scopes.addOne()).* = .{
                 .range = nodeSourceRange(tree, node_idx),
                 .decls = std.StringHashMap(Declaration).init(allocator),
                 .data = .{ .block = node_idx },
             };
-            var scope_idx = scopes.items.len - 1;
+            var scope_idx = self.scopes.items.len - 1;
             var uses = std.ArrayList(*const Ast.Node.Index).init(allocator);
 
             errdefer {
-                scopes.items[scope_idx].decls.deinit();
+                self.scopes.items[scope_idx].decls.deinit();
                 uses.deinit();
             }
 
@@ -307,17 +225,17 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     continue;
                 }
 
-                try makeScopeInternal(allocator, context, idx);
+                try self.makeScopeInternal(tree, idx);
                 if (ast.varDecl(tree, idx)) |var_decl| {
                     const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
-                    if (try scopes.items[scope_idx].decls.fetchPut(name, .{ .ast_node = idx })) |existing| {
+                    if (try self.scopes.items[scope_idx].decls.fetchPut(name, .{ .ast_node = idx })) |existing| {
                         _ = existing;
                         // TODO record a redefinition error.
                     }
                 }
             }
 
-            scopes.items[scope_idx].uses = uses.toOwnedSlice();
+            self.scopes.items[scope_idx].uses = uses.toOwnedSlice();
             return;
         },
         .@"if",
@@ -326,7 +244,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             const if_node = ast.ifFull(tree, node_idx);
 
             if (if_node.payload_token) |payload| {
-                var scope = try scopes.addOne(allocator);
+                var scope = try self.scopes.addOne();
                 scope.* = .{
                     .range = .{
                         .start = ast.tokenLocation(tree, payload).start,
@@ -349,12 +267,12 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 });
             }
 
-            try makeScopeInternal(allocator, context, if_node.ast.then_expr);
+            try self.makeScopeInternal(tree, if_node.ast.then_expr);
 
             if (if_node.ast.else_expr != 0) {
                 if (if_node.error_token) |err_token| {
                     std.debug.assert(token_tags[err_token] == .identifier);
-                    var scope = try scopes.addOne(allocator);
+                    var scope = try self.scopes.addOne();
                     scope.* = .{
                         .range = .{
                             .start = ast.tokenLocation(tree, err_token).start,
@@ -368,16 +286,16 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     const name = tree.tokenSlice(err_token);
                     try scope.decls.putNoClobber(name, .{ .ast_node = if_node.ast.else_expr });
                 }
-                try makeScopeInternal(allocator, context, if_node.ast.else_expr);
+                try self.makeScopeInternal(tree, if_node.ast.else_expr);
             }
         },
         .@"catch" => {
-            try makeScopeInternal(allocator, context, data[node_idx].lhs);
+            try self.makeScopeInternal(tree, data[node_idx].lhs);
 
             const catch_token = main_tokens[node_idx];
             const catch_expr = data[node_idx].rhs;
 
-            var scope = try scopes.addOne(allocator);
+            var scope = try self.scopes.addOne();
             scope.* = .{
                 .range = .{
                     .start = ast.tokenLocation(tree, tree.firstToken(catch_expr)).start,
@@ -395,7 +313,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 const name = tree.tokenSlice(catch_token + 2);
                 try scope.decls.putNoClobber(name, .{ .ast_node = catch_expr });
             }
-            try makeScopeInternal(allocator, context, catch_expr);
+            try self.makeScopeInternal(tree, catch_expr);
         },
         .@"while",
         .while_simple,
@@ -408,7 +326,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
 
             if (while_node.label_token) |label| {
                 std.debug.assert(token_tags[label] == .identifier);
-                var scope = try scopes.addOne(allocator);
+                var scope = try self.scopes.addOne();
                 scope.* = .{
                     .range = .{
                         .start = ast.tokenLocation(tree, while_node.ast.while_token).start,
@@ -423,7 +341,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             }
 
             if (while_node.payload_token) |payload| {
-                var scope = try scopes.addOne(allocator);
+                var scope = try self.scopes.addOne();
                 scope.* = .{
                     .range = .{
                         .start = ast.tokenLocation(tree, payload).start,
@@ -463,12 +381,12 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     }
                 }
             }
-            try makeScopeInternal(allocator, context, while_node.ast.then_expr);
+            try self.makeScopeInternal(tree, while_node.ast.then_expr);
 
             if (while_node.ast.else_expr != 0) {
                 if (while_node.error_token) |err_token| {
                     std.debug.assert(token_tags[err_token] == .identifier);
-                    var scope = try scopes.addOne(allocator);
+                    var scope = try self.scopes.addOne();
                     scope.* = .{
                         .range = .{
                             .start = ast.tokenLocation(tree, err_token).start,
@@ -482,7 +400,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     const name = tree.tokenSlice(err_token);
                     try scope.decls.putNoClobber(name, .{ .ast_node = while_node.ast.else_expr });
                 }
-                try makeScopeInternal(allocator, context, while_node.ast.else_expr);
+                try self.makeScopeInternal(tree, while_node.ast.else_expr);
             }
         },
         .@"switch",
@@ -500,7 +418,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 };
 
                 if (switch_case.payload_token) |payload| {
-                    var scope = try scopes.addOne(allocator);
+                    var scope = try self.scopes.addOne();
                     scope.* = .{
                         .range = .{
                             .start = ast.tokenLocation(tree, payload).start,
@@ -524,7 +442,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                     });
                 }
 
-                try makeScopeInternal(allocator, context, switch_case.ast.target_expr);
+                try self.makeScopeInternal(tree, switch_case.ast.target_expr);
             }
         },
         .switch_case,
@@ -540,11 +458,11 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         => {
             const var_decl = ast.varDecl(tree, node_idx).?;
             if (var_decl.ast.type_node != 0) {
-                try makeScopeInternal(allocator, context, var_decl.ast.type_node);
+                try self.makeScopeInternal(tree, var_decl.ast.type_node);
             }
 
             if (var_decl.ast.init_node != 0) {
-                try makeScopeInternal(allocator, context, var_decl.ast.init_node);
+                try self.makeScopeInternal(tree, var_decl.ast.init_node);
             }
         },
         .call,
@@ -559,9 +477,9 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             var buf: [1]Ast.Node.Index = undefined;
             const call = ast.callFull(tree, node_idx, &buf).?;
 
-            try makeScopeInternal(allocator, context, call.ast.fn_expr);
+            try self.makeScopeInternal(tree, call.ast.fn_expr);
             for (call.ast.params) |param|
-                try makeScopeInternal(allocator, context, param);
+                try self.makeScopeInternal(tree, param);
         },
         .struct_init,
         .struct_init_comma,
@@ -582,10 +500,10 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             };
 
             if (struct_init.ast.type_expr != 0)
-                try makeScopeInternal(allocator, context, struct_init.ast.type_expr);
+                try self.makeScopeInternal(tree, struct_init.ast.type_expr);
 
             for (struct_init.ast.fields) |field| {
-                try makeScopeInternal(allocator, context, field);
+                try self.makeScopeInternal(tree, field);
             }
         },
         .array_init,
@@ -607,9 +525,9 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             };
 
             if (array_init.ast.type_expr != 0)
-                try makeScopeInternal(allocator, context, array_init.ast.type_expr);
+                try self.makeScopeInternal(tree, array_init.ast.type_expr);
             for (array_init.ast.elements) |elem| {
-                try makeScopeInternal(allocator, context, elem);
+                try self.makeScopeInternal(tree, elem);
             }
         },
         .container_field,
@@ -618,9 +536,9 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         => {
             const field = ast.containerField(tree, node_idx).?;
 
-            try makeScopeInternal(allocator, context, field.ast.type_expr);
-            try makeScopeInternal(allocator, context, field.ast.align_expr);
-            try makeScopeInternal(allocator, context, field.ast.value_expr);
+            try self.makeScopeInternal(tree, field.ast.type_expr);
+            try self.makeScopeInternal(tree, field.ast.align_expr);
+            try self.makeScopeInternal(tree, field.ast.value_expr);
         },
         .builtin_call,
         .builtin_call_comma,
@@ -640,7 +558,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
             };
 
             for (params) |param| {
-                try makeScopeInternal(allocator, context, param);
+                try self.makeScopeInternal(tree, param);
             }
         },
         .ptr_type,
@@ -650,9 +568,9 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         => {
             const ptr_type: Ast.full.PtrType = ast.ptrType(tree, node_idx).?;
 
-            try makeScopeInternal(allocator, context, ptr_type.ast.sentinel);
-            try makeScopeInternal(allocator, context, ptr_type.ast.align_node);
-            try makeScopeInternal(allocator, context, ptr_type.ast.child_type);
+            try self.makeScopeInternal(tree, ptr_type.ast.sentinel);
+            try self.makeScopeInternal(tree, ptr_type.ast.align_node);
+            try self.makeScopeInternal(tree, ptr_type.ast.child_type);
         },
         .slice,
         .slice_open,
@@ -664,16 +582,16 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 .slice_sentinel => tree.sliceSentinel(node_idx),
                 else => unreachable,
             };
-            try makeScopeInternal(allocator, context, slice.ast.sliced);
-            try makeScopeInternal(allocator, context, slice.ast.start);
-            try makeScopeInternal(allocator, context, slice.ast.end);
-            try makeScopeInternal(allocator, context, slice.ast.sentinel);
+            try self.makeScopeInternal(tree, slice.ast.sliced);
+            try self.makeScopeInternal(tree, slice.ast.start);
+            try self.makeScopeInternal(tree, slice.ast.end);
+            try self.makeScopeInternal(tree, slice.ast.sentinel);
         },
         .@"errdefer" => {
             const expr = data[node_idx].rhs;
             if (data[node_idx].lhs != 0) {
                 const payload_token = data[node_idx].lhs;
-                var scope = try scopes.addOne(allocator);
+                var scope = try self.scopes.addOne();
                 scope.* = .{
                     .range = .{
                         .start = ast.tokenLocation(tree, payload_token).start,
@@ -688,7 +606,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
                 try scope.decls.putNoClobber(name, .{ .ast_node = expr });
             }
 
-            try makeScopeInternal(allocator, context, expr);
+            try self.makeScopeInternal(tree, expr);
         },
 
         .@"asm",
@@ -709,7 +627,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         .@"continue",
         => {},
         .@"break", .@"defer" => {
-            try makeScopeInternal(allocator, context, data[node_idx].rhs);
+            try self.makeScopeInternal(tree, data[node_idx].rhs);
         },
 
         .@"return",
@@ -731,7 +649,7 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         .unwrap_optional,
         .@"usingnamespace",
         => {
-            try makeScopeInternal(allocator, context, data[node_idx].lhs);
+            try self.makeScopeInternal(tree, data[node_idx].lhs);
         },
 
         .equal_equal,
@@ -785,64 +703,125 @@ fn makeScopeInternal(allocator: std.mem.Allocator, context: ScopeContext, node_i
         .array_access,
         .error_union,
         => {
-            try makeScopeInternal(allocator, context, data[node_idx].lhs);
-            try makeScopeInternal(allocator, context, data[node_idx].rhs);
+            try self.makeScopeInternal(tree, data[node_idx].lhs);
+            try self.makeScopeInternal(tree, data[node_idx].rhs);
         },
     }
 }
 
-const Self = @This();
+/// .container
+fn makeInnerScope(self: *Self, tree: Ast, node_idx: Ast.Node.Index) error{OutOfMemory}!void {
+    const allocator =self.allocator;
+    const tags = tree.nodes.items(.tag);
+    const token_tags = tree.tokens.items(.tag);
+    const data = tree.nodes.items(.data);
+    const main_tokens = tree.nodes.items(.main_token);
+    const node_tag = tags[node_idx];
 
-scopes: []Scope,
-error_completions: CompletionSet,
-enum_completions: CompletionSet,
+    var buf: [2]Ast.Node.Index = undefined;
+    const ast_decls = ast.declMembers(tree, node_idx, &buf);
 
-pub fn init(allocator: std.mem.Allocator, tree: Ast) !Self {
-    var scopes = std.ArrayListUnmanaged(Scope){};
-    var error_completions = CompletionSet{};
-    var enum_completions = CompletionSet{};
+    // new Scope
+    (try self.scopes.addOne()).* = .{
+        .range = nodeSourceRange(tree, node_idx),
+        .decls = std.StringHashMap(Declaration).init(allocator),
+        .data = .{ .container = node_idx },
+    };
+    const scope_idx = self.scopes.items.len - 1;
+    var uses = std.ArrayListUnmanaged(*const Ast.Node.Index){};
+    var tests = std.ArrayListUnmanaged(Ast.Node.Index){};
 
     errdefer {
-        scopes.deinit(allocator);
-        for (error_completions.entries.items(.key)) |completion| {
-            if (completion.documentation) |doc| allocator.free(doc.value);
-        }
-        error_completions.deinit(allocator);
-        for (enum_completions.entries.items(.key)) |completion| {
-            if (completion.documentation) |doc| allocator.free(doc.value);
-        }
-        enum_completions.deinit(allocator);
+        self.scopes.items[scope_idx].decls.deinit();
+        uses.deinit(allocator);
+        tests.deinit(allocator);
     }
-    // pass root node index ('0')
-    had_root = false;
-    try makeScopeInternal(allocator, .{
-        .scopes = &scopes,
-        .errors = &error_completions,
-        .enums = &enum_completions,
-        .tree = tree,
-    }, 0);
-    return Self{
-        .scopes = scopes.toOwnedSlice(allocator),
-        .error_completions = error_completions,
-        .enum_completions = enum_completions,
-    };
-}
 
-pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-    for (self.scopes) |*scope| {
-        scope.decls.deinit();
-        allocator.free(scope.uses);
-        allocator.free(scope.tests);
+    if (node_tag == .error_set_decl) {
+        // All identifiers in main_token..data.lhs are error fields.
+        var i = main_tokens[node_idx];
+        while (i < data[node_idx].rhs) : (i += 1) {
+            if (token_tags[i] == .identifier) {
+                try self.errors.put(allocator, .{
+                    .label = tree.tokenSlice(i),
+                    .kind = .Constant,
+                    .insertText = tree.tokenSlice(i),
+                    .insertTextFormat = .PlainText,
+                }, {});
+            }
+        }
     }
-    allocator.free(self.scopes);
-    for (self.error_completions.entries.items(.key)) |item| {
-        if (item.documentation) |doc| allocator.free(doc.value);
+
+    const container_decl = switch (node_tag) {
+        .container_decl, .container_decl_trailing => tree.containerDecl(node_idx),
+        .container_decl_arg, .container_decl_arg_trailing => tree.containerDeclArg(node_idx),
+        .container_decl_two, .container_decl_two_trailing => blk: {
+            var buffer: [2]Ast.Node.Index = undefined;
+            break :blk tree.containerDeclTwo(&buffer, node_idx);
+        },
+        .tagged_union, .tagged_union_trailing => tree.taggedUnion(node_idx),
+        .tagged_union_enum_tag, .tagged_union_enum_tag_trailing => tree.taggedUnionEnumTag(node_idx),
+        .tagged_union_two, .tagged_union_two_trailing => blk: {
+            var buffer: [2]Ast.Node.Index = undefined;
+            break :blk tree.taggedUnionTwo(&buffer, node_idx);
+        },
+        else => null,
+    };
+
+    // Only tagged unions and enums should pass this
+    const can_have_enums = if (container_decl) |container| blk: {
+        const kind = token_tags[container.ast.main_token];
+        break :blk kind != .keyword_struct and
+            (kind != .keyword_union or container.ast.enum_token != null or container.ast.arg != 0);
+    } else false;
+
+    for (ast_decls) |*ptr_decl| {
+        const decl = ptr_decl.*;
+        if (tags[decl] == .@"usingnamespace") {
+            try uses.append(allocator, ptr_decl);
+            continue;
+        }
+
+        try self.makeScopeInternal(tree, decl);
+        const name = TypeWithHandle.getDeclName(tree, decl) orelse continue;
+
+        if (tags[decl] == .test_decl) {
+            try tests.append(allocator, decl);
+            continue;
+        }
+        if (try self.scopes.items[scope_idx].decls.fetchPut(name, .{ .ast_node = decl })) |existing| {
+            _ = existing;
+            // TODO Record a redefinition error.
+        }
+
+        if (!can_have_enums)
+            continue;
+
+        const container_field = switch (tags[decl]) {
+            .container_field => tree.containerField(decl),
+            .container_field_align => tree.containerFieldAlign(decl),
+            .container_field_init => tree.containerFieldInit(decl),
+            else => null,
+        };
+
+        if (container_field) |_| {
+            if (!std.mem.eql(u8, name, "_")) {
+                try self.enums.put(allocator, .{
+                    .label = name,
+                    .kind = .Constant,
+                    .insertText = name,
+                    .insertTextFormat = .PlainText,
+                    .documentation = if (try ast.getDocComments(allocator, tree, decl, .Markdown)) |docs|
+                        lsp.MarkupContent{ .kind = .Markdown, .value = docs }
+                    else
+                        null,
+                }, {});
+            }
+        }
     }
-    self.error_completions.deinit(allocator);
-    for (self.enum_completions.entries.items(.key)) |item| {
-        if (item.documentation) |doc| allocator.free(doc.value);
-    }
-    self.enum_completions.deinit(allocator);
+
+    self.scopes.items[scope_idx].tests = tests.toOwnedSlice(allocator);
+    self.scopes.items[scope_idx].uses = uses.toOwnedSlice(allocator);
 }
 
 pub fn debugPrint(self: Self) void {
@@ -870,10 +849,10 @@ pub fn debugPrint(self: Self) void {
 }
 
 pub fn innermostBlockScopeIndex(self: Self, source_index: usize) usize {
-    if (self.scopes.len == 1) return 0;
+    if (self.scopes.items.len == 1) return 0;
 
     var current: usize = 0;
-    for (self.scopes[1..]) |*scope, idx| {
+    for (self.scopes.items[1..]) |*scope, idx| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             switch (scope.data) {
                 .container, .function, .block => current = idx + 1,
@@ -886,14 +865,14 @@ pub fn innermostBlockScopeIndex(self: Self, source_index: usize) usize {
 }
 
 pub fn innermostBlockScope(self: Self, source_index: usize) Ast.Node.Index {
-    return self.scopes[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
+    return self.scopes.items[self.innermostBlockScopeIndex(source_index)].toNodeIndex().?;
 }
 
 pub fn findContainerScope(self: Self, container: Ast.Node.Index) ?*Scope {
     // if (!ast.isContainer(handle.ast_context.tree, container)) return null;
 
     // Find the container scope.
-    return for (self.scopes) |*scope| {
+    return for (self.scopes.items) |*scope| {
         switch (scope.data) {
             .container => |node| if (node == container) {
                 break scope;

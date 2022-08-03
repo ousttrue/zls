@@ -207,10 +207,10 @@ pub fn deinit() void {
 }
 
 pub fn innermostContainer(handle: *Document, source_index: usize) Self {
-    var current = handle.ast_context.document_scope.scopes[0].data.container;
-    if (handle.ast_context.document_scope.scopes.len == 1) return Self.typeVal(handle, current);
+    var current = handle.ast_context.document_scope.scopes.items[0].data.container;
+    if (handle.ast_context.document_scope.scopes.items.len == 1) return Self.typeVal(handle, current);
 
-    for (handle.ast_context.document_scope.scopes[1..]) |scope| {
+    for (handle.ast_context.document_scope.scopes.items[1..]) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             switch (scope.data) {
                 .container => |node| current = node,

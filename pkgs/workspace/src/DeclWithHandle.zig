@@ -793,7 +793,7 @@ pub fn symbolReferences(
         },
         .param_decl => |param| {
             // Rename the param tok.
-            const fn_node: Ast.full.FnProto = loop: for (curr_handle.ast_context.document_scope.scopes) |scope| {
+            const fn_node: Ast.full.FnProto = loop: for (curr_handle.ast_context.document_scope.scopes.items) |scope| {
                 switch (scope.data) {
                     .function => |proto| {
                         var buf: [1]Ast.Node.Index = undefined;

@@ -613,7 +613,7 @@ fn iterateSymbolsGlobalInternal(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
-    for (handle.ast_context.document_scope.scopes) |scope| {
+    for (handle.ast_context.document_scope.scopes.items) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             var decl_it = scope.decls.iterator();
             while (decl_it.next()) |entry| {

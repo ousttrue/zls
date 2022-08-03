@@ -128,7 +128,7 @@ pub fn lookupSymbolGlobalTokenIndex(
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.ast_context.document_scope.scopes[curr];
+        const scope = &handle.ast_context.document_scope.scopes.items[curr];
         if (token.loc.start >= scope.range.start and token.loc.end <= scope.range.end) blk: {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {
