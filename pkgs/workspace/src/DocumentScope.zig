@@ -50,7 +50,7 @@ errors: CompletionSet = .{},
 enums: CompletionSet = .{},
 
 pub fn init(allocator: std.mem.Allocator, tree: Ast) !Self {
-    var self = Self{        
+    var self = Self{
         .allocator = allocator,
         .scopes = std.ArrayList(Scope).init(allocator),
     };
@@ -113,7 +113,110 @@ fn makeScopeInternal(
         .root,
         .error_set_decl,
         => {
-            try self.makeInnerScope(tree, node_idx);
+            var buf: [2]Ast.Node.Index = undefined;
+            const ast_decls = ast.declMembers(tree, node_idx, &buf);
+
+            // new Scope
+            (try self.scopes.addOne()).* = .{
+                .range = nodeSourceRange(tree, node_idx),
+                .decls = std.StringHashMap(Declaration).init(allocator),
+                .data = .{ .container = node_idx },
+            };
+            const scope_idx = self.scopes.items.len - 1;
+            var uses = std.ArrayListUnmanaged(*const Ast.Node.Index){};
+            var tests = std.ArrayListUnmanaged(Ast.Node.Index){};
+
+            errdefer {
+                self.scopes.items[scope_idx].decls.deinit();
+                uses.deinit(allocator);
+                tests.deinit(allocator);
+            }
+
+            if (node_tag == .error_set_decl) {
+                // All identifiers in main_token..data.lhs are error fields.
+                var i = main_tokens[node_idx];
+                while (i < data[node_idx].rhs) : (i += 1) {
+                    if (token_tags[i] == .identifier) {
+                        try self.errors.put(allocator, .{
+                            .label = tree.tokenSlice(i),
+                            .kind = .Constant,
+                            .insertText = tree.tokenSlice(i),
+                            .insertTextFormat = .PlainText,
+                        }, {});
+                    }
+                }
+            }
+
+            const container_decl = switch (node_tag) {
+                .container_decl, .container_decl_trailing => tree.containerDecl(node_idx),
+                .container_decl_arg, .container_decl_arg_trailing => tree.containerDeclArg(node_idx),
+                .container_decl_two, .container_decl_two_trailing => blk: {
+                    var buffer: [2]Ast.Node.Index = undefined;
+                    break :blk tree.containerDeclTwo(&buffer, node_idx);
+                },
+                .tagged_union, .tagged_union_trailing => tree.taggedUnion(node_idx),
+                .tagged_union_enum_tag, .tagged_union_enum_tag_trailing => tree.taggedUnionEnumTag(node_idx),
+                .tagged_union_two, .tagged_union_two_trailing => blk: {
+                    var buffer: [2]Ast.Node.Index = undefined;
+                    break :blk tree.taggedUnionTwo(&buffer, node_idx);
+                },
+                else => null,
+            };
+
+            // Only tagged unions and enums should pass this
+            const can_have_enums = if (container_decl) |container| blk: {
+                const kind = token_tags[container.ast.main_token];
+                break :blk kind != .keyword_struct and
+                    (kind != .keyword_union or container.ast.enum_token != null or container.ast.arg != 0);
+            } else false;
+
+            for (ast_decls) |*ptr_decl| {
+                const decl = ptr_decl.*;
+                if (tags[decl] == .@"usingnamespace") {
+                    try uses.append(allocator, ptr_decl);
+                    continue;
+                }
+
+                try self.makeScopeInternal(tree, decl);
+                const name = TypeWithHandle.getDeclName(tree, decl) orelse continue;
+
+                if (tags[decl] == .test_decl) {
+                    try tests.append(allocator, decl);
+                    continue;
+                }
+                if (try self.scopes.items[scope_idx].decls.fetchPut(name, .{ .ast_node = decl })) |existing| {
+                    _ = existing;
+                    // TODO Record a redefinition error.
+                }
+
+                if (!can_have_enums)
+                    continue;
+
+                const container_field = switch (tags[decl]) {
+                    .container_field => tree.containerField(decl),
+                    .container_field_align => tree.containerFieldAlign(decl),
+                    .container_field_init => tree.containerFieldInit(decl),
+                    else => null,
+                };
+
+                if (container_field) |_| {
+                    if (!std.mem.eql(u8, name, "_")) {
+                        try self.enums.put(allocator, .{
+                            .label = name,
+                            .kind = .Constant,
+                            .insertText = name,
+                            .insertTextFormat = .PlainText,
+                            .documentation = if (try ast.getDocComments(allocator, tree, decl, .Markdown)) |docs|
+                                lsp.MarkupContent{ .kind = .Markdown, .value = docs }
+                            else
+                                null,
+                        }, {});
+                    }
+                }
+            }
+
+            self.scopes.items[scope_idx].tests = tests.toOwnedSlice(allocator);
+            self.scopes.items[scope_idx].uses = uses.toOwnedSlice(allocator);
         },
         .array_type_sentinel => {
             // TODO: ???
@@ -707,121 +810,6 @@ fn makeScopeInternal(
             try self.makeScopeInternal(tree, data[node_idx].rhs);
         },
     }
-}
-
-/// .container
-fn makeInnerScope(self: *Self, tree: Ast, node_idx: Ast.Node.Index) error{OutOfMemory}!void {
-    const allocator =self.allocator;
-    const tags = tree.nodes.items(.tag);
-    const token_tags = tree.tokens.items(.tag);
-    const data = tree.nodes.items(.data);
-    const main_tokens = tree.nodes.items(.main_token);
-    const node_tag = tags[node_idx];
-
-    var buf: [2]Ast.Node.Index = undefined;
-    const ast_decls = ast.declMembers(tree, node_idx, &buf);
-
-    // new Scope
-    (try self.scopes.addOne()).* = .{
-        .range = nodeSourceRange(tree, node_idx),
-        .decls = std.StringHashMap(Declaration).init(allocator),
-        .data = .{ .container = node_idx },
-    };
-    const scope_idx = self.scopes.items.len - 1;
-    var uses = std.ArrayListUnmanaged(*const Ast.Node.Index){};
-    var tests = std.ArrayListUnmanaged(Ast.Node.Index){};
-
-    errdefer {
-        self.scopes.items[scope_idx].decls.deinit();
-        uses.deinit(allocator);
-        tests.deinit(allocator);
-    }
-
-    if (node_tag == .error_set_decl) {
-        // All identifiers in main_token..data.lhs are error fields.
-        var i = main_tokens[node_idx];
-        while (i < data[node_idx].rhs) : (i += 1) {
-            if (token_tags[i] == .identifier) {
-                try self.errors.put(allocator, .{
-                    .label = tree.tokenSlice(i),
-                    .kind = .Constant,
-                    .insertText = tree.tokenSlice(i),
-                    .insertTextFormat = .PlainText,
-                }, {});
-            }
-        }
-    }
-
-    const container_decl = switch (node_tag) {
-        .container_decl, .container_decl_trailing => tree.containerDecl(node_idx),
-        .container_decl_arg, .container_decl_arg_trailing => tree.containerDeclArg(node_idx),
-        .container_decl_two, .container_decl_two_trailing => blk: {
-            var buffer: [2]Ast.Node.Index = undefined;
-            break :blk tree.containerDeclTwo(&buffer, node_idx);
-        },
-        .tagged_union, .tagged_union_trailing => tree.taggedUnion(node_idx),
-        .tagged_union_enum_tag, .tagged_union_enum_tag_trailing => tree.taggedUnionEnumTag(node_idx),
-        .tagged_union_two, .tagged_union_two_trailing => blk: {
-            var buffer: [2]Ast.Node.Index = undefined;
-            break :blk tree.taggedUnionTwo(&buffer, node_idx);
-        },
-        else => null,
-    };
-
-    // Only tagged unions and enums should pass this
-    const can_have_enums = if (container_decl) |container| blk: {
-        const kind = token_tags[container.ast.main_token];
-        break :blk kind != .keyword_struct and
-            (kind != .keyword_union or container.ast.enum_token != null or container.ast.arg != 0);
-    } else false;
-
-    for (ast_decls) |*ptr_decl| {
-        const decl = ptr_decl.*;
-        if (tags[decl] == .@"usingnamespace") {
-            try uses.append(allocator, ptr_decl);
-            continue;
-        }
-
-        try self.makeScopeInternal(tree, decl);
-        const name = TypeWithHandle.getDeclName(tree, decl) orelse continue;
-
-        if (tags[decl] == .test_decl) {
-            try tests.append(allocator, decl);
-            continue;
-        }
-        if (try self.scopes.items[scope_idx].decls.fetchPut(name, .{ .ast_node = decl })) |existing| {
-            _ = existing;
-            // TODO Record a redefinition error.
-        }
-
-        if (!can_have_enums)
-            continue;
-
-        const container_field = switch (tags[decl]) {
-            .container_field => tree.containerField(decl),
-            .container_field_align => tree.containerFieldAlign(decl),
-            .container_field_init => tree.containerFieldInit(decl),
-            else => null,
-        };
-
-        if (container_field) |_| {
-            if (!std.mem.eql(u8, name, "_")) {
-                try self.enums.put(allocator, .{
-                    .label = name,
-                    .kind = .Constant,
-                    .insertText = name,
-                    .insertTextFormat = .PlainText,
-                    .documentation = if (try ast.getDocComments(allocator, tree, decl, .Markdown)) |docs|
-                        lsp.MarkupContent{ .kind = .Markdown, .value = docs }
-                    else
-                        null,
-                }, {});
-            }
-        }
-    }
-
-    self.scopes.items[scope_idx].tests = tests.toOwnedSlice(allocator);
-    self.scopes.items[scope_idx].uses = uses.toOwnedSlice(allocator);
 }
 
 pub fn debugPrint(self: Self) void {
