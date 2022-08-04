@@ -14,9 +14,9 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "zig test pkgs/workspace/src/LinePosition.zig",
+            "command": "zig test pkgs/workspace/src/AstToken.zig",
             "problemMatcher": [
-                // "$gcc"
+                "$gcc"
             ]
         }
     ]

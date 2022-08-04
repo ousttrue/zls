@@ -15,6 +15,7 @@ const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
 const AstNodeIterator = ws.AstNodeIterator;
+const AstToken = ws.AstToken;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const URI = @import("./uri.zig");
@@ -439,8 +440,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-        // token not found. return no hover.
+    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
         return lsp.Response.createNull(id);
     };
 
@@ -448,7 +448,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
         arena,
         workspace,
         doc,
-        token_with_index.index,
+        token,
         if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
     ) catch |err| (std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null);
     const text = hover_or_null orelse {

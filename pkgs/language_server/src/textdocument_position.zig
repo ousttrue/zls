@@ -7,6 +7,7 @@ const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const SymbolLookup = ws.SymbolLookup;
 const FixedPath = ws.FixedPath;
+const AstToken = ws.AstToken;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 
@@ -14,14 +15,13 @@ pub fn getHover(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    token_index: u32,
+    token: AstToken,
     hover_kind: ast.MarkupFormat,
 ) !?[]const u8 {
-    var context_info = try doc.ast_context.getTokenIndexContext(arena.allocator(), token_index);
-    const token = doc.ast_context.tokens.items[token_index];
-    const name = doc.ast_context.getTokenText(token);
+    var context_info = try doc.ast_context.getTokenIndexContext(arena.allocator(), token.index);
+    const name = token.getText();
     const allocator = arena.allocator();
-    switch (token.tag) {
+    switch (token.getTag()) {
         .builtin => {
             if (builtin_completions.find(name)) |builtin| {
                 return try std.fmt.allocPrint(
@@ -40,7 +40,7 @@ pub fn getHover(
         .identifier => {
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (lookup.lookupIdentifier(arena, workspace, doc, token_index)) |decl| {
+            if (lookup.lookupIdentifier(arena, workspace, doc, token.index)) |decl| {
                 const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                 return try std.fmt.allocPrint(
                     allocator,
