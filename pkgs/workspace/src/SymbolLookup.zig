@@ -6,6 +6,8 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
+const AstToken = @import("./AstToken.zig");
+const AstNode = @import("./AstNode.zig");
 const ast = @import("./ast.zig");
 
 const Self = @This();
@@ -300,12 +302,20 @@ pub fn lookupIdentifier(
     doc: *Document,
     token_index: u32,
 ) ?DeclWithHandle {
+    const node = AstNode.fromTokenIndex(doc.ast_context, token_index);
+    _ = node;
     const tag = doc.ast_context.tree.nodes.items(.tag);
     const idx = doc.ast_context.tokens_node[token_index];
     const node_tag = tag[idx];
-    return switch (node_tag) {
-        .identifier => self.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index),
-        .field_access => self.getSymbolFieldAccess(arena, workspace, doc, token_index),
-        else => null,
-    };
+    switch (node_tag) {
+        .identifier => {
+            return self.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index);
+        },
+        .field_access => {
+            return self.getSymbolFieldAccess(arena, workspace, doc, token_index);
+        },
+        else => {
+            return null;
+        },
+    }
 }

@@ -509,7 +509,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
 pub fn @"textDocument/typeDefinition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
-    logger.debug("[definition]{s} {}", .{ try FixedPath.fromUri(params.textDocument.uri), params.position });
+    logger.debug("[definition]{s} {}", .{ (try FixedPath.fromUri(params.textDocument.uri)).slice(), params.position });
     const doc = workspace.getDocument(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));

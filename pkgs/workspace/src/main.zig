@@ -18,6 +18,7 @@ pub const DeclWithHandle = @import("./DeclWithHandle.zig");
 pub const TypeWithHandle = @import("./TypeWithHandle.zig");
 pub const AstNodeIterator = @import("./AstNodeIterator.zig");
 pub const AstToken = @import("./AstToken.zig");
+pub const AstNode = @import("./AstNode.zig");
 pub const SymbolLookup = @import("./SymbolLookup.zig");
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
     TypeWithHandle.init(allocator);

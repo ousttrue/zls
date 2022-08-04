@@ -44,7 +44,7 @@ pub fn getHover(
                 const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                 return try std.fmt.allocPrint(
                     allocator,
-                    "# {s}\n\n{s}\n\n{s}",
+                    "# {s}\n\n{s}\n\n{?s}",
                     .{ name, context_info, hover },
                 );
             } else {

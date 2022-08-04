@@ -6,6 +6,7 @@ const ast = @import("./ast.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
+const AstNode = @import("./AstNode.zig");
 const Self = @This();
 
 fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
