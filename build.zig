@@ -69,10 +69,12 @@ pub fn build(b: *std.build.Builder) !void {
     // session_tests.setBuildMode(.Debug);
     // test_step.dependOn(&session_tests.step);
 
-    const tests = b.addExecutable("zls_test", "src/test.zig");
-    tests.setBuildMode(mode);
+    const tests = b.addTest("src/main.zig");
     tests.addPackage(lsp_pkg);
     tests.setTarget(target);
     tests.setBuildMode(mode);
-    tests.install();
+    // tests.install();
+    const test_step = b.step("test", "Run all the tests");
+    test_step.dependOn(&tests.step);
+    test_step.dependOn(b.getInstallStep());
 }

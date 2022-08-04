@@ -1,11 +1,8 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
-const UriBytePosition = @import("./UriBytePosition.zig");
 const AstNodeIterator = @import("./AstNodeIterator.zig");
 const ast = @import("./ast.zig");
-const ZigEnv = @import("./ZigEnv.zig");
 const DocumentScope = @import("./DocumentScope.zig");
-const DeclWithHandle = @import("./DeclWithHandle.zig");
 const AstNode = @import("./AstNode.zig");
 const Self = @This();
 
