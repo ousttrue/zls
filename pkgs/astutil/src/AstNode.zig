@@ -1,4 +1,5 @@
 const std = @import("std");
+const Ast = std.zig.Ast;
 const AstContext = @import("./AstContext.zig");
 const Self = @This();
 
@@ -17,6 +18,21 @@ pub fn fromTokenIndex(context: *const AstContext, token_idx: u32) Self {
     return init(context, idx);
 }
 
+pub fn getTag(self: Self) Ast.Node.Tag {
+    const tag = self.context.tree.nodes.items(.tag);
+    return tag[self.index];
+}
+
+pub fn parent(self: Self) ? Self
+{
+    if(self.index==0)
+    {
+        return null;
+    }
+    const index = self.context.nodes_parent[self.index];
+    return init(self.context, index);
+}
+
 test {
     const source =
         \\pub fn main() !void {
@@ -24,13 +40,18 @@ test {
         \\}
     ;
     const allocator = std.testing.allocator;
-    const text = allocator.dupeZ(u8, source);
+    const text: [:0]const u8 = try allocator.dupeZ(u8, source);
     defer allocator.free(text);
 
-    const context = AstContext.new(allocator, text);
+    const context = try AstContext.new(allocator, text);
     defer context.delete();
 
     const node = fromTokenIndex(context, 0);
-    _ = node;
-    // try std.testing.expect()
+    try std.testing.expectEqual(node.getTag(), .fn_proto_simple);
+
+    const parent_node = node.parent().?;
+    try std.testing.expectEqual(parent_node.getTag(), .fn_decl);
+
+    const root_node = parent_node.parent().?;
+    try std.testing.expectEqual(root_node.getTag(), .root);
 }

@@ -85,6 +85,7 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
 pub fn delete(self: *Self) void {
     self.allocator.free(self.tokens_node);
     self.allocator.free(self.nodes_parent);
+    self.tokens.deinit();
     self.tree.deinit(self.allocator);
     self.allocator.destroy(self);
 }
