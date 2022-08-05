@@ -115,7 +115,7 @@ pub const NodeChildren = union(enum) {
         const node_data = data[idx];
 
         return switch (node_tag) {
-            .root => .{ .nodes = tree.rootDecls() },
+            .root => .{ .container_decl = tree.containerDeclRoot() },
             .@"usingnamespace" => .{ .one = node_data.lhs },
             .test_decl => .{ .one = node_data.rhs },
             .global_var_decl => .{ .var_decl = tree.globalVarDecl(idx) },

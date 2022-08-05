@@ -38,17 +38,15 @@ pub fn init(context: *const AstContext, token: AstToken) Self {
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
-    // token / node
     const token = try self.token.allocPrint(allocator);
     defer allocator.free(token);
     const node = try self.node.allocPrint(allocator);
     defer allocator.free(node);
     return std.fmt.allocPrint(allocator, "`{s} => {s}`\n", .{ node, token });
 
-    // const children = AstNodeIterator.NodeChildren.init(self.tree, node_idx, &u32_2);
+    // identifier => getDecl
+    // field_access => getLhs identifier / field_access
 
-    // var fixed_buffer = std.heap.FixedBufferAllocator.init(&debug_buffer);
-    // const allocator = fixed_buffer.allocator();
     // switch (self) {
     //     .identifier => |value| {
     //         return std.fmt.allocPrint(

@@ -21,13 +21,22 @@ pub fn fromTokenIndex(context: *const AstContext, token_idx: u32) Self {
 }
 
 fn printRec(self: Self, w: anytype) std.mem.Allocator.Error!void {
-    if (!self.isBlock()) {
-        if (self.getParent()) |parent| {
-            try parent.printRec(w);
-            try w.print("/", .{});
-        }
+    var buffer: [2]u32 = undefined;
+    const children = self.getChildren(&buffer);
+    switch (children) {
+        .container_decl, .block => {},
+        else => {
+            if (self.getParent()) |parent| {
+                try parent.printRec(w);
+                try w.print("/", .{});
+            }
+        },
     }
-    try w.print("{s}", .{@tagName(self.getTag())});
+    switch (children) {
+        .container_decl => try w.print("<{s}>", .{@tagName(self.getTag())}),
+        .block => try w.print("[{s}]", .{@tagName(self.getTag())}),
+        else => try w.print("{s}", .{@tagName(self.getTag())}),
+    }
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -56,10 +65,10 @@ pub fn getChildren(self: Self, buffer: []u32) AstNodeIterator.NodeChildren {
     return AstNodeIterator.NodeChildren.init(self.context.tree, self.index, buffer);
 }
 
-pub fn isBlock(self: Self) bool {
+pub fn isChildrenType(self: Self, childrenType: AstNodeIterator.NodeChildren) bool {
     var buffer: [2]u32 = undefined;
     const children = self.getChildren(&buffer);
-    return children == .block;
+    return children == childrenType;
 }
 
 pub fn getParent(self: Self) ?Self {
