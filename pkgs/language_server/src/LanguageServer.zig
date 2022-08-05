@@ -374,14 +374,15 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
     const params = try lsp.fromDynamicTree(arena, lsp.requests.TextDocumentIdentifierRequest, jsonParams.?);
     const doc = workspace.getDocument(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 
-    const tree = doc.ast_context.tree;
+    // const tree = doc.ast_context.tree;
     var data = std.ArrayList(lsp.types.CodeLens).init(arena.allocator());
-    // const tag = doc.ast_context.tree.nodes.items(.tag);
+    const tag = doc.ast_context.tree.nodes.items(.tag);
+    // var i: u32 = 0;
     var buffer: [2]u32 = undefined;
-    var i: u32 = 0;
     const allocator = arena.allocator();
-    while (i < tree.nodes.len) : (i += 1) {
-        const children = AstNodeIterator.NodeChildren.init(doc.ast_context.tree, i, &buffer);
+    // while (i < tree.nodes.len) : (i += 1) {
+    for(tag)|_, i|{
+        const children = AstNodeIterator.NodeChildren.init(doc.ast_context.tree, @intCast(u32, i), &buffer);
         switch (children) {
             .fn_proto => |fn_proto| {
                 const token_idx = fn_proto.ast.fn_token;
