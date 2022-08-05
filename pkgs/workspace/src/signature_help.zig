@@ -8,6 +8,7 @@ const Document = @import("./Document.zig");
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
+const AstToken = astutil.AstToken;
 const ast = astutil.ast;
 const Builtin = @import("./Builtin.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
@@ -305,10 +306,10 @@ pub fn getSignatureInfo(
                         );
                     }
 
-                    const name = doc.ast_context.getTokenTextFromBytePosition(expr_end - 1) orelse {
+                    const expr_token = AstToken.fromBytePosition(&doc.ast_context.tree, expr_end - 1) orelse {
                         try symbol_stack.append(alloc, .l_paren);
                         continue;
-                    };
+                    };                    
 
                     const skip_self_param = !type_handle.type.is_type_val;
                     var lookup = SymbolLookup.init(arena.allocator());
@@ -318,7 +319,7 @@ pub fn getSignatureInfo(
                         workspace,
                         type_handle.handle,
                         node,
-                        name,
+                        expr_token.getText(),
                         true,
                     ) orelse {
                         try symbol_stack.append(alloc, .l_paren);

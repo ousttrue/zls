@@ -8,6 +8,7 @@ const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
 const ast = astutil.ast;
+const AstToken = astutil.AstToken;
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, TypeWithHandle);
 const SymbolLookup = @import("./SymbolLookup.zig");
@@ -371,7 +372,12 @@ fn symbolReferencesInternal(
         .identifier => {
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (lookup.lookupSymbolGlobalTokenIndex(arena, workspace, doc, main_tokens[node])) |child| {
+            if (lookup.lookupSymbolGlobalTokenIndex(
+                arena,
+                workspace,
+                doc,
+                AstToken.init(&doc.ast_context.tree, main_tokens[node]),
+            )) |child| {
                 if (std.meta.eql(self, child)) {
                     try locations.append(doc.tokenReference(main_tokens[node]));
                 }

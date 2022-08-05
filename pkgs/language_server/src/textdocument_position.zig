@@ -41,7 +41,7 @@ pub fn getHover(
         .identifier => {
             var lookup = SymbolLookup.init(arena.allocator());
             defer lookup.deinit();
-            if (lookup.lookupIdentifier(arena, workspace, doc, token.index)) |decl| {
+            if (lookup.lookupIdentifier(arena, workspace, doc, token)) |decl| {
                 const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                 return try std.fmt.allocPrint(
                     allocator,
@@ -66,16 +66,15 @@ pub fn getRename(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    token_index: u32,
+    token: AstToken,
 ) !?[]const UriBytePosition {
-    const token = doc.ast_context.tokens[token_index];
-    if (token.tag != .identifier) {
+    if (token.getTag() != .identifier) {
         return null;
     }
 
     var lookup = SymbolLookup.init(arena.allocator());
     defer lookup.deinit();
-    const decl = lookup.lookupIdentifier(arena, workspace, doc, token_index) orelse {
+    const decl = lookup.lookupIdentifier(arena, workspace, doc, token) orelse {
         return null;
     };
 
@@ -86,13 +85,12 @@ pub fn getGoto(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    token_index: u32,
+    token: AstToken,
     resolve_alias: bool,
 ) !?UriBytePosition {
-    const token = doc.ast_context.tokens[token_index];
-    switch (token.tag) {
+    switch (token.getTag()) {
         .string_literal => {
-            const text = doc.ast_context.getTokenText(token);
+            const text = token.getText();
             if (text.len > 2) {
                 const path = try workspace.resolveImportPath(doc, text[1 .. text.len - 1]);
                 return UriBytePosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
@@ -110,7 +108,7 @@ pub fn getGoto(
 
     var lookup = SymbolLookup.init(arena.allocator());
     defer lookup.deinit();
-    const decl = lookup.lookupIdentifier(arena, workspace, doc, token_index) orelse {
+    const decl = lookup.lookupIdentifier(arena, workspace, doc, token) orelse {
         return null;
     };
 
@@ -121,18 +119,17 @@ pub fn getRenferences(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    token_index: u32,
+    token: AstToken,
     include_decl: bool,
     config: *Config,
 ) !?[]UriBytePosition {
-    const token = doc.ast_context.tokens[token_index];
-    if (token.tag != .identifier) {
+    if (token.getTag() != .identifier) {
         return null;
     }
 
     var lookup = SymbolLookup.init(arena.allocator());
     defer lookup.deinit();
-    const decl = lookup.lookupIdentifier(arena, workspace, doc, token_index) orelse {
+    const decl = lookup.lookupIdentifier(arena, workspace, doc, token) orelse {
         return null;
     };
 

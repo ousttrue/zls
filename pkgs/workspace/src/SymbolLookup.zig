@@ -122,18 +122,16 @@ pub fn lookupSymbolGlobalTokenIndex(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     handle: *Document,
-    token_idx: u32,
+    token: AstToken,
 ) ?DeclWithHandle {
-    // const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
-    const token = handle.ast_context.tokens[token_idx];
-    const symbol = handle.ast_context.getTokenText(token);
-    const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(token.loc.start);
+    const loc = token.getRange();
+    const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(loc.start);
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {
         const scope = &handle.document_scope.scopes.items[curr];
-        if (token.loc.start >= scope.range.start and token.loc.end <= scope.range.end) blk: {
-            if (scope.decls.getEntry(symbol)) |candidate| {
+        if (loc.start >= scope.range.start and loc.end <= scope.range.end) blk: {
+            if (scope.decls.getEntry(token.getText())) |candidate| {
                 switch (candidate.value_ptr.*) {
                     .ast_node => |node| {
                         if (handle.ast_context.tree.nodes.items(.tag)[node].isContainerField()) break :blk;
@@ -147,7 +145,7 @@ pub fn lookupSymbolGlobalTokenIndex(
                 };
             }
 
-            if (self.resolveUse(arena, workspace, scope.uses, symbol, handle)) |result| {
+            if (self.resolveUse(arena, workspace, scope.uses, token.getText(), handle)) |result| {
                 return result;
             }
         }
@@ -176,7 +174,7 @@ fn resolveVarDeclAliasInternal(
             arena,
             workspace,
             handle,
-            token,
+            AstToken.init(&handle.ast_context.tree, token),
         );
     }
 
@@ -283,15 +281,14 @@ pub fn getSymbolFieldAccess(
         .other => |n| n,
         else => return null,
     };
-    const token = doc.ast_context.tokens[token_idx];
-    const name = doc.ast_context.getTokenText(token);
+    const token = AstToken.init(&doc.ast_context.tree, token_idx);
 
     return self.lookupSymbolContainer(
         arena,
         workspace,
         container_handle.handle,
         container_handle_node,
-        name,
+        token.getText(),
         true,
     );
 }
@@ -301,19 +298,15 @@ pub fn lookupIdentifier(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    token_index: u32,
+    token: AstToken,
 ) ?DeclWithHandle {
-    const node = AstNode.fromTokenIndex(doc.ast_context, token_index);
-    _ = node;
-    const tag = doc.ast_context.tree.nodes.items(.tag);
-    const idx = doc.ast_context.tokens_node[token_index];
-    const node_tag = tag[idx];
-    switch (node_tag) {
+    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+    switch (node.getTag()) {
         .identifier => {
-            return self.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token_index);
+            return self.lookupSymbolGlobalTokenIndex(arena, workspace, doc, token);
         },
         .field_access => {
-            return self.getSymbolFieldAccess(arena, workspace, doc, token_index);
+            return self.getSymbolFieldAccess(arena, workspace, doc, token.index);
         },
         else => {
             return null;

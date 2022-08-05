@@ -6,6 +6,7 @@ const Document = @import("./Document.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
+const AstToken = astutil.AstToken;
 const ast = astutil.ast;
 const logger = std.log.scoped(.FieldAccessReturn);
 
@@ -33,7 +34,7 @@ pub fn getFieldAccessType(
                     arena,
                     workspace,
                     current_type.handle,
-                    current,
+                    AstToken.init(&current_type.handle.ast_context.tree, current),
                 )) |child| {
                     if (try child.resolveType(arena, workspace, &bound_type_params)) |child_type| {
                         current_type = child_type;
@@ -80,7 +81,7 @@ pub fn getFieldAccessType(
                             workspace,
                             current_type.handle,
                             current_type_node,
-                            doc.ast_context.getTokenText(doc.ast_context.tokenFromBytePos(after_period_token.loc.start).?.token),
+                            AstToken.fromBytePosition(&doc.ast_context.tree, after_period_token.loc.start).?.getText(),
                             !current_type.type.is_type_val,
                         )) |child| {
                             current_type = (try child.resolveType(

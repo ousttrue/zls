@@ -14,7 +14,7 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "zig test pkgs/astutil/src/AstNode.zig",
+            "command": "zig test pkgs/astutil/src/AstToken.zig",
             "problemMatcher": [
                 "$gcc"
             ]

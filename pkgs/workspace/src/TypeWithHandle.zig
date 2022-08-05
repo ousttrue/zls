@@ -4,6 +4,7 @@ const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const ast = astutil.ast;
+const AstToken = astutil.AstToken;
 pub const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, Self);
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
@@ -461,7 +462,7 @@ pub fn resolveTypeOfNodeInternal(
                 arena,
                 workspace,
                 doc,
-                main_tokens[node],
+                AstToken.init(&doc.ast_context.tree, main_tokens[node]),
             )) |child| {
                 switch (child.decl.*) {
                     .ast_node => |n| {

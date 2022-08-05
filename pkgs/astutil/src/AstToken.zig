@@ -27,18 +27,24 @@ const Self = @This();
 tree: *const Ast,
 index: u32,
 
-pub fn init(tree: *const Ast, index: u32) Self {
+pub fn init(tree: *const Ast, index: usize) Self {
     return Self{
         .tree = tree,
-        .index = index,
+        .index = @intCast(u32, index),
     };
 }
 
-pub fn fromBytePosition(tree: *const Ast, byte_position: u32) ?Self {
-    return if (findTokenIndex(tree, byte_position)) |index|
+pub fn fromBytePosition(tree: *const Ast, byte_position: usize) ?Self {
+    return if (findTokenIndex(tree, @intCast(u32, byte_position))) |index|
         init(tree, index)
     else
         null;
+}
+
+var debug_buffer: [1024]u8 = undefined;
+pub fn debugInfo(self: Self) []const u8 {
+    var fixed_buffer = std.heap.FixedBufferAllocator.init(&debug_buffer);
+    return std.fmt.allocPrint(fixed_buffer.allocator(), "{s}: {s}", .{ @tagName(self.getTag()), self.getText() }) catch unreachable;
 }
 
 pub fn getText(self: Self) []const u8 {
@@ -48,6 +54,28 @@ pub fn getText(self: Self) []const u8 {
 pub fn getTag(self: Self) std.zig.Token.Tag {
     const token_tag = self.tree.tokens.items(.tag);
     return token_tag[self.index];
+}
+
+pub fn getStart(self: Self) u32 {
+    const token_start = self.tree.tokens.items(.start);
+    return token_start[self.index];
+}
+
+pub fn getRange(self: Self) std.zig.Token.Loc {
+    const start = self.getStart();
+    const text = self.getText();
+    return .{ .start = start, .end = start + text.len };
+}
+
+test "tokenizer" {
+    const source =
+        \\pub fn main() !void {
+        \\    
+        \\}
+    ;
+    var tokenizer = std.zig.Tokenizer.init(source);
+    const token = tokenizer.next();
+    try std.testing.expectEqual(token.loc, .{ .start = 0, .end = 3 });
 }
 
 test {
@@ -66,6 +94,7 @@ test {
     try std.testing.expect(token.index == 0);
     try std.testing.expectEqualSlices(u8, token.getText(), "pub");
     try std.testing.expectEqual(token.getTag(), .keyword_pub);
+    try std.testing.expectEqual(token.getRange(), .{ .start = 0, .end = 3 });
 
     try std.testing.expect(fromBytePosition(&tree, 3) == null);
 

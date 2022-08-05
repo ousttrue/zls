@@ -2,6 +2,7 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const AstNodeIterator = @import("./AstNodeIterator.zig");
 const AstNode = @import("./AstNode.zig");
+const AstToken = @import("./AstToken.zig");
 const Self = @This();
 
 fn getAllTokensAlloc(allocator: std.mem.Allocator, source: [:0]const u8) []std.zig.Token {
@@ -88,17 +89,6 @@ pub fn delete(self: *Self) void {
 
 pub fn getText(self: Self, loc: std.zig.Token.Loc) []const u8 {
     return self.tree.source[loc.start..loc.end];
-}
-
-pub fn getTokenText(self: Self, token: std.zig.Token) []const u8 {
-    return self.getText(token.loc);
-}
-
-pub fn getTokenTextFromBytePosition(self: Self, byte_position: usize) ?[]const u8 {
-    return if (self.tokenFromBytePos(byte_position)) |token_with_index|
-        self.getTokenText(token_with_index.token)
-    else
-        null;
 }
 
 pub fn getTokens(self: Self, start: usize, last: usize) []const std.zig.Token {
@@ -221,11 +211,10 @@ pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx:
     try w.print(" => ", .{});
 
     // token
-    const token = self.tokens[token_idx];
-    const name = self.getTokenText(token);
+    const token = AstToken.init(&self.tree, token_idx);
     try w.print("{s}: {s}", .{
-        @tagName(token.tag),
-        name,
+        @tagName(token.getTag()),
+        token.getText(),
     });
 
     return buffer.items;

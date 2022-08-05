@@ -1,6 +1,7 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const AstContext = @import("./AstContext.zig");
+const AstToken = @import("./AstToken.zig");
 const Self = @This();
 
 context: *const AstContext,
@@ -23,10 +24,13 @@ pub fn getTag(self: Self) Ast.Node.Tag {
     return tag[self.index];
 }
 
-pub fn parent(self: Self) ? Self
-{
-    if(self.index==0)
-    {
+pub fn getMainToken(self: Self) AstToken {
+    const main_token = self.context.tree.ndoes.items(.main_token);
+    return AstToken.init(self.context.tree, main_token[self.index]);
+}
+
+pub fn parent(self: Self) ?Self {
+    if (self.index == 0) {
         return null;
     }
     const index = self.context.nodes_parent[self.index];

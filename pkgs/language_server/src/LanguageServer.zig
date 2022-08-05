@@ -387,10 +387,11 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
         switch (children) {
             .fn_proto => |fn_proto| {
                 const token_idx = fn_proto.ast.fn_token;
-                const token = doc.ast_context.tokens[token_idx];
-                const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token_idx, true, self.config)) |refs| refs.len else 0;
-                const start = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.start, self.encoding);
-                const end = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.end, self.encoding);
+                const token = AstToken.init(&doc.ast_context.tree, token_idx);
+                const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token, true, self.config)) |refs| refs.len else 0;
+                const loc = token.getRange();
+                const start = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, self.encoding);
+                const end = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, self.encoding);
                 const text = try std.fmt.allocPrint(allocator, "references {}", .{n});
                 _ = text;
                 // const arg = try std.fmt.allocPrint(allocator, "{}", .{token_idx});
@@ -476,12 +477,11 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-        // token not found. return no hover.
+    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, false)) |location| {
+    if (try textdocument_position.getGoto(arena, workspace, doc, token, true)) |location| {
         const goto_doc = workspace.getOrLoadDocument(location.path) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
@@ -515,12 +515,11 @@ pub fn @"textDocument/typeDefinition"(self: *Self, arena: *std.heap.ArenaAllocat
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-        // token not found. return no hover.
+    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, workspace, doc, token_with_index.index, true)) |location| {
+    if (try textdocument_position.getGoto(arena, workspace, doc, token, true)) |location| {
         const goto_doc = workspace.getDocument(location.path) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
@@ -572,7 +571,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         workspace,
         doc,
         params.context.triggerCharacter,
-        token_with_index.index,
+        AstToken.init(&doc.ast_context.tree, token_with_index.index),
         self.config,
         if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
     );
@@ -595,12 +594,11 @@ pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: 
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-        // token not found. return no hover.
+    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getRename(arena, workspace, doc, token_with_index.index)) |locations| {
+    if (try textdocument_position.getRename(arena, workspace, doc, token)) |locations| {
         var changes = std.StringHashMap([]lsp.TextEdit).init(arena.allocator());
         const allocator = arena.allocator();
         for (locations) |location| {
@@ -642,8 +640,7 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-        // token not found. return no hover.
+    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
         return lsp.Response.createNull(id);
     };
 
@@ -651,7 +648,7 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
         arena,
         workspace,
         doc,
-        token_with_index.index,
+        token,
         params.context.includeDeclaration,
         self.config,
     )) |src| {

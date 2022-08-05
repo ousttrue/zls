@@ -11,6 +11,7 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
 const ast = astutil.ast;
+const AstToken = astutil.AstToken;
 const Ast = std.zig.Ast;
 const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.Completion);
@@ -697,20 +698,19 @@ fn completeFieldAccess(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
-    token_index: u32,
+    token: AstToken,
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
     {
-        const token = doc.ast_context.tokens[token_index];
-        if (token.tag != .period) {
-            logger.warn("not period: {} => {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
+        if (token.getTag() != .period) {
+            logger.warn("not period: {s}", .{ token.debugInfo() });
             return completions.items;
         }
     }
 
-    if (FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_index - 1)) |result| {
+    if (FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token.index - 1)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
         builtin_completions.truncateCompletions(completions.items, config.max_detail_length);
     }
@@ -772,18 +772,16 @@ pub fn process(
     workspace: *Workspace,
     doc: *Document,
     trigger_character: ?[]const u8,
-    token_index: u32,
+    token: AstToken,
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
-    const token = doc.ast_context.tokens[token_index];
-    logger.debug("prev: {}: {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
+    logger.debug("prev: {s}", .{token.debugInfo()});
 
-    _ = trigger_character;
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
-            return try completeFieldAccess(arena, workspace, doc, token_index, config, doc_kind);
+            return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
         } else if (std.mem.eql(u8, trigger, "@")) {
             logger.debug("trigger '@' => builtin", .{});
             return builtin_completions.completeBuiltin();
@@ -792,7 +790,7 @@ pub fn process(
             return &[_]lsp.CompletionItem{};
         }
     } else {
-        switch (token.tag) {
+        switch (token.getTag()) {
             .period => {
                 // completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
                 // const idx = doc.ast_context.tokens_node[token_with_index.index];
@@ -807,10 +805,10 @@ pub fn process(
                 //         return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
                 //     },
                 // }
-                return try completeFieldAccess(arena, workspace, doc, token_index, config, doc_kind);
+                return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
             },
             else => {
-                return try completeGlobal(arena, workspace, token.loc.start, doc, config, doc_kind);
+                return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
             },
         }
     }
