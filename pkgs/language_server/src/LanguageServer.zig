@@ -302,7 +302,6 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     const doc = workspace.getDocument(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     var symbol_tree = SymbolTree.init(arena.allocator(), doc.ast_context.tree);
     try symbol_tree.traverse(0);
-    // logger.debug("{} symbols", .{symbol_tree.symbols.items.len});
     const symbols = try textdocument.to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
     return lsp.Response{
         .id = id,

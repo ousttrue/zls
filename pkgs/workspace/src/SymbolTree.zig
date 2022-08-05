@@ -40,7 +40,7 @@ pub fn traverse(self: *Self, node: Ast.Node.Index) anyerror!void {
                     .parent = node,
                     .node = child,
                 });
-                try self.traverse(child);
+                // try self.traverse(child);
             }
         }
     }
