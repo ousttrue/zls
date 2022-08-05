@@ -24,9 +24,14 @@ pub fn getTag(self: Self) Ast.Node.Tag {
     return tag[self.index];
 }
 
+pub fn getData(self: Self) Ast.Node.Data {
+    const data = self.context.tree.nodes.items(.data);
+    return data[self.index];
+}
+
 pub fn getMainToken(self: Self) AstToken {
-    const main_token = self.context.tree.ndoes.items(.main_token);
-    return AstToken.init(self.context.tree, main_token[self.index]);
+    const main_token = self.context.tree.nodes.items(.main_token);
+    return AstToken.init(&self.context.tree, main_token[self.index]);
 }
 
 pub fn parent(self: Self) ?Self {

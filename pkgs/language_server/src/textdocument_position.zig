@@ -12,6 +12,7 @@ const AstToken = astutil.AstToken;
 const AstSemantic = astutil.AstSemantic;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
+const logger = std.log.scoped(.textdocument_position);
 
 pub fn getHover(
     arena: *std.heap.ArenaAllocator,
@@ -20,16 +21,7 @@ pub fn getHover(
     token: AstToken,
     hover_kind: ast.MarkupFormat,
 ) !?[]const u8 {
-    if (AstSemantic.inspect(doc.ast_context, token)) |semantic| {
-        switch (semantic) {
-            .identifier => |value| {
-                _ = value;
-            },
-            .field_access => |value| {
-                _ = value;
-            },
-        }
-    }
+    logger.debug("{s}", .{AstSemantic.inspect(doc.ast_context, token).debugInfo()});
 
     var context_info = try doc.ast_context.getTokenIndexContext(arena.allocator(), token.index);
     const name = token.getText();
