@@ -1,4 +1,5 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const ws = @import("workspace");
 const Config = ws.Config;
 const Workspace = ws.Workspace;
@@ -7,7 +8,7 @@ const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const SymbolLookup = ws.SymbolLookup;
 const FixedPath = ws.FixedPath;
-const AstToken = ws.AstToken;
+const AstToken = astutil.AstToken;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 

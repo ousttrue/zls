@@ -1,9 +1,10 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const semantic_tokens = @import("./semantic_tokens.zig");
 const SemanticTokenType = semantic_tokens.SemanticTokenType;
 const SemanticTokenModifiers = semantic_tokens.SemanticTokenModifiers;
 const Document = @import("./Document.zig");
-const AstNodeIterator = @import("./AstNodeIterator.zig");
+const AstNodeIterator = astutil.AstNodeIterator;
 const logger = std.log.scoped(.SemanticTokens);
 const Self = @This();
 

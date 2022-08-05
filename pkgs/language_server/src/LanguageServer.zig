@@ -1,6 +1,7 @@
 //! A LanguageServer frontend, registered to a JsonRPC dispatcher.
 const std = @import("std");
 const lsp = @import("lsp");
+const astutil = @import("astutil");
 const ws = @import("workspace");
 const FixedPath = ws.FixedPath;
 const Config = ws.Config;
@@ -14,8 +15,8 @@ const DeclWithHandle = ws.DeclWithHandle;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
-const AstNodeIterator = ws.AstNodeIterator;
-const AstToken = ws.AstToken;
+const AstNodeIterator = astutil.AstNodeIterator;
+const AstToken = astutil.AstToken;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const URI = @import("./uri.zig");

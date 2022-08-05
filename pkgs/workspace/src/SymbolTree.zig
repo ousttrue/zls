@@ -1,8 +1,9 @@
 const std = @import("std");
 const ast = @import("./ast.zig");
+const astutil = @import("astutil");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
-const AstNodeIterator = @import("./AstNodeIterator.zig");
+const AstNodeIterator = astutil.AstNodeIterator;
 const logger = std.log.scoped(.SymbolTree);
 
 pub const Symbol = struct {
