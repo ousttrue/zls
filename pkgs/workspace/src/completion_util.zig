@@ -703,7 +703,7 @@ fn completeFieldAccess(
 ) ![]lsp.CompletionItem {
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
     {
-        const token = doc.ast_context.tokens.items[token_index];
+        const token = doc.ast_context.tokens[token_index];
         if (token.tag != .period) {
             logger.warn("not period: {} => {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
             return completions.items;
@@ -776,7 +776,7 @@ pub fn process(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
-    const token = doc.ast_context.tokens.items[token_index];
+    const token = doc.ast_context.tokens[token_index];
     logger.debug("prev: {}: {s}", .{ token.tag, doc.ast_context.getTokenText(token) });
 
     _ = trigger_character;

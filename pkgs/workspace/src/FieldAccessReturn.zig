@@ -24,7 +24,7 @@ pub fn getFieldAccessType(
     const token_begin = doc.ast_context.tree.firstToken(doc.ast_context.getRootIdentifier(idx));
     var current = token_begin;
     while (current <= token_idx) : (current += 1) {
-        const tok = doc.ast_context.tokens.items[current];
+        const tok = doc.ast_context.tokens[current];
         switch (tok.tag) {
             .identifier => {
                 var lookup = SymbolLookup.init(arena.allocator());
@@ -49,7 +49,7 @@ pub fn getFieldAccessType(
             .period => {
                 current += 1;
                 const after_period = current;
-                const after_period_token = doc.ast_context.tokens.items[after_period];
+                const after_period_token = doc.ast_context.tokens[after_period];
                 switch (after_period_token.tag) {
                     .eof => {
                         // function labels cannot be dot accessed
@@ -135,7 +135,7 @@ pub fn getFieldAccessType(
                         // Skip to the right paren
                         var paren_count: usize = 1;
                         current += 1;
-                        var next = doc.ast_context.tokens.items[current];
+                        var next = doc.ast_context.tokens[current];
                         while (current <= token_idx) : (current += 1) {
                             if (next.tag == .r_paren) {
                                 paren_count -= 1;
@@ -150,7 +150,7 @@ pub fn getFieldAccessType(
             .l_bracket => {
                 var brack_count: usize = 1;
                 current += 1;
-                var next = doc.ast_context.tokens.items[current];
+                var next = doc.ast_context.tokens[current];
                 var is_range = false;
                 while (next.tag != .eof) : (current += 1) {
                     if (next.tag == .r_bracket) {

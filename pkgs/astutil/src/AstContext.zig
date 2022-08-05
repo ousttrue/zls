@@ -1,18 +1,14 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const AstNodeIterator = @import("./AstNodeIterator.zig");
-const ast = @import("./ast.zig");
 const AstNode = @import("./AstNode.zig");
 const Self = @This();
 
-fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayList(std.zig.Token) {
+fn getAllTokensAlloc(allocator: std.mem.Allocator, source: [:0]const u8) []std.zig.Token {
     var tokens = std.ArrayList(std.zig.Token).init(allocator);
-    var tokenizer: std.zig.Tokenizer = .{
-        .buffer = source,
-        .index = 0,
-        .pending_invalid_token = null,
-    };
+    defer tokens.deinit();
 
+    var tokenizer = std.zig.Tokenizer.init(source);
     while (true) {
         const token = tokenizer.next();
         if (token.tag == .eof) {
@@ -21,7 +17,7 @@ fn getAllTokens(allocator: std.mem.Allocator, source: [:0]const u8) std.ArrayLis
         tokens.append(token) catch unreachable;
     }
 
-    return tokens;
+    return tokens.toOwnedSlice();
 }
 
 pub fn traverse(context: *Self, parent_idx: Ast.Node.Index, idx: Ast.Node.Index) void {
@@ -53,7 +49,7 @@ pub const AstPath = struct {};
 allocator: std.mem.Allocator,
 tree: std.zig.Ast,
 nodes_parent: []u32,
-tokens: std.ArrayList(std.zig.Token),
+tokens: []std.zig.Token,
 tokens_node: []u32,
 
 pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
@@ -63,7 +59,7 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
         .allocator = allocator,
         .tree = tree,
         .nodes_parent = allocator.alloc(u32, tree.nodes.len) catch unreachable,
-        .tokens = getAllTokens(allocator, tree.source),
+        .tokens = getAllTokensAlloc(allocator, tree.source),
         .tokens_node = allocator.alloc(u32, tree.tokens.len) catch unreachable,
     };
     for (self.nodes_parent) |*x| {
@@ -85,7 +81,7 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
 pub fn delete(self: *Self) void {
     self.allocator.free(self.tokens_node);
     self.allocator.free(self.nodes_parent);
-    self.tokens.deinit();
+    self.allocator.free(self.tokens);
     self.tree.deinit(self.allocator);
     self.allocator.destroy(self);
 }
@@ -107,10 +103,10 @@ pub fn getTokenTextFromBytePosition(self: Self, byte_position: usize) ?[]const u
 
 pub fn getTokens(self: Self, start: usize, last: usize) []const std.zig.Token {
     var end = last;
-    if (end < self.tokens.items.len) {
+    if (end < self.tokens.len) {
         end += 1;
     }
-    return self.tokens.items[start..end];
+    return self.tokens[start..end];
 }
 
 pub fn getNodeTokens(self: Self, idx: u32) []const std.zig.Token {
@@ -132,7 +128,7 @@ pub fn getNodeTag(self: Self, idx: u32) std.zig.Ast.Node.Tag {
 pub fn getMainToken(self: Self, idx: u32) std.zig.Token {
     const main_token = self.tree.nodes.items(.main_token);
     const token_idx = main_token[idx];
-    return self.tokens.items[token_idx];
+    return self.tokens[token_idx];
 }
 
 pub fn getAstPath(self: Self, token_idx: usize) ?AstPath {
@@ -163,7 +159,7 @@ pub fn isInToken(pos: usize, token: std.zig.Token) bool {
 pub const TokenWithIndex = struct { token: std.zig.Token, index: u32 };
 
 pub fn tokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
-    for (self.tokens.items) |token, i| {
+    for (self.tokens) |token, i| {
         if (isInToken(byte_pos, token)) {
             return TokenWithIndex{ .token = token, .index = @intCast(u32, i) };
         }
@@ -172,14 +168,14 @@ pub fn tokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
 }
 
 pub fn prevTokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
-    for (self.tokens.items) |token, i| {
+    for (self.tokens) |token, i| {
         if (byte_pos <= token.loc.start) {
             if (i == 0) {
                 return null;
             } else {
                 // if(std.)
                 //        ^
-                return TokenWithIndex{ .token = self.tokens.items[i - 1], .index = @intCast(u32, i - 1) };
+                return TokenWithIndex{ .token = self.tokens[i - 1], .index = @intCast(u32, i - 1) };
             }
         }
     }
@@ -225,7 +221,7 @@ pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx:
     try w.print(" => ", .{});
 
     // token
-    const token = self.tokens.items[token_idx];
+    const token = self.tokens[token_idx];
     const name = self.getTokenText(token);
     try w.print("{s}: {s}", .{
         @tagName(token.tag),

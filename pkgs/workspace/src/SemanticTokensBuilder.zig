@@ -284,7 +284,7 @@ pub fn writeAllSemanticTokens(arena: *std.heap.ArenaAllocator, document: *Docume
     var text = document.utf8_buffer.text;
     var self = init(allocator, document);
     var last: usize = 0;
-    for (document.ast_context.tokens.items) |token, i| {
+    for (document.ast_context.tokens) |token, i| {
         try self.pushLineCommments(text, last, token.loc.start);
 
         try self.push(@intCast(u32, i), token);

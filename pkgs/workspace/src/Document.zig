@@ -68,7 +68,7 @@ pub fn update(self: *Self, text: []const u8) !void {
 // }
 
 pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
-    const token = self.ast_context.tokens.items[token_idx];
+    const token = self.ast_context.tokens[token_idx];
     return UriBytePosition{
         .path = self.path,
         .loc = token.loc,

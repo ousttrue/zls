@@ -138,9 +138,9 @@ pub fn to_symbols(allocator: std.mem.Allocator, doc: *Document, encoding: Line.E
     const tags = tree.nodes.items(.tag);
     for (src) |symbol| {
         if (symbol.parent == parent) {
-            const first = ast_context.tokens.items[tree.firstToken(symbol.node)];
+            const first = ast_context.tokens[tree.firstToken(symbol.node)];
             var start_loc = try doc.utf8_buffer.getPositionFromBytePosition(first.loc.start, encoding);
-            const last = ast_context.tokens.items[tree.lastToken(symbol.node)];
+            const last = ast_context.tokens[tree.lastToken(symbol.node)];
             var end_loc = try doc.utf8_buffer.getPositionFromBytePosition(last.loc.end, encoding);
 
             var range = lsp.Range{

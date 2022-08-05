@@ -125,7 +125,7 @@ pub fn lookupSymbolGlobalTokenIndex(
     token_idx: u32,
 ) ?DeclWithHandle {
     // const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
-    const token = handle.ast_context.tokens.items[token_idx];
+    const token = handle.ast_context.tokens[token_idx];
     const symbol = handle.ast_context.getTokenText(token);
     const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(token.loc.start);
 
@@ -283,7 +283,7 @@ pub fn getSymbolFieldAccess(
         .other => |n| n,
         else => return null,
     };
-    const token = doc.ast_context.tokens.items[token_idx];
+    const token = doc.ast_context.tokens[token_idx];
     const name = doc.ast_context.getTokenText(token);
 
     return self.lookupSymbolContainer(

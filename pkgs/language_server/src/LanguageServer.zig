@@ -387,7 +387,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
         switch (children) {
             .fn_proto => |fn_proto| {
                 const token_idx = fn_proto.ast.fn_token;
-                const token = doc.ast_context.tokens.items[token_idx];
+                const token = doc.ast_context.tokens[token_idx];
                 const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token_idx, true, self.config)) |refs| refs.len else 0;
                 const start = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.start, self.encoding);
                 const end = try doc.utf8_buffer.getPositionFromBytePosition(token.loc.end, self.encoding);

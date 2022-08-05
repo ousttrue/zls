@@ -68,7 +68,7 @@ pub fn getRename(
     doc: *Document,
     token_index: u32,
 ) !?[]const UriBytePosition {
-    const token = doc.ast_context.tokens.items[token_index];
+    const token = doc.ast_context.tokens[token_index];
     if (token.tag != .identifier) {
         return null;
     }
@@ -89,7 +89,7 @@ pub fn getGoto(
     token_index: u32,
     resolve_alias: bool,
 ) !?UriBytePosition {
-    const token = doc.ast_context.tokens.items[token_index];
+    const token = doc.ast_context.tokens[token_index];
     switch (token.tag) {
         .string_literal => {
             const text = doc.ast_context.getTokenText(token);
@@ -125,7 +125,7 @@ pub fn getRenferences(
     include_decl: bool,
     config: *Config,
 ) !?[]UriBytePosition {
-    const token = doc.ast_context.tokens.items[token_index];
+    const token = doc.ast_context.tokens[token_index];
     if (token.tag != .identifier) {
         return null;
     }
