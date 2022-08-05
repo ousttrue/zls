@@ -2,6 +2,7 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const AstContext = @import("./AstContext.zig");
 const AstToken = @import("./AstToken.zig");
+const AstNodeIterator = @import("./AstNodeIterator.zig");
 const Self = @This();
 
 context: *const AstContext,
@@ -19,19 +20,20 @@ pub fn fromTokenIndex(context: *const AstContext, token_idx: u32) Self {
     return init(context, idx);
 }
 
-pub fn allocPrint(_: Self, allocator: std.mem.Allocator) ![]const u8 {
-    const buffer = std.ArrayList(u8).init(allocator);
+fn printRec(self: Self, w: anytype) std.mem.Allocator.Error!void {
+    if (!self.isBlock()) {
+        if (self.getParent()) |parent| {
+            try parent.printRec(w);
+            try w.print("/", .{});
+        }
+    }
+    try w.print("{s}", .{@tagName(self.getTag())});
+}
 
-    // const parent = self.nodes_parent[node_idx];
-    // const w = allocator.writer();
-    // if (parent != 0) {
-    //     try self.writePath(buffer, parent);
-    //     try w.print("/", .{});
-    // } else {}
-    // const tag = self.tree.nodes.items(.tag);
-    // const node_tag = tag[node_idx];
-    // try w.print("{s}", .{@tagName(node_tag)});
-
+pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+    var buffer = std.ArrayList(u8).init(allocator);
+    const w = buffer.writer();
+    try self.printRec(w);
     return buffer.items;
 }
 
@@ -50,7 +52,17 @@ pub fn getMainToken(self: Self) AstToken {
     return AstToken.init(&self.context.tree, main_token[self.index]);
 }
 
-pub fn parent(self: Self) ?Self {
+pub fn getChildren(self: Self, buffer: []u32) AstNodeIterator.NodeChildren {
+    return AstNodeIterator.NodeChildren.init(self.context.tree, self.index, buffer);
+}
+
+pub fn isBlock(self: Self) bool {
+    var buffer: [2]u32 = undefined;
+    const children = self.getChildren(&buffer);
+    return children == .block;
+}
+
+pub fn getParent(self: Self) ?Self {
     if (self.index == 0) {
         return null;
     }

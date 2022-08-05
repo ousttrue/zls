@@ -43,7 +43,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     defer allocator.free(token);
     const node = try self.node.allocPrint(allocator);
     defer allocator.free(node);
-    return std.fmt.allocPrint(allocator, "`{s} => {s}`\n", .{ token, node });
+    return std.fmt.allocPrint(allocator, "`{s} => {s}`\n", .{ node, token });
 
     // const children = AstNodeIterator.NodeChildren.init(self.tree, node_idx, &u32_2);
 
