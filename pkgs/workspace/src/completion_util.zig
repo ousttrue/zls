@@ -172,7 +172,7 @@ pub fn iterateSymbolsContainerInternal(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    const container_scope = handle.ast_context.document_scope.findContainerScope(container) orelse return;
+    const container_scope = handle.document_scope.findContainerScope(container) orelse return;
 
     var decl_it = container_scope.decls.iterator();
     while (decl_it.next()) |entry| {
@@ -566,7 +566,7 @@ pub fn iterateLabels(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
-    for (handle.ast_context.document_scope.scopes) |scope| {
+    for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             var decl_it = scope.decls.iterator();
             while (decl_it.next()) |entry| {
@@ -613,7 +613,7 @@ fn iterateSymbolsGlobalInternal(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
-    for (handle.ast_context.document_scope.scopes.items) |scope| {
+    for (handle.document_scope.scopes.items) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             var decl_it = scope.decls.iterator();
             while (decl_it.next()) |entry| {
@@ -723,19 +723,19 @@ fn completeFieldAccess(
 //     comptime name: []const u8,
 // ) ![]lsp.CompletionItem {
 //     // TODO Better solution for deciding what tags to include
-//     var max_len: usize = @field(base.ast_context.document_scope, name).count();
+//     var max_len: usize = @field(base.document_scope, name).count();
 //     for (base.imports_used.items) |uri| {
-//         max_len += @field(workspace.handles.get(uri).?.ast_context.document_scope, name).count();
+//         max_len += @field(workspace.handles.get(uri).?.document_scope, name).count();
 //     }
 
 //     var result_set = DocumentScope.CompletionSet{};
 //     try result_set.ensureTotalCapacity(arena.allocator(), max_len);
-//     for (@field(base.ast_context.document_scope, name).entries.items(.key)) |completion| {
+//     for (@field(base.document_scope, name).entries.items(.key)) |completion| {
 //         result_set.putAssumeCapacityNoClobber(completion, {});
 //     }
 
 //     for (base.imports_used.items) |uri| {
-//         const curr_set = &@field(workspace.handles.get(uri).?.ast_context.document_scope, name);
+//         const curr_set = &@field(workspace.handles.get(uri).?.document_scope, name);
 //         for (curr_set.entries.items(.key)) |completion| {
 //             result_set.putAssumeCapacity(completion, {});
 //         }

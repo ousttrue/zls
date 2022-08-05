@@ -3,7 +3,6 @@ const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const AstNodeIterator = astutil.AstNodeIterator;
 const ast = @import("./ast.zig");
-const DocumentScope = @import("./DocumentScope.zig");
 const AstNode = @import("./AstNode.zig");
 const Self = @This();
 
@@ -57,7 +56,6 @@ tree: std.zig.Ast,
 nodes_parent: []u32,
 tokens: std.ArrayList(std.zig.Token),
 tokens_node: []u32,
-document_scope: DocumentScope,
 
 pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
     const tree = std.zig.parse(allocator, text) catch unreachable;
@@ -68,7 +66,6 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
         .nodes_parent = allocator.alloc(u32, tree.nodes.len) catch unreachable,
         .tokens = getAllTokens(allocator, tree.source),
         .tokens_node = allocator.alloc(u32, tree.tokens.len) catch unreachable,
-        .document_scope = try DocumentScope.init(allocator, tree),
     };
     for (self.nodes_parent) |*x| {
         x.* = 0;
@@ -87,7 +84,6 @@ pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
 }
 
 pub fn delete(self: *Self) void {
-    self.document_scope.deinit(self.allocator);
     self.allocator.free(self.tokens_node);
     self.allocator.free(self.nodes_parent);
     self.tree.deinit(self.allocator);

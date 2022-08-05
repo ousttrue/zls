@@ -58,23 +58,23 @@ pub fn init(allocator: std.mem.Allocator, tree: Ast) !Self {
     return self;
 }
 
-pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+pub fn deinit(self: *Self) void {
     for (self.scopes.items) |*scope| {
         scope.decls.deinit();
-        allocator.free(scope.uses);
-        allocator.free(scope.tests);
+        self.allocator.free(scope.uses);
+        self.allocator.free(scope.tests);
     }
     self.scopes.deinit();
 
     for (self.errors.entries.items(.key)) |item| {
-        if (item.documentation) |doc| allocator.free(doc.value);
+        if (item.documentation) |doc| self.allocator.free(doc.value);
     }
-    self.errors.deinit(allocator);
+    self.errors.deinit(self.allocator);
 
     for (self.enums.entries.items(.key)) |item| {
-        if (item.documentation) |doc| allocator.free(doc.value);
+        if (item.documentation) |doc| self.allocator.free(doc.value);
     }
-    self.enums.deinit(allocator);
+    self.enums.deinit(self.allocator);
 }
 
 fn makeScopeInternal(

@@ -93,7 +93,7 @@ pub fn lookupSymbolContainer(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    if (doc.ast_context.document_scope.findContainerScope(container)) |container_scope| {
+    if (doc.document_scope.findContainerScope(container)) |container_scope| {
         if (container_scope.decls.getEntry(symbol)) |candidate| {
             switch (candidate.value_ptr.*) {
                 .ast_node => |node| {
@@ -127,11 +127,11 @@ pub fn lookupSymbolGlobalTokenIndex(
     // const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
     const token = handle.ast_context.tokens.items[token_idx];
     const symbol = handle.ast_context.getTokenText(token);
-    const innermost_scope_idx = handle.ast_context.document_scope.innermostBlockScopeIndex(token.loc.start);
+    const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(token.loc.start);
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.ast_context.document_scope.scopes.items[curr];
+        const scope = &handle.document_scope.scopes.items[curr];
         if (token.loc.start >= scope.range.start and token.loc.end <= scope.range.end) blk: {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {

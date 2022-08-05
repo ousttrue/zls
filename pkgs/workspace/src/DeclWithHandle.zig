@@ -137,7 +137,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
                 return null;
 
             if (node_tags[pay.items[0]] == .enum_literal) {
-                const scope = switch_expr_type.handle.ast_context.document_scope.findContainerScope(switch_expr_type.type.data.other) orelse return null;
+                const scope = switch_expr_type.handle.document_scope.findContainerScope(switch_expr_type.type.data.other) orelse return null;
                 if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
                     switch (candidate.value_ptr.*) {
                         .ast_node => |node| {
@@ -793,7 +793,7 @@ pub fn symbolReferences(
         },
         .param_decl => |param| {
             // Rename the param tok.
-            const fn_node: Ast.full.FnProto = loop: for (curr_handle.ast_context.document_scope.scopes.items) |scope| {
+            const fn_node: Ast.full.FnProto = loop: for (curr_handle.document_scope.scopes.items) |scope| {
                 switch (scope.data) {
                     .function => |proto| {
                         var buf: [1]Ast.Node.Index = undefined;
@@ -903,7 +903,7 @@ pub fn hoverSymbol(
 pub fn lookupLabel(handle: *Document, source_index: usize) error{OutOfMemory}!?Self {
     const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
     const symbol = handle.ast_context.getTokenText(token_with_index.token);
-    for (handle.ast_context.document_scope.scopes) |scope| {
+    for (handle.document_scope.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {
