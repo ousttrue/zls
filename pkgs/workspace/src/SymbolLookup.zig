@@ -1,4 +1,5 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
@@ -6,7 +7,7 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
-const AstToken = @import("./AstToken.zig");
+const AstToken = astutil.AstToken;
 const AstNode = @import("./AstNode.zig");
 const ast = @import("./ast.zig");
 
