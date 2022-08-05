@@ -555,7 +555,6 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    // _ = byte_position;
 
     // get token for completion context
     //
@@ -575,27 +574,13 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         self.config,
         if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
     );
-    // logger.debug("{} completions", .{completions.len});
-    // logger.debug("{s}", .{completions[0]});
 
-    // const allocator = arena.allocator();
-    // var completions = std.ArrayList(lsp.CompletionItem).init(allocator);
-    // try completions.append(.{
-    //     .label = "lajfkdjkla",
-    // });
-
-    const response = lsp.Response{
+    return lsp.Response{
         .id = id,
         .result = .{
             .CompletionItems = completions,
         },
     };
-
-    // try tmp.resize(0);
-    // std.json.stringify(response, .{.emit_null_optional_fields=false}, tmp.writer()) catch unreachable;
-    // logger.debug("{s}", .{tmp.items});
-
-    return response;
 }
 
 /// # language feature

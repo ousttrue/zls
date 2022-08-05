@@ -708,9 +708,6 @@ fn completeFieldAccess(
             return completions.items;
         }
     }
-    const idx = doc.ast_context.tokens_node[token_index - 1];
-    const tag = doc.ast_context.tree.nodes.items(.tag);
-    std.log.debug("node: {}", .{tag[idx]});
 
     if (FieldAccessReturn.getFieldAccessType(arena, workspace, doc, token_index - 1)) |result| {
         try typeToCompletion(arena, workspace, &completions, result, doc, config, doc_kind);
