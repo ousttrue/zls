@@ -1,6 +1,6 @@
 const std = @import("std");
-const ast = @import("./ast.zig");
 const astutil = @import("astutil");
+const ast = astutil.ast;
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const Ast = std.zig.Ast;
 const AstNodeIterator = astutil.AstNodeIterator;

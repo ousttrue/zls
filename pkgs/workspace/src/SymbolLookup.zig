@@ -8,8 +8,8 @@ const TypeWithHandle = @import("./TypeWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const AstToken = astutil.AstToken;
-const AstNode = @import("./AstNode.zig");
-const ast = @import("./ast.zig");
+const AstNode = astutil.AstNode;
+const ast = astutil.ast;
 
 const Self = @This();
 

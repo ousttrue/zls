@@ -1,5 +1,6 @@
 const std = @import("std");
 const lsp = @import("lsp");
+const astutil = @import("astutil");
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const DocumentScope = @import("./DocumentScope.zig");
@@ -9,7 +10,7 @@ const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
-const ast = @import("./ast.zig");
+const ast = astutil.ast;
 const Ast = std.zig.Ast;
 const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.Completion);

@@ -1,4 +1,5 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
@@ -6,7 +7,7 @@ const UriBytePosition = @import("./UriBytePosition.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
-const ast = @import("./ast.zig");
+const ast = astutil.ast;
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, TypeWithHandle);
 const SymbolLookup = @import("./SymbolLookup.zig");

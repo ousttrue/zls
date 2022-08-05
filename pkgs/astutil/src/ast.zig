@@ -6,7 +6,7 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const Node = Ast.Node;
 const full = Ast.full;
-const logger = std.log.scoped(.ast_helper);
+const logger = std.log.scoped(.astutil);
 
 fn fullPtrType(tree: Ast, info: full.PtrType.Components) full.PtrType {
     const token_tags = tree.tokens.items(.tag);

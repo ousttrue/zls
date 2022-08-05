@@ -1,11 +1,12 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
-const ast = @import("./ast.zig");
+const ast = astutil.ast;
 const logger = std.log.scoped(.FieldAccessReturn);
 
 const Self = @This();

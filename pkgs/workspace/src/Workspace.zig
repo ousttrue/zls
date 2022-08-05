@@ -3,8 +3,9 @@
 ///    * uri: Document
 ///
 const std = @import("std");
+const astutil = @import("astutil");
 const Ast = std.zig.Ast;
-const ast = @import("./ast.zig");
+const ast = astutil.ast;
 const FixedPath = @import("./FixedPath.zig");
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");

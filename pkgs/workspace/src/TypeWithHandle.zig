@@ -1,8 +1,9 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
-const ast = @import("./ast.zig");
+const ast = astutil.ast;
 pub const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, Self);
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");

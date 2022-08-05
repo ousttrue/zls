@@ -12,13 +12,13 @@ pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
 pub const SymbolTree = @import("./SymbolTree.zig");
 pub const completion_util = @import("./completion_util.zig");
-pub const ast = @import("./ast.zig");
+pub const ast = astutil.ast;
 pub const signature_help = @import("./signature_help.zig");
 pub const builtin_completions = @import("./builtin_completions.zig");
 pub const DeclWithHandle = @import("./DeclWithHandle.zig");
 pub const TypeWithHandle = @import("./TypeWithHandle.zig");
-pub const AstNode = @import("./AstNode.zig");
 pub const SymbolLookup = @import("./SymbolLookup.zig");
+
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
     TypeWithHandle.init(allocator);
     builtin_completions.init(allocator, builtins, config);
