@@ -17,6 +17,7 @@ const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const SymbolTree = ws.SymbolTree;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
+const AstSemantic = astutil.AstSemantic;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const URI = @import("./uri.zig");
@@ -382,7 +383,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
     var buffer: [2]u32 = undefined;
     const allocator = arena.allocator();
     // while (i < tree.nodes.len) : (i += 1) {
-    for(tag)|_, i|{
+    for (tag) |_, i| {
         const children = AstNodeIterator.NodeChildren.init(doc.ast_context.tree, @intCast(u32, i), &buffer);
         switch (children) {
             .fn_proto => |fn_proto| {
