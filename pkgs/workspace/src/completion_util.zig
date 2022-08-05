@@ -705,7 +705,7 @@ fn completeFieldAccess(
     var completions = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
     {
         if (token.getTag() != .period) {
-            logger.warn("not period: {s}", .{ token.debugInfo() });
+            logger.warn("not period: {s}", .{try token.allocPrint(arena.allocator())});
             return completions.items;
         }
     }
@@ -776,7 +776,7 @@ pub fn process(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
-    logger.debug("prev: {s}", .{token.debugInfo()});
+    logger.debug("prev: {s}", .{try token.allocPrint(arena.allocator())});
 
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {

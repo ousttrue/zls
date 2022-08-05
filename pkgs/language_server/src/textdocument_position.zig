@@ -21,9 +21,7 @@ pub fn getHover(
     token: AstToken,
     hover_kind: ast.MarkupFormat,
 ) !?[]const u8 {
-    logger.debug("{s}", .{AstSemantic.inspect(doc.ast_context, token).debugInfo()});
-
-    var context_info = try doc.ast_context.getTokenIndexContext(arena.allocator(), token.index);
+    var context_info = try AstSemantic.init(doc.ast_context, token).allocPrint(arena.allocator());
     const name = token.getText();
     const allocator = arena.allocator();
     switch (token.getTag()) {

@@ -41,10 +41,8 @@ pub fn fromBytePosition(tree: *const Ast, byte_position: usize) ?Self {
         null;
 }
 
-var debug_buffer: [1024]u8 = undefined;
-pub fn debugInfo(self: Self) []const u8 {
-    var fixed_buffer = std.heap.FixedBufferAllocator.init(&debug_buffer);
-    return std.fmt.allocPrint(fixed_buffer.allocator(), "{s}: {s}", .{ @tagName(self.getTag()), self.getText() }) catch unreachable;
+pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+    return try std.fmt.allocPrint(allocator, "{s}: {s}", .{ @tagName(self.getTag()), self.getText() });
 }
 
 pub fn getText(self: Self) []const u8 {

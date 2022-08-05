@@ -19,6 +19,22 @@ pub fn fromTokenIndex(context: *const AstContext, token_idx: u32) Self {
     return init(context, idx);
 }
 
+pub fn allocPrint(_: Self, allocator: std.mem.Allocator) ![]const u8 {
+    const buffer = std.ArrayList(u8).init(allocator);
+
+    // const parent = self.nodes_parent[node_idx];
+    // const w = allocator.writer();
+    // if (parent != 0) {
+    //     try self.writePath(buffer, parent);
+    //     try w.print("/", .{});
+    // } else {}
+    // const tag = self.tree.nodes.items(.tag);
+    // const node_tag = tag[node_idx];
+    // try w.print("{s}", .{@tagName(node_tag)});
+
+    return buffer.items;
+}
+
 pub fn getTag(self: Self) Ast.Node.Tag {
     const tag = self.context.tree.nodes.items(.tag);
     return tag[self.index];

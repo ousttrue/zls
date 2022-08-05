@@ -172,54 +172,6 @@ pub fn prevTokenFromBytePos(self: Self, byte_pos: usize) ?TokenWithIndex {
     return null;
 }
 
-fn writePath(self: Self, buffer: *std.ArrayList(u8), node_idx: u32) anyerror!void {
-    const parent = self.nodes_parent[node_idx];
-    const w = buffer.writer();
-    if (parent != 0) {
-        try self.writePath(buffer, parent);
-        try w.print("/", .{});
-    } else {}
-    const tag = self.tree.nodes.items(.tag);
-    const node_tag = tag[node_idx];
-    try w.print("{s}", .{@tagName(node_tag)});
-}
-
-///
-/// AST: a/b/c/d => TAG: TAG_TEXT
-///
-pub fn getTokenIndexContext(self: Self, allocator: std.mem.Allocator, token_idx: usize) ![]const u8 {
-    var buffer = std.ArrayList(u8).init(allocator);
-
-    const w = buffer.writer();
-
-    // node
-    const node_idx = self.tokens_node[token_idx];
-    const tag = self.tree.nodes.items(.tag);
-    const node_tag = tag[node_idx];
-    switch (node_tag) {
-        .field_access => {},
-        .enum_literal => {},
-        else => {
-            var u32_2: [2]u32 = undefined;
-            const children = AstNodeIterator.NodeChildren.init(self.tree, node_idx, &u32_2);
-            try children.debugPrint(w);
-        },
-    }
-
-    // ast path
-    try self.writePath(&buffer, node_idx);
-    try w.print(" => ", .{});
-
-    // token
-    const token = AstToken.init(&self.tree, token_idx);
-    try w.print("{s}: {s}", .{
-        @tagName(token.getTag()),
-        token.getText(),
-    });
-
-    return buffer.items;
-}
-
 pub fn getRootIdentifier(self: Self, node_idx: u32) u32 {
     var tag = self.tree.nodes.items(.tag);
     if (tag[node_idx] != .field_access) {
