@@ -29,14 +29,14 @@ pub fn getHover(
             if (builtin_completions.find(name)) |builtin| {
                 return try std.fmt.allocPrint(
                     allocator,
-                    "# builtin: {s}\n\n```zig\n{s}\n```\n\n`{s}`\n\n{s}",
-                    .{ name, builtin.signature, context_info, builtin.documentation },
+                    "# builtin: {s}\n\n{s}\n\n## hover\n\n```zig\n{s}\n```\n\n{s}",
+                    .{ name, context_info, builtin.signature, builtin.documentation },
                 );
             } else {
                 return try std.fmt.allocPrint(
                     allocator,
-                    "{s}\n* builtin {s} not found",
-                    .{ context_info, name },
+                    "# builtin: {s}\n\n{s}\n\n",
+                    .{ name, context_info },
                 );
             }
         },
@@ -47,19 +47,23 @@ pub fn getHover(
                 const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
                 return try std.fmt.allocPrint(
                     allocator,
-                    "# {s}\n\n{s}\n\n{?s}",
+                    "# {s}\n\n{s}\n\n## hover\n\n{?s}",
                     .{ name, context_info, hover },
                 );
             } else {
                 return try std.fmt.allocPrint(
                     allocator,
-                    "{s}\n* decl {s} not found",
-                    .{ context_info, name },
+                    "# {s}\n\n{s}\n\n",
+                    .{ name, context_info },
                 );
             }
         },
         else => {
-            return context_info;
+            return try std.fmt.allocPrint(
+                allocator,
+                "# {s}: {s}\n\n{s}\n\n",
+                .{ @tagName(token.getTag()), name, context_info },
+            );
         },
     }
 }

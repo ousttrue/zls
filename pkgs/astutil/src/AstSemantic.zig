@@ -2,6 +2,7 @@ const std = @import("std");
 const AstContext = @import("./AstContext.zig");
 const AstNode = @import("./AstNode.zig");
 const AstToken = @import("./AstToken.zig");
+const LocalVar = @import("./LocalVar.zig");
 
 var debug_buffer: [1024]u8 = undefined;
 
@@ -49,11 +50,10 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
 
     switch (self.semantics) {
         .identifier => {
-            try w.print("[identifier]", .{});
-            const symbol = self.token.getText();
-            if (self.node.findLocalVar(symbol)) |local| {
+            try w.print("## identifier\n\n", .{});
+            if (LocalVar.find(self.node)) |local| {
                 _ = local;
-                try w.print("[local] {s}", .{symbol});
+                try w.print("{s}", .{try local.allocPrint(allocator)});
             } else {
                 try w.print("not found", .{});
             }
