@@ -54,29 +54,12 @@ pub fn getHover(
                 switch (identifier) {
                     .reference => |reference| {
                         const text = try reference.allocPrint(allocator);
-                        switch (reference.target) {
-                            .local => |local| {
-                                return Hover{
-                                    .text = text,
-                                    .loc = local.token.getRange(),
-                                };
-                            },
-                            .decl => |decl| {
-                                return Hover{
-                                    .text = text,
-                                    .loc = decl.token.getRange(),
-                                };
-                            },
-                        }
-                    },
-                    .local => |local| {
-                        const text = try local.allocPrint(allocator);
                         return Hover{
                             .text = text,
-                            .loc = local.token.getRange(),
+                            .loc = reference.token.getRange(),
                         };
                     },
-                    .container => |decl| {
+                    .decl => |decl| {
                         const text = try decl.allocPrint(allocator);
                         return Hover{
                             .text = text,
