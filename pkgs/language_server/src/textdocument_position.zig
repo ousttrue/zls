@@ -69,11 +69,19 @@ pub fn getHover(
                             },
                         }
                     },
-                    .local => {
-                        return null;
+                    .local => |local| {
+                        const text = try local.allocPrint(allocator);
+                        return Hover{
+                            .text = text,
+                            .loc = local.token.getRange(),
+                        };
                     },
-                    .container => {
-                        return null;
+                    .container => |decl| {
+                        const text = try decl.allocPrint(allocator);
+                        return Hover{
+                            .text = text,
+                            .loc = decl.token.getRange(),
+                        };
                     },
                 }
             } else {

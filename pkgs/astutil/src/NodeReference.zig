@@ -6,18 +6,18 @@ const AstContext = @import("./AstContext.zig");
 const AstNode = @import("./AstNode.zig");
 const AstToken = @import("./AstToken.zig");
 const LocalVar = @import("./LocalVar.zig");
-const Declaration = @import("./Declaration.zig");
+const ContainerVar = @import("./ContainerVar.zig");
 
 var debug_buffer: [1024]u8 = undefined;
 
 pub const Reference = union(enum) {
     local: LocalVar,
-    decl: Declaration,
+    decl: ContainerVar,
 
-    fn fromIdentifierNode(node: AstNode) ?@This() {
+    pub fn fromIdentifierNode(node: AstNode) ?@This() {
         return if (LocalVar.find(node)) |local|
             @This(){ .local = local }
-        else if (Declaration.find(node)) |decl|
+        else if (ContainerVar.find(node)) |decl|
             @This(){ .decl = decl }
         else
             null;
@@ -30,7 +30,7 @@ token: AstToken,
 node: AstNode,
 target: Reference,
 
-pub fn init(context: *const AstContext, token: AstToken) ?Self {
+pub fn fromToken(context: *const AstContext, token: AstToken) ?Self {
     const node_idx = context.tokens_node[token.index];
     const node = AstNode.init(context, node_idx);
     return if (Reference.fromIdentifierNode(node)) |reference|

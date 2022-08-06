@@ -463,7 +463,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
     if (hover.loc) |loc| {
         const start = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, self.encoding);
         const end = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, self.encoding);
-        const r = lsp.types.Range{
+        range = lsp.types.Range{
             .start = .{
                 .line = start.line,
                 .character = start.x,
@@ -473,8 +473,6 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
                 .character = end.x,
             },
         };
-        logger.debug("{}", .{r});
-        range = r;
     }
 
     return lsp.Response{

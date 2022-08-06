@@ -3,35 +3,26 @@ const Ast = std.zig.Ast;
 const AstContext = @import("./AstContext.zig");
 const AstNode = @import("./AstNode.zig");
 const AstToken = @import("./AstToken.zig");
-const AstNodeReference = @import("./AstNodeReference.zig");
+const NodeReference = @import("./NodeReference.zig");
+const ContainerVar = @import("./ContainerVar.zig");
+const LocalVar = @import("./LocalVar.zig");
 
 pub const AstIdentifier = union(enum) {
     const Self = @This();
 
-    reference: AstNodeReference,
-    local,
-    container,
+    reference: NodeReference,
+    container: ContainerVar,
+    local: LocalVar,
 
     pub fn init(context: *const AstContext, token: AstToken) ?Self {
         std.debug.assert(token.getTag() == .identifier);
-
-        const node = AstNode.init(context, context.tokens_node[token.index]);
-        var buf: [2]u32 = undefined;
-        switch (node.getChildren(&buf)) {
-            else => {
-                switch (node.getTag()) {
-                    .identifier => {
-                        if (AstNodeReference.init(context, token)) |reference| {
-                            return Self{
-                                .reference = reference,
-                            };
-                        }
-                    },
-                    else => {},
-                }
-            },
-        }
-
-        return null;
+        return if (NodeReference.fromToken(context, token)) |reference|
+            Self{ .reference = reference }
+        else if (ContainerVar.fromToken(context, token)) |container_var|
+            Self{ .container = container_var }
+        else if (LocalVar.fromToken(context, token)) |local_var|
+            Self{ .local = local_var }
+        else
+            null;
     }
 };

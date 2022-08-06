@@ -16,97 +16,124 @@ full: union(enum) {
     param: Ast.full.FnProto.Param,
 },
 
-/// block スコープを遡ってローカル変数を探す
-pub fn find(node: AstNode) ?Self {
-    std.debug.assert(node.getTag() == .identifier);
-    const tree = &node.context.tree;
-    const symbol = node.getMainToken().getText();
-    var it = node.parentIterator();
-    while (it.next()) |current| {
-        var buffer: [2]u32 = undefined;
-        switch (current.getChildren(&buffer)) {
-            .block => |block| {
-                for (block.ast.statements) |statement| {
-                    const statement_node = AstNode.init(node.context, statement);
-                    var buffer2: [2]u32 = undefined;
-                    switch (statement_node.getChildren(&buffer2)) {
-                        .var_decl => |full| {
-                            const token = statement_node.getMainToken().next();
-                            if (std.mem.eql(u8, token.getText(), symbol)) {
-                                return Self{
-                                    .context = node.context,
-                                    .token = token,
-                                    .full = .{ .var_decl = full },
-                                };
-                            }
-                        },
-                        else => {},
-                    }
-                }
-            },
-            .@"if" => |full| {
-                if (full.payload_token) |payload_token| {
-                    const token = AstToken.init(tree, payload_token);
-                    if (std.mem.eql(u8, token.getText(), symbol)) {
-                        return Self{
-                            .context = node.context,
-                            .token = token,
-                            .full = .{ .if_payload = full },
-                        };
-                    }
-                }
-            },
-            .@"while" => |full| {
-                if (full.payload_token) |payload_token| {
-                    const token = AstToken.init(tree, payload_token);
-                    if (std.mem.eql(u8, token.getText(), symbol)) {
-                        return Self{
-                            .context = node.context,
-                            .token = token,
-                            .full = .{ .while_payload = full },
-                        };
-                    }
-                }
-            },
-            .switch_case => |full| {
-                if (full.payload_token) |payload_token| {
-                    const token = AstToken.init(tree, payload_token);
-                    if (std.mem.eql(u8, token.getText(), symbol)) {
-                        return Self{
-                            .context = node.context,
-                            .token = token,
-                            .full = .{ .switch_case_payload = full },
-                        };
-                    }
-                }
-            },
-            else => {
-                switch (current.getTag()) {
-                    .fn_decl => {
-                        const fn_proto_node = AstNode.init(node.context, current.getData().lhs);
-                        var buffer2: [2]u32 = undefined;
-                        if (fn_proto_node.getFnProto(&buffer2)) |fn_proto| {
-                            var params = fn_proto.iterate(tree);
-                            while (params.next()) |param| {
-                                if (param.name_token) |name_token| {
-                                    const token = AstToken.init(tree, name_token);
-                                    if (std.mem.eql(u8, token.getText(), symbol)) {
-                                        return Self{
-                                            .context = node.context,
-                                            .token = token,
-                                            .full = .{ .param = param },
-                                        };
-                                    }
-                                }
-                            }
-                        } else {
-                            unreachable;
+pub fn findFromNode(block_scope: AstNode, symbol: []const u8) ?Self {
+    const tree = &block_scope.context.tree;
+    var buffer: [2]u32 = undefined;
+    switch (block_scope.getChildren(&buffer)) {
+        .block => |block| {
+            for (block.ast.statements) |statement| {
+                const statement_node = AstNode.init(block_scope.context, statement);
+                var buffer2: [2]u32 = undefined;
+                switch (statement_node.getChildren(&buffer2)) {
+                    .var_decl => |full| {
+                        const token = statement_node.getMainToken().next();
+                        if (std.mem.eql(u8, token.getText(), symbol)) {
+                            return Self{
+                                .context = block_scope.context,
+                                .token = token,
+                                .full = .{ .var_decl = full },
+                            };
                         }
-                        break;
                     },
                     else => {},
                 }
-            },
+            }
+        },
+        .@"if" => |full| {
+            if (full.payload_token) |payload_token| {
+                const token = AstToken.init(tree, payload_token);
+                if (std.mem.eql(u8, token.getText(), symbol)) {
+                    return Self{
+                        .context = block_scope.context,
+                        .token = token,
+                        .full = .{ .if_payload = full },
+                    };
+                }
+            }
+        },
+        .@"while" => |full| {
+            if (full.payload_token) |payload_token| {
+                const token = AstToken.init(tree, payload_token);
+                if (std.mem.eql(u8, token.getText(), symbol)) {
+                    return Self{
+                        .context = block_scope.context,
+                        .token = token,
+                        .full = .{ .while_payload = full },
+                    };
+                }
+            }
+        },
+        .switch_case => |full| {
+            if (full.payload_token) |payload_token| {
+                const token = AstToken.init(tree, payload_token);
+                if (std.mem.eql(u8, token.getText(), symbol)) {
+                    return Self{
+                        .context = block_scope.context,
+                        .token = token,
+                        .full = .{ .switch_case_payload = full },
+                    };
+                }
+            }
+        },
+        else => {
+            switch (block_scope.getTag()) {
+                .fn_decl => {
+                    const fn_proto_node = AstNode.init(block_scope.context, block_scope.getData().lhs);
+                    var buffer2: [2]u32 = undefined;
+                    if (fn_proto_node.getFnProto(&buffer2)) |fn_proto| {
+                        var params = fn_proto.iterate(tree);
+                        while (params.next()) |param| {
+                            if (param.name_token) |name_token| {
+                                const token = AstToken.init(tree, name_token);
+                                if (std.mem.eql(u8, token.getText(), symbol)) {
+                                    return Self{
+                                        .context = block_scope.context,
+                                        .token = token,
+                                        .full = .{ .param = param },
+                                    };
+                                }
+                            }
+                        }
+                    } else {
+                        unreachable;
+                    }
+                },
+                else => {},
+            }
+        },
+    }
+    return null;
+}
+
+/// token がローカル変数であるか調べる
+pub fn fromToken(context: *const AstContext, token: AstToken) ?Self {
+    const symbol = token.getText();
+    const node = AstNode.init(context, context.tokens_node[token.index]);
+    var it = node.parentIterator();
+    while (it.current) |current| : (it.next()) {
+        if (findFromNode(current, symbol)) |local| {
+            return local;
+        }
+        if (current.getTag() == .fn_decl) {
+            break;
+        }
+    }
+    return null;
+}
+
+/// block スコープを遡ってローカル変数を探す
+pub fn find(node: AstNode) ?Self {
+    if (node.getTag() != .identifier) {
+        return null;
+    }
+    const symbol = node.getMainToken().getText();
+    var it = node.parentIterator();
+    while (it.current) |current| : (it.next()) {
+        if (findFromNode(current, symbol)) |local| {
+            return local;
+        }
+        if (current.getTag() == .fn_decl) {
+            break;
         }
     }
     return null;

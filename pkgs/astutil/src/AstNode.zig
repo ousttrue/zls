@@ -88,14 +88,11 @@ pub fn getParent(self: Self) ?Self {
 }
 
 pub const Iterator = struct {
-    current: Self,
+    current: ?Self,
 
-    pub fn next(self: *@This()) ?Self {
-        if (self.current.getParent()) |parent| {
-            self.current = parent;
-            return parent;
-        } else {
-            return null;
+    pub fn next(self: *@This()) void {
+        if (self.current) |current| {
+            self.current = current.getParent();
         }
     }
 };
