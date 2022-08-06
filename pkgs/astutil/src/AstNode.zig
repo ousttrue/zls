@@ -71,6 +71,14 @@ pub fn isChildrenType(self: Self, childrenType: AstNodeIterator.NodeChildren) bo
     return children == childrenType;
 }
 
+pub fn getFnProto(self: Self, buffer: []u32) ?Ast.full.FnProto {
+    const children = self.getChildren(buffer);
+    return switch (children) {
+        .fn_proto => |fn_proto| fn_proto,
+        else => null,
+    };
+}
+
 pub fn getParent(self: Self) ?Self {
     if (self.index == 0) {
         return null;
