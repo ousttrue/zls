@@ -10,6 +10,7 @@ const SymbolLookup = ws.SymbolLookup;
 const FixedPath = ws.FixedPath;
 const AstToken = astutil.AstToken;
 const AstSemantic = astutil.AstSemantic;
+const AstIdentifier = astutil.AstIdentifier;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
@@ -28,29 +29,57 @@ pub fn getHover(
 ) !?Hover {
     const allocator = arena.allocator();
     const name = token.getText();
-    const semantic = AstSemantic.init(doc.ast_context, token);
-    var context_info = try semantic.allocPrint(allocator);
     switch (token.getTag()) {
         .builtin => {
             if (builtin_completions.find(name)) |builtin| {
                 return Hover{
                     .text = try std.fmt.allocPrint(
                         allocator,
-                        "# builtin: {s}\n\n{s}\n\n## hover\n\n```zig\n{s}\n```\n\n{s}",
-                        .{ name, context_info, builtin.signature, builtin.documentation },
+                        "# builtin: {s}\n\n## hover\n\n```zig\n{s}\n```\n\n{s}",
+                        .{ name, builtin.signature, builtin.documentation },
                     ),
                 };
             } else {
                 return Hover{
                     .text = try std.fmt.allocPrint(
                         allocator,
-                        "# builtin: {s}\n\n{s}\n\n",
-                        .{ name, context_info },
+                        "# builtin: {s}\n\n",
+                        .{name},
                     ),
                 };
             }
         },
         .identifier => {
+            if (AstIdentifier.init(doc.ast_context, token)) |identifier| {
+                switch (identifier) {
+                    .reference => |reference| {
+                        const text = try reference.allocPrint(allocator);
+                        switch (reference.target) {
+                            .local => |local| {
+                                return Hover{
+                                    .text = text,
+                                    .loc = local.token.getRange(),
+                                };
+                            },
+                            .decl => |decl| {
+                                return Hover{
+                                    .text = text,
+                                    .loc = decl.token.getRange(),
+                                };
+                            },
+                        }
+                    },
+                    .local => {
+                        return null;
+                    },
+                    .container => {
+                        return null;
+                    },
+                }
+            } else {
+                return null;
+            }
+
             // var lookup = SymbolLookup.init(arena.allocator());
             // defer lookup.deinit();
             // if (lookup.lookupIdentifier(arena, workspace, doc, token)) |decl| {
@@ -67,33 +96,13 @@ pub fn getHover(
             //         .{ name, context_info },
             //     );
             // }
-
-            switch (semantic.reference) {
-                .local => |local| {
-                    return Hover{
-                        .text = try semantic.allocPrint(allocator),
-                        .loc = local.token.getRange(),
-                    };
-                },
-                .decl => |decl| {
-                    return Hover{
-                        .text = try semantic.allocPrint(allocator),
-                        .loc = decl.token.getRange(),
-                    };
-                },
-                else => {
-                    return Hover{
-                        .text = try semantic.allocPrint(allocator),
-                    };
-                },
-            }
         },
         else => {
             return Hover{
                 .text = try std.fmt.allocPrint(
                     allocator,
-                    "# {s}: {s}\n\n{s}\n\n",
-                    .{ @tagName(token.getTag()), name, context_info },
+                    "# {s}: {s}\n\n",
+                    .{ @tagName(token.getTag()), name },
                 ),
             };
         },

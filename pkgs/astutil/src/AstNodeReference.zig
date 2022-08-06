@@ -1,3 +1,6 @@
+///
+/// 変数参照。コンテナ変数、関数引数、ローカル変数以外の変数。参照先を示す。
+///
 const std = @import("std");
 const AstContext = @import("./AstContext.zig");
 const AstNode = @import("./AstNode.zig");
@@ -7,20 +10,17 @@ const Declaration = @import("./Declaration.zig");
 
 var debug_buffer: [1024]u8 = undefined;
 
-pub const Semantics = union(enum) {
+pub const Reference = union(enum) {
     local: LocalVar,
     decl: Declaration,
-    field_access,
-    unknown,
 
-    fn fromIdentifierNode(node: AstNode) @This() {
-        if (LocalVar.find(node)) |local| {
-            return Semantics{ .local = local };
-        } else if (Declaration.find(node)) |decl| {
-            return Semantics{ .decl = decl };
-        } else {
-            return .unknown;
-        }
+    fn fromIdentifierNode(node: AstNode) ?@This() {
+        return if (LocalVar.find(node)) |local|
+            @This(){ .local = local }
+        else if (Declaration.find(node)) |decl|
+            @This(){ .decl = decl }
+        else
+            null;
     }
 };
 
@@ -28,21 +28,19 @@ const Self = @This();
 
 token: AstToken,
 node: AstNode,
-reference: Semantics,
+target: Reference,
 
-pub fn init(context: *const AstContext, token: AstToken) Self {
+pub fn init(context: *const AstContext, token: AstToken) ?Self {
     const node_idx = context.tokens_node[token.index];
     const node = AstNode.init(context, node_idx);
-    return Self{
-        .token = token,
-        .node = node,
-        .reference = switch (node.getTag()) {
-            .identifier => Semantics.fromIdentifierNode(node),
-            .field_access => .field_access,
-            // .enum_literal => {},
-            else => .unknown,
-        },
-    };
+    return if (Reference.fromIdentifierNode(node)) |reference|
+        Self{
+            .token = token,
+            .node = node,
+            .target = reference,
+        }
+    else
+        null;
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -55,7 +53,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     defer allocator.free(node);
     try w.print("`{s} => {s}`\n", .{ node, token });
 
-    switch (self.reference) {
+    switch (self.target) {
         .local => |local| {
             try w.print("## identifier\n\n", .{});
             const info = try local.allocPrint(allocator);
@@ -67,9 +65,6 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             const info = try decl.allocPrint(allocator);
             defer allocator.free(info);
             try w.print("{s}", .{info});
-        },
-        else => {
-            try w.print("not found", .{});
         },
     }
 
