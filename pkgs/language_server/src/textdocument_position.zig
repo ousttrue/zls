@@ -53,10 +53,11 @@ pub fn getHover(
             if (AstIdentifier.init(doc.ast_context, token)) |identifier| {
                 switch (identifier) {
                     .reference => |reference| {
-                        const text = try reference.allocPrint(allocator);
+                        const decl = reference.decl;
+                        const text = try decl.allocPrint(allocator);
                         return Hover{
                             .text = text,
-                            .loc = reference.token.getRange(),
+                            .loc = decl.token.getRange(),
                         };
                     },
                     .decl => |decl| {
