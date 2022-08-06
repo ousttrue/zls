@@ -79,6 +79,56 @@ pub fn getParent(self: Self) ?Self {
     return init(self.context, index);
 }
 
+pub const Iterator = struct {
+    current: Self,
+
+    pub fn next(self: *@This()) ?Self {
+        if (self.current.getParent()) |parent| {
+            self.current = parent;
+            return parent;
+        } else {
+            return null;
+        }
+    }
+};
+
+pub fn parentIterator(self: Self) Iterator {
+    return Iterator{ .current = self };
+}
+
+/// var_decl, if_payload, while_payload, switch_case_payload, fn_param
+pub fn findLocalVar(self: Self, symbol: []const u8) ?Ast.full.VarDecl {
+    var it = Iterator{ .current = self };
+    while (it.next()) |current| {
+        var buffer: [2]u32 = undefined;
+        switch (current.getChildren(&buffer)) {
+            .block => |block| {
+                for (block.ast.statements) |statement| {
+                    const statement_node = init(self.context, statement);
+                    var buffer2: [2]u32 = undefined;
+                    switch (statement_node.getChildren(&buffer2)) {
+                        .var_decl => |var_decl| {
+                            if (std.mem.eql(u8, statement_node.getMainToken().next().getText(), symbol)) {
+                                return var_decl;
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {
+                switch (current.getTag()) {
+                    .fn_decl => {
+                        break;
+                    },
+                    else => {},
+                }
+            },
+        }
+    }
+    return null;
+}
+
 test {
     const source =
         \\pub fn main() !void {

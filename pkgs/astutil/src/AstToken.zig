@@ -11,9 +11,9 @@ fn findTokenIndex(tree: *const Ast, byte_position: u32) ?u32 {
                 return null;
             }
             const index = @intCast(u32, i - 1);
-            const prev = tree.tokenSlice(index);
+            const prev_text = tree.tokenSlice(index);
             const prev_start = token_start[index];
-            if (prev_start + prev.len <= byte_position) {
+            if (prev_start + prev_text.len <= byte_position) {
                 return null;
             }
             return index;
@@ -28,6 +28,7 @@ tree: *const Ast,
 index: u32,
 
 pub fn init(tree: *const Ast, index: usize) Self {
+    std.debug.assert(index < tree.tokens.len);
     return Self{
         .tree = tree,
         .index = @intCast(u32, index),
@@ -39,6 +40,14 @@ pub fn fromBytePosition(tree: *const Ast, byte_position: usize) ?Self {
         init(tree, index)
     else
         null;
+}
+
+pub fn next(self: Self) Self {
+    return init(self.tree, self.index + 1);
+}
+
+pub fn prev(self: Self) Self {
+    return init(self.tree, self.index - 1);
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {

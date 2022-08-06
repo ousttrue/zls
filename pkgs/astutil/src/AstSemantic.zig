@@ -38,11 +38,28 @@ pub fn init(context: *const AstContext, token: AstToken) Self {
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+    var buffer = std.ArrayList(u8).init(allocator);
+    const w = buffer.writer();
+
     const token = try self.token.allocPrint(allocator);
     defer allocator.free(token);
     const node = try self.node.allocPrint(allocator);
     defer allocator.free(node);
-    return std.fmt.allocPrint(allocator, "`{s} => {s}`\n", .{ node, token });
+    try w.print("`{s} => {s}`\n", .{ node, token });
+
+    switch (self.semantics) {
+        .identifier => {
+            try w.print("[identifier]", .{});
+            const symbol = self.token.getText();
+            if (self.node.findLocalVar(symbol)) |local| {
+                _ = local;
+                try w.print("[local] {s}", .{symbol});
+            } else {
+                try w.print("not found", .{});
+            }
+        },
+        else => {},
+    }
 
     // identifier => getDecl
     // field_access => getLhs identifier / field_access
@@ -72,4 +89,6 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     //         ) catch unreachable;
     //     },
     // }
+
+    return buffer.items;
 }
