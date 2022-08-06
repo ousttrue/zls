@@ -149,7 +149,7 @@ pub const NodeChildren = union(enum) {
             .bool_not, .negation, .bit_not, .negation_wrap, .address_of => .{ .one = node_data.lhs },
             // try await ?
             .@"try", .@"await", .optional_type => .{ .one = node_data.lhs },
-            .array_type => .{ .two = node_data },
+            .array_type => .{ .array_type = tree.arrayType(idx) },
             .array_type_sentinel => .{ .array_type = tree.arrayTypeSentinel(idx) },
             .ptr_type_aligned => .{ .ptr_type = tree.ptrTypeAligned(idx) },
             .ptr_type_sentinel => .{ .ptr_type = tree.ptrTypeSentinel(idx) },

@@ -221,7 +221,7 @@ pub fn findFromBlock(node: AstNode) ?Self {
     return null;
 }
 
-pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+pub fn allocPrint(self: Self, allocator: std.mem.Allocator) anyerror![]const u8 {
     var buffer = std.ArrayList(u8).init(allocator);
     const w = buffer.writer();
 
@@ -231,7 +231,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             const var_type = VarType.fromVarDecl(self.context, full);
             const info = try var_type.allocPrint(allocator);
             defer allocator.free(info);
-            try w.print("[local] var_decl: {s}", .{info});
+            try w.print("{s}", .{info});
         },
         .if_payload => |full| {
             // getType: eval expression
@@ -250,8 +250,10 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         },
         .param => |full| {
             // getType: param decl
-            _ = full;
-            try w.print("[local] param", .{});
+            const var_type = VarType.fromParam(self.context, full);
+            const info = try var_type.allocPrint(allocator);
+            defer allocator.free(info);
+            try w.print("{s}: {s}", .{self.token.getText(), info});
         },
         .fn_decl => {
             try w.print("[container] fn", .{});
