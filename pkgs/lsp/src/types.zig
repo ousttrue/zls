@@ -22,6 +22,7 @@ pub const Location = struct {
 /// Hover response
 pub const Hover = struct {
     contents: MarkupContent,
+    range: ?Range,
 };
 
 pub const WorkspaceEdit = struct {

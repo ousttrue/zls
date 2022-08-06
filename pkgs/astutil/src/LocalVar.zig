@@ -2,9 +2,12 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const AstToken = @import("./AstToken.zig");
 const AstNode = @import("./AstNode.zig");
+const AstContext = @import("./AstContext.zig");
+const VarType = @import("./VarType.zig");
 const Self = @This();
 
-name: []const u8,
+context: *const AstContext,
+token: AstToken,
 full: union(enum) {
     var_decl: Ast.full.VarDecl,
     if_payload: Ast.full.If,
@@ -28,9 +31,11 @@ pub fn find(node: AstNode) ?Self {
                     var buffer2: [2]u32 = undefined;
                     switch (statement_node.getChildren(&buffer2)) {
                         .var_decl => |full| {
-                            if (std.mem.eql(u8, statement_node.getMainToken().next().getText(), symbol)) {
+                            const token = statement_node.getMainToken().next();
+                            if (std.mem.eql(u8, token.getText(), symbol)) {
                                 return Self{
-                                    .name = symbol,
+                                    .context = node.context,
+                                    .token = token,
                                     .full = .{ .var_decl = full },
                                 };
                             }
@@ -44,7 +49,8 @@ pub fn find(node: AstNode) ?Self {
                     const token = AstToken.init(tree, payload_token);
                     if (std.mem.eql(u8, token.getText(), symbol)) {
                         return Self{
-                            .name = symbol,
+                            .context = node.context,
+                            .token = token,
                             .full = .{ .if_payload = full },
                         };
                     }
@@ -55,7 +61,8 @@ pub fn find(node: AstNode) ?Self {
                     const token = AstToken.init(tree, payload_token);
                     if (std.mem.eql(u8, token.getText(), symbol)) {
                         return Self{
-                            .name = symbol,
+                            .context = node.context,
+                            .token = token,
                             .full = .{ .while_payload = full },
                         };
                     }
@@ -66,7 +73,8 @@ pub fn find(node: AstNode) ?Self {
                     const token = AstToken.init(tree, payload_token);
                     if (std.mem.eql(u8, token.getText(), symbol)) {
                         return Self{
-                            .name = symbol,
+                            .context = node.context,
+                            .token = token,
                             .full = .{ .switch_case_payload = full },
                         };
                     }
@@ -84,7 +92,8 @@ pub fn find(node: AstNode) ?Self {
                                     const token = AstToken.init(tree, name_token);
                                     if (std.mem.eql(u8, token.getText(), symbol)) {
                                         return Self{
-                                            .name = symbol,
+                                            .context = node.context,
+                                            .token = token,
                                             .full = .{ .param = param },
                                         };
                                     }
@@ -110,8 +119,10 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     switch (self.full) {
         .var_decl => |full| {
             // getType: var decl type part => eval expression
-            _ = full;
-            try w.print("[local] var_decl", .{});
+            const var_type = VarType.fromVarDecl(self.context, full);
+            const info = try var_type.allocPrint(allocator);
+            defer allocator.free(info);
+            try w.print("[local] var_decl: {s}", .{info});
         },
         .if_payload => |full| {
             // getType: eval expression

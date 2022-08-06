@@ -14,56 +14,88 @@ const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
 
+pub const Hover = struct {
+    text: []const u8,
+    loc: ?std.zig.Token.Loc = null,
+};
+
 pub fn getHover(
     arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
+    // workspace: *Workspace,
     doc: *Document,
     token: AstToken,
-    hover_kind: ast.MarkupFormat,
-) !?[]const u8 {
-    var context_info = try AstSemantic.init(doc.ast_context, token).allocPrint(arena.allocator());
-    const name = token.getText();
+    // hover_kind: ast.MarkupFormat,
+) !?Hover {
     const allocator = arena.allocator();
+    const name = token.getText();
+    const semantic = AstSemantic.init(doc.ast_context, token);
+    var context_info = try semantic.allocPrint(allocator);
     switch (token.getTag()) {
         .builtin => {
             if (builtin_completions.find(name)) |builtin| {
-                return try std.fmt.allocPrint(
-                    allocator,
-                    "# builtin: {s}\n\n{s}\n\n## hover\n\n```zig\n{s}\n```\n\n{s}",
-                    .{ name, context_info, builtin.signature, builtin.documentation },
-                );
+                return Hover{
+                    .text = try std.fmt.allocPrint(
+                        allocator,
+                        "# builtin: {s}\n\n{s}\n\n## hover\n\n```zig\n{s}\n```\n\n{s}",
+                        .{ name, context_info, builtin.signature, builtin.documentation },
+                    ),
+                };
             } else {
-                return try std.fmt.allocPrint(
-                    allocator,
-                    "# builtin: {s}\n\n{s}\n\n",
-                    .{ name, context_info },
-                );
+                return Hover{
+                    .text = try std.fmt.allocPrint(
+                        allocator,
+                        "# builtin: {s}\n\n{s}\n\n",
+                        .{ name, context_info },
+                    ),
+                };
             }
         },
         .identifier => {
-            var lookup = SymbolLookup.init(arena.allocator());
-            defer lookup.deinit();
-            if (lookup.lookupIdentifier(arena, workspace, doc, token)) |decl| {
-                const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
-                return try std.fmt.allocPrint(
-                    allocator,
-                    "# {s}\n\n{s}\n\n## hover\n\n{?s}",
-                    .{ name, context_info, hover },
-                );
-            } else {
-                return try std.fmt.allocPrint(
-                    allocator,
-                    "# {s}\n\n{s}\n\n",
-                    .{ name, context_info },
-                );
+            // var lookup = SymbolLookup.init(arena.allocator());
+            // defer lookup.deinit();
+            // if (lookup.lookupIdentifier(arena, workspace, doc, token)) |decl| {
+            //     const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
+            //     return try std.fmt.allocPrint(
+            //         allocator,
+            //         "# {s}\n\n{s}\n\n## hover\n\n{?s}",
+            //         .{ name, context_info, hover },
+            //     );
+            // } else {
+            //     return try std.fmt.allocPrint(
+            //         allocator,
+            //         "# {s}\n\n{s}\n\n",
+            //         .{ name, context_info },
+            //     );
+            // }
+
+            switch (semantic.reference) {
+                .local => |local| {
+                    return Hover{
+                        .text = try semantic.allocPrint(allocator),
+                        .loc = local.token.getRange(),
+                    };
+                },
+                .decl => |decl| {
+                    return Hover{
+                        .text = try semantic.allocPrint(allocator),
+                        .loc = decl.token.getRange(),
+                    };
+                },
+                else => {
+                    return Hover{
+                        .text = try semantic.allocPrint(allocator),
+                    };
+                },
             }
         },
         else => {
-            return try std.fmt.allocPrint(
-                allocator,
-                "# {s}: {s}\n\n{s}\n\n",
-                .{ @tagName(token.getTag()), name, context_info },
-            );
+            return Hover{
+                .text = try std.fmt.allocPrint(
+                    allocator,
+                    "# {s}: {s}\n\n{s}\n\n",
+                    .{ @tagName(token.getTag()), name, context_info },
+                ),
+            };
         },
     }
 }

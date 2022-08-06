@@ -8,16 +8,27 @@ const Declaration = @import("./Declaration.zig");
 var debug_buffer: [1024]u8 = undefined;
 
 pub const Semantics = union(enum) {
-    identifier,
+    local: LocalVar,
+    decl: Declaration,
     field_access,
     unknown,
+
+    fn fromIdentifierNode(node: AstNode) @This() {
+        if (LocalVar.find(node)) |local| {
+            return Semantics{ .local = local };
+        } else if (Declaration.find(node)) |decl| {
+            return Semantics{ .decl = decl };
+        } else {
+            return .unknown;
+        }
+    }
 };
 
 const Self = @This();
 
 token: AstToken,
 node: AstNode,
-semantics: Semantics,
+reference: Semantics,
 
 pub fn init(context: *const AstContext, token: AstToken) Self {
     const node_idx = context.tokens_node[token.index];
@@ -25,16 +36,11 @@ pub fn init(context: *const AstContext, token: AstToken) Self {
     return Self{
         .token = token,
         .node = node,
-        .semantics = switch (node.getTag()) {
-            // ref: 他の宣言を参照している。scope search
-            // param: 関数引数
-            // decl: 変数宣言
-            .identifier => .identifier,
-            // lhs
-            // rhs(identifier)
+        .reference = switch (node.getTag()) {
+            .identifier => Semantics.fromIdentifierNode(node),
             .field_access => .field_access,
-            else => .unknown,
             // .enum_literal => {},
+            else => .unknown,
         },
     };
 }
@@ -49,20 +55,22 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     defer allocator.free(node);
     try w.print("`{s} => {s}`\n", .{ node, token });
 
-    switch (self.semantics) {
-        .identifier => {
+    switch (self.reference) {
+        .local => |local| {
             try w.print("## identifier\n\n", .{});
-            if (LocalVar.find(self.node)) |local| {
-                _ = local;
-                try w.print("{s}", .{try local.allocPrint(allocator)});
-            } else if (Declaration.find(self.node)) |decl| {
-                _ = decl;
-                try w.print("{s}", .{try decl.allocPrint(allocator)});
-            } else {
-                try w.print("not found", .{});
-            }
+            const info = try local.allocPrint(allocator);
+            defer allocator.free(info);
+            try w.print("{s}", .{info});
         },
-        else => {},
+        .decl => |decl| {
+            try w.print("## identifier\n\n", .{});
+            const info = try decl.allocPrint(allocator);
+            defer allocator.free(info);
+            try w.print("{s}", .{info});
+        },
+        else => {
+            try w.print("not found", .{});
+        },
     }
 
     // identifier => getDecl

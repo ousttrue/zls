@@ -5,7 +5,7 @@ const AstNode = @import("./AstNode.zig");
 const logger = std.log.scoped(.Declaration);
 const Self = @This();
 
-name: []const u8,
+token: AstToken,
 full: union(enum) {
     var_decl: Ast.full.VarDecl,
     fn_decl: AstNode,
@@ -26,9 +26,10 @@ pub fn find(node: AstNode) ?Self {
                     var buf2: [2]u32 = undefined;
                     switch (member_node.getChildren(&buf2)) {
                         .var_decl => |full| {
-                            if (std.mem.eql(u8, member_node.getMainToken().next().getText(), symbol)) {
+                            const token = member_node.getMainToken().next();
+                            if (std.mem.eql(u8, token.getText(), symbol)) {
                                 return Self{
-                                    .name = symbol,
+                                    .token = token,
                                     .full = .{ .var_decl = full },
                                 };
                             }
@@ -41,9 +42,10 @@ pub fn find(node: AstNode) ?Self {
                                     var buf3: [2]u32 = undefined;
                                     if (fn_proto_node.getFnProto(&buf3)) |fn_proto| {
                                         if (fn_proto.name_token) |name_token| {
-                                            if (std.mem.eql(u8, AstToken.init(tree, name_token).getText(), symbol)) {
+                                            const token = AstToken.init(tree, name_token);
+                                            if (std.mem.eql(u8, token.getText(), symbol)) {
                                                 return Self{
-                                                    .name = symbol,
+                                                    .token = token,
                                                     .full = .{ .fn_decl = member_node },
                                                 };
                                             }

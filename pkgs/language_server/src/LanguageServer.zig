@@ -447,22 +447,42 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
         return lsp.Response.createNull(id);
     };
 
-    const hover_or_null = textdocument_position.getHover(
+    const hover_or_null: ?textdocument_position.Hover = try textdocument_position.getHover(
         arena,
-        workspace,
+        // workspace,
         doc,
         token,
-        if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
-    ) catch |err| (std.fmt.allocPrint(arena.allocator(), "{}", .{err}) catch null);
-    const text = hover_or_null orelse {
+        // if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
+    );
+
+    const hover = hover_or_null orelse {
         return lsp.Response.createNull(id);
     };
+
+    var range: ?lsp.types.Range = null;
+    if (hover.loc) |loc| {
+        const start = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, self.encoding);
+        const end = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, self.encoding);
+        const r = lsp.types.Range{
+            .start = .{
+                .line = start.line,
+                .character = start.x,
+            },
+            .end = .{
+                .line = end.line,
+                .character = end.x,
+            },
+        };
+        logger.debug("{}", .{r});
+        range = r;
+    }
 
     return lsp.Response{
         .id = id,
         .result = .{
             .Hover = .{
-                .contents = .{ .value = text },
+                .contents = .{ .value = hover.text },
+                .range = range,
             },
         },
     };
