@@ -6,7 +6,7 @@ const Self = @This();
 
 name: []const u8,
 full: union(enum) {
-    local_decl: Ast.full.VarDecl,
+    var_decl: Ast.full.VarDecl,
     if_payload: Ast.full.If,
     while_payload: Ast.full.While,
     switch_case_payload: Ast.full.SwitchCase,
@@ -31,7 +31,7 @@ pub fn find(node: AstNode) ?Self {
                             if (std.mem.eql(u8, statement_node.getMainToken().next().getText(), symbol)) {
                                 return Self{
                                     .name = symbol,
-                                    .full = .{ .local_decl = full },
+                                    .full = .{ .var_decl = full },
                                 };
                             }
                         },
@@ -108,7 +108,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     const w = buffer.writer();
 
     switch (self.full) {
-        .local_decl => |full| {
+        .var_decl => |full| {
             // getType: var decl type part => eval expression
             _ = full;
             try w.print("[local] var_decl", .{});
