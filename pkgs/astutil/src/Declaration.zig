@@ -253,7 +253,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) anyerror![]const u8 
             const var_type = VarType.fromParam(self.context, full);
             const info = try var_type.allocPrint(allocator);
             defer allocator.free(info);
-            try w.print("{s}: {s}", .{self.token.getText(), info});
+            try w.print("{s}: {s}", .{ self.token.getText(), info });
         },
         .fn_decl => {
             try w.print("[container] fn", .{});

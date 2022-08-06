@@ -3,7 +3,7 @@ const Ast = std.zig.Ast;
 const AstToken = @import("./AstToken.zig");
 const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
-const NodeReference = @import("./NodeReference.zig");
+const Declaration = @import("./Declaration.zig");
 const Self = @This();
 
 node: AstNode,
@@ -70,9 +70,9 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         else => {
             switch (self.node.getTag()) {
                 .identifier => {
-                    if (NodeReference.fromToken(self.node.context, self.node.getMainToken())) |ref| {
+                    if (Declaration.fromToken(self.node.context, self.node.getMainToken())) |decl| {
                         // deref
-                        const info = try ref.decl.allocPrint(allocator);
+                        const info = try decl.allocPrint(allocator);
                         defer allocator.free(info);
                         try w.print("{s}", .{info});
                     } else {
@@ -80,7 +80,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
                     }
                 },
                 else => {
-                    try w.print("tag: {s}", .{@tagName(self.node.getTag())});
+                    try w.print("node [{s}]: {s}", .{self.node.getMainToken().getText(), @tagName(self.node.getTag())});
                 },
             }
         },
