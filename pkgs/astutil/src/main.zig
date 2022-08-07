@@ -4,4 +4,5 @@ pub const AstNode = @import("./AstNode.zig");
 pub const AstContext = @import("./AstContext.zig");
 pub const Declaration = @import("./Declaration.zig");
 pub const VarType = @import("./VarType.zig");
+pub const FixedPath = @import("./FixedPath.zig");
 pub const ast = @import("./ast.zig");

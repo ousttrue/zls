@@ -1,6 +1,7 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
-const FixedPath = @import("./FixedPath.zig");
+const FixedPath = astutil.FixedPath;
 const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
 const Pkg = struct {

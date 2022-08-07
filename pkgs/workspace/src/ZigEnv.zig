@@ -1,7 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const astutil = @import("astutil");
 const known_folders = @import("known-folders");
-const FixedPath = @import("./FixedPath.zig");
+const FixedPath = astutil.FixedPath;
 const logger = std.log.scoped(.ZigEnv);
 
 pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
