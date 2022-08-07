@@ -839,8 +839,6 @@ pub fn process(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) ![]const lsp.CompletionItem {
-    logger.debug("prev: {s}", .{try token.allocPrint(arena.allocator())});
-
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
