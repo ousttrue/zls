@@ -76,10 +76,10 @@ pub fn log(
 }
 
 pub fn main() anyerror!void {
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // const allocator = gpa.allocator();
-    // defer std.debug.assert(!gpa.deinit());
-    const allocator = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer std.debug.assert(!gpa.deinit());
+    // const allocator = std.heap.page_allocator;
 
     transport = Stdio.init(allocator);
     logger.info("######## [ZLS MODIFIED] ########", .{});
@@ -177,20 +177,21 @@ pub fn main() anyerror!void {
     var language_server = LanguageServer.init(allocator, &config, zigenv);
     defer language_server.deinit();
 
+    // life cycle
     dispatcher.registerRequest(&language_server, "initialize");
     dispatcher.registerNotify(&language_server, "initialized");
     dispatcher.registerRequest(&language_server, "shutdown");
-
+    // document sync
     dispatcher.registerNotify(&language_server, "textDocument/didOpen");
     dispatcher.registerNotify(&language_server, "textDocument/didChange");
     dispatcher.registerNotify(&language_server, "textDocument/didSave");
     dispatcher.registerNotify(&language_server, "textDocument/didClose");
-
+    // document request
     dispatcher.registerRequest(&language_server, "textDocument/semanticTokens/full");
     dispatcher.registerRequest(&language_server, "textDocument/documentSymbol");
     dispatcher.registerRequest(&language_server, "textDocument/codeLens");
     dispatcher.registerRequest(&language_server, "codeLens/resolve");
-
+    // document position request
     dispatcher.registerRequest(&language_server, "textDocument/hover");
     dispatcher.registerRequest(&language_server, "textDocument/formatting");
     dispatcher.registerRequest(&language_server, "textDocument/definition");
@@ -199,8 +200,7 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&language_server, "textDocument/rename");
     dispatcher.registerRequest(&language_server, "textDocument/references");
     dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
-    // dispatcher.registerRequest("textDocument/implementation", requests.GotoDefinition, server.gotoDefinitionHandler);
-    // dispatcher.registerRequest("textDocument/declaration", requests.GotoDeclaration, server.gotoDeclarationHandler);
 
+    // start
     jsonrpc.readloop(allocator, &transport, &dispatcher, &language_server.notification_queue);
 }
