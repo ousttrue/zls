@@ -186,47 +186,66 @@ const SymbolTree = struct {
                 const text = try type_var.allocPrint(arena.allocator());
                 const token = node.getMainToken().next();
                 const range = try getRange(doc, token, encoding);
-                if (type_var.kind == .import) {
-                    try self.imports.append(lsp.DocumentSymbol{
-                        .name = token.getText(),
-                        .kind = .Module,
-                        .range = range,
-                        .selectionRange = range,
-                        .detail = text,
-                    });
-                } else {
-                    var symbol = lsp.DocumentSymbol{
-                        .name = token.getText(),
-                        .kind = .Variable,
-                        .range = range,
-                        .selectionRange = range,
-                        .detail = text,
-                    };
+                switch (type_var.kind) {
+                    .import => |import| {
+                        // .Package or .File
+                        try self.imports.append(lsp.DocumentSymbol{
+                            .name = token.getText(),
+                            .kind = switch (import) {
+                                .Pkg => .Package,
+                                .File => .File,
+                            },
+                            .range = range,
+                            .selectionRange = range,
+                            .detail = text,
+                        });
+                    },
+                    else => {
+                        var symbol = lsp.DocumentSymbol{
+                            .name = token.getText(),
+                            .kind = .Variable,
+                            .range = range,
+                            .selectionRange = range,
+                            .detail = text,
+                        };
 
-                    if (type_var.kind == .container) {
-                        var buf2: [2]u32 = undefined;
-                        if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
-                            var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
-                            for (container_decl.ast.members) |decl| {
-                                if (try self.traverse(arena, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
-                                    try children.append(child);
+                        switch (type_var.kind) {
+                            .container => |container| {
+                                switch (container) {
+                                    .Struct => {
+                                        symbol.kind = .Struct;
+                                    },
+                                    .Enum => {
+                                        symbol.kind = .Enum;
+                                    },
                                 }
-                            }
-                            symbol.children = children.toOwnedSlice();
+                                var buf2: [2]u32 = undefined;
+                                if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
+                                    var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
+                                    for (container_decl.ast.members) |decl| {
+                                        if (try self.traverse(arena, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+                                            try children.append(child);
+                                        }
+                                    }
+                                    symbol.children = children.toOwnedSlice();
+                                }
+                            },
+                            else => {},
                         }
-                    }
 
-                    return symbol;
+                        return symbol;
+                    },
                 }
             },
             .container_field => |container_field| {
-                const type_var = VarType.fromContainerField(node.context, container_field);
-                const text = try type_var.allocPrint(arena.allocator());
+                // EnumMember
+                const var_type = VarType.fromContainerField(node.context, container_field);
+                const text = try var_type.allocPrint(arena.allocator());
                 const token = AstToken.init(&node.context.tree, container_field.ast.name_token);
                 const range = try getRange(doc, token, encoding);
                 return lsp.DocumentSymbol{
                     .name = token.getText(),
-                    .kind = .Property,
+                    .kind = if (var_type.kind == .enum_literal) .EnumMember else .Property,
                     .range = range,
                     .selectionRange = range,
                     .detail = text,

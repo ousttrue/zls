@@ -4,31 +4,65 @@ const AstToken = @import("./AstToken.zig");
 const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
+const Primitive = @import("./Primitive.zig");
+
+pub const ContainerType = enum {
+    Struct,
+    Enum,
+};
+
+pub const ImportType = union(enum) {
+    Pkg: []const u8,
+    File: []const u8,
+};
+
 const Self = @This();
 
 node: AstNode,
 kind: union(enum) {
-    import,
+    import: ImportType,
     this,
     builtin,
     call,
     array,
     ptr,
-    container,
-    ref: Declaration,
+    optional,
+    field_access,
+    error_union,
+    enum_literal,
+    container: ContainerType,
+    primitive: Primitive,
     unknown,
 } = .unknown,
 
 pub fn init(node: AstNode) Self {
     var buf: [2]u32 = undefined;
-    switch (node.getChildren(&buf)) {
-        .builtin_call => {
+    const children = node.getChildren(&buf);
+    switch (children) {
+        .builtin_call => |builtin_call| {
             const builtin = node.getMainToken().getText();
             if (std.mem.eql(u8, builtin, "@import")) {
-                return Self{
-                    .node = node,
-                    .kind = .import,
-                };
+                const param = AstNode.init(node.context, builtin_call.ast.params[0]);
+                const text = param.getMainToken().getText();
+                if (std.mem.endsWith(u8, text, ".zig\"")) {
+                    return Self{
+                        .node = node,
+                        .kind = .{
+                            .import = .{
+                                .File = text,
+                            },
+                        },
+                    };
+                } else {
+                    return Self{
+                        .node = node,
+                        .kind = .{
+                            .import = .{
+                                .Pkg = text,
+                            },
+                        },
+                    };
+                }
             } else if (std.mem.eql(u8, builtin, "@This")) {
                 // TODO: eval
                 return Self{
@@ -62,24 +96,60 @@ pub fn init(node: AstNode) Self {
                 .kind = .ptr,
             };
         },
-        .container_decl => {
-            return Self{
-                .node = node,
-                .kind = .container,
-            };
+        .var_decl => |var_decl| {
+            return fromVarDecl(node.context, var_decl);
+        },
+        .container_decl => |container_decl| {
+            const token = AstToken.init(&node.context.tree, container_decl.ast.main_token);
+            if (std.mem.eql(u8, token.getText(), "enum")) {
+                return Self{
+                    .node = node,
+                    .kind = .{ .container = .Enum },
+                };
+            } else {
+                return Self{
+                    .node = node,
+                    .kind = .{ .container = .Struct },
+                };
+            }
         },
         else => {
             switch (node.getTag()) {
                 .identifier => {
-                    if (Declaration.fromToken(node.context, node.getMainToken())) |decl| {
-                        // deref
+                    const token = node.getMainToken();
+                    if (Primitive.fromName(token.getText())) |primitive| {
                         return Self{
                             .node = node,
-                            .kind = .{ .ref = decl },
+                            .kind = .{ .primitive = primitive },
                         };
+                    } else if (Declaration.fromToken(node.context, token)) |decl| {
+                        // deref
+                        // return Self{
+                        //     .node = node,
+                        //     .kind = .{ .ref = decl },
+                        // };
+                        return init(AstNode.fromTokenIndex(node.context, decl.token.index));
                     } else {
                         // try w.print("no ref: {s}", .{node.getMainToken().getText()});
                     }
+                },
+                .optional_type => {
+                    return Self{
+                        .node = node,
+                        .kind = .optional,
+                    };
+                },
+                .field_access => {
+                    return Self{
+                        .node = node,
+                        .kind = .field_access,
+                    };
+                },
+                .error_union => {
+                    return Self{
+                        .node = node,
+                        .kind = .error_union,
+                    };
                 },
                 else => {
                     // try w.print("node [{s}]: {s}", .{ node.getMainToken().getText(), @tagName(node.getTag()) });
@@ -111,69 +181,109 @@ pub fn fromFnProtoReturn(context: *const AstContext, fn_proto: Ast.full.FnProto)
     return init(AstNode.init(context, node_idx));
 }
 
-pub fn fromContainerField(context: *const AstContext, field: Ast.full.ContainerField) Self
-{
+pub fn fromContainerField(context: *const AstContext, field: Ast.full.ContainerField) Self {
     const node_idx = field.ast.type_expr;
-    return init(AstNode.init(context, node_idx));
+    const node = AstNode.init(context, node_idx);
+    if (node_idx == 0) {
+        // enum member ?
+        return Self{
+            .node = node,
+            .kind = .enum_literal,
+        };
+    } else {
+        return init(node);
+    }
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     var buffer = std.ArrayList(u8).init(allocator);
     const w = buffer.writer();
 
-    var buf: [2]u32 = undefined;
-    switch (self.node.getChildren(&buf)) {
-        .builtin_call => {
-            const builtin = self.node.getMainToken().getText();
-            if (std.mem.eql(u8, builtin, "@import")) {
-                try w.print("struct @import", .{});
-            } else if (std.mem.eql(u8, builtin, "@This")) {
-                // TODO: eval
-                try w.print("struct @This", .{});
-            } else {
-                try w.print("{s}", .{builtin});
+    switch (self.kind) {
+        // .import=> {
+        // },
+        // .this=> {},
+        // .builtin=> {},
+        // .call=> {},
+        // .array=> {},
+        // .ptr=> {},
+        // .container=> {},
+        // .primitive=> {}: Primitive,
+        // .ref=> {}: Declaration,
+        .unknown => {
+            try w.print("unknown: node tag = {s}", .{@tagName(self.node.getTag())});
+        },
+        .import => |import| {
+            switch (import) {
+                .Pkg => |pkg| {
+                    try w.print("@import pkg {s}", .{pkg});
+                },
+                .File => |file| {
+                    try w.print("@import file {s}", .{file});
+                },
             }
-        },
-        .call => {
-            // TODO: eval
-            try w.print("call result value type", .{});
-        },
-        .array_type => |array_type| {
-            const element_count = AstNode.init(self.node.context, array_type.ast.elem_count);
-            // TODO: deref
-            const element_type = AstNode.init(self.node.context, array_type.ast.elem_type);
-            try w.print("[{s}]{s}", .{
-                element_count.getMainToken().getText(),
-                element_type.getMainToken().getText(),
-            });
-        },
-        .ptr_type => |ptr_type| {
-            // TODO: deref
-            const child_type = AstNode.init(self.node.context, ptr_type.ast.child_type);
-            try w.print("*{s}", .{
-                child_type.getMainToken().getText(),
-            });
-        },
-        .container_decl => {
-            try w.print("struct", .{});
         },
         else => {
-            switch (self.node.getTag()) {
-                .identifier => {
-                    if (Declaration.fromToken(self.node.context, self.node.getMainToken())) |decl| {
-                        // deref
-                        const info = try decl.allocPrint(allocator);
-                        defer allocator.free(info);
-                        try w.print("{s}", .{info});
-                    } else {
-                        try w.print("no ref: {s}", .{self.node.getMainToken().getText()});
-                    }
-                },
-                else => {
-                    try w.print("node [{s}]: {s}", .{ self.node.getMainToken().getText(), @tagName(self.node.getTag()) });
-                },
-            }
+            try w.print("{s}", .{@tagName(self.kind)});
         },
     }
+
+    // var buf: [2]u32 = undefined;
+    // switch (self.node.getChildren(&buf)) {
+    //     .builtin_call => {
+    //         const builtin = self.node.getMainToken().getText();
+    //         if (std.mem.eql(u8, builtin, "@import")) {
+    //             try w.print("struct @import", .{});
+    //         } else if (std.mem.eql(u8, builtin, "@This")) {
+    //             // TODO: eval
+    //             try w.print("struct @This", .{});
+    //         } else {
+    //             try w.print("{s}", .{builtin});
+    //         }
+    //     },
+    //     .call => {
+    //         // TODO: eval
+    //         try w.print("call result value type", .{});
+    //     },
+    //     .array_type => |array_type| {
+    //         const element_count = AstNode.init(self.node.context, array_type.ast.elem_count);
+    //         // TODO: deref
+    //         const element_type = AstNode.init(self.node.context, array_type.ast.elem_type);
+    //         try w.print("[{s}]{s}", .{
+    //             element_count.getMainToken().getText(),
+    //             element_type.getMainToken().getText(),
+    //         });
+    //     },
+    //     .ptr_type => |ptr_type| {
+    //         // TODO: deref
+    //         const child_type = AstNode.init(self.node.context, ptr_type.ast.child_type);
+    //         try w.print("*{s}", .{
+    //             child_type.getMainToken().getText(),
+    //         });
+    //     },
+    //     .container_decl => {
+    //         try w.print("struct", .{});
+    //     },
+    //     else => {
+    //         switch (self.node.getTag()) {
+    //             .identifier => {
+    //                 const token = self.node.getMainToken();
+    //                 if (Primitive.fromName(token.getText())) |primitive| {
+    //                     try w.print("primitive: {s}", .{token.getText()});
+    //                 } else if (Declaration.fromToken(self.node.context, self.node.getMainToken())) |decl| {
+    //                     // deref
+    //                     const info = try decl.allocPrint(allocator);
+    //                     defer allocator.free(info);
+    //                     try w.print("{s}", .{info});
+    //                 } else {
+    //                     try w.print("no ref: {s}", .{token.getText()});
+    //                 }
+    //             },
+    //             else => {
+    //                 try w.print("node [{s}]: {s}", .{ self.node.getMainToken().getText(), @tagName(self.node.getTag()) });
+    //             },
+    //         }
+    //     },
+    // }
     return buffer.items;
 }
