@@ -7,7 +7,6 @@ const Config = ws.Config;
 const Document = ws.Document;
 const Line = ws.Line;
 const TypeWithHandle = ws.TypeWithHandle;
-const SymbolTree = ws.SymbolTree;
 const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
@@ -126,64 +125,128 @@ fn getRange(doc: *Document, token: AstToken, encoding: Line.Encoding) !lsp.Range
     return range;
 }
 
-fn traverse(
-    arena: *std.heap.ArenaAllocator,
-    doc: *Document,
-    node: AstNode,
-    encoding: Line.Encoding,
-) !?lsp.DocumentSymbol {
-    _ = arena;
-    var buf: [2]u32 = undefined;
-    switch (node.getChildren(&buf)) {
-        .var_decl => |var_decl| {
-            // recursive if container
-            const type_var = VarType.fromVarDecl(node.context, var_decl);
-            const text = try type_var.allocPrint(arena.allocator());
-            const token = node.getMainToken().next();
-            const range = try getRange(doc, token, encoding);
-            return lsp.DocumentSymbol{
-                .name = token.getText(),
-                .kind = .Variable,
-                .range = range,
-                .selectionRange = range,
-                .detail = text,
-                // .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
-            };
-        },
-        .container_field => {},
-        else => {
-            switch (node.getTag()) {
-                .fn_decl => {
-                    const fn_proto_node = AstNode.init(node.context, node.getData().lhs);
-                    var buf2: [2]u32 = undefined;
-                    if (fn_proto_node.getFnProto(&buf2)) |fn_proto| {
-                        if (fn_proto.name_token) |name_token| {
-                            const token = AstToken.init(&node.context.tree, name_token);
-                            const range = try getRange(doc, token, encoding);
-                            return lsp.DocumentSymbol{
-                                .name = token.getText(),
-                                .kind = .Function,
-                                .range = range,
-                                .selectionRange = range,
-                                .detail = "",
-                                // .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
-                            };
-                        }
-                    }
-                },
-                else => {},
-            }
-        },
-    }
-    return null;
-}
+const SymbolTree = struct {
+    const Self = @This();
 
-pub fn to_symbols(arena: *std.heap.ArenaAllocator, doc: *Document, encoding: Line.Encoding) anyerror![]lsp.DocumentSymbol {
-    var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
-    for (doc.ast_context.tree.rootDecls()) |decl| {
-        if (try traverse(arena, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
-            try children.append(child);
+    root: std.ArrayList(lsp.DocumentSymbol),
+    imports: std.ArrayList(lsp.DocumentSymbol),
+
+    fn init(allocator: std.mem.Allocator) Self {
+        var self = Self{
+            .root = std.ArrayList(lsp.DocumentSymbol).init(allocator),
+            .imports = std.ArrayList(lsp.DocumentSymbol).init(allocator),
+        };
+        var range = lsp.Range{
+            .start = .{
+                .line = 0,
+                .character = 0,
+            },
+            .end = .{
+                .line = 0,
+                .character = 0,
+            },
+        };
+        self.root.append(.{
+            .name = "imports",
+            .kind = .Module,
+            .range = range,
+            .selectionRange = range,
+            .detail = "",
+        }) catch unreachable;
+        return self;
+    }
+
+    fn toOwnedSlice(self: *Self) []lsp.DocumentSymbol {
+        self.root.items[0].children = self.imports.items;
+        return self.root.toOwnedSlice();
+    }
+
+    fn process(self: *Self, arena: *std.heap.ArenaAllocator, doc: *Document, encoding: Line.Encoding) !void {
+        for (doc.ast_context.tree.rootDecls()) |decl| {
+            if (try self.traverse(arena, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+                try self.root.append(child);
+            }
         }
     }
-    return children.toOwnedSlice();
+
+    fn traverse(
+        self: *Self,
+        arena: *std.heap.ArenaAllocator,
+        doc: *Document,
+        node: AstNode,
+        encoding: Line.Encoding,
+    ) !?lsp.DocumentSymbol {
+        _ = self;
+        _ = arena;
+        var buf: [2]u32 = undefined;
+        switch (node.getChildren(&buf)) {
+            .var_decl => |var_decl| {
+                const type_var = VarType.fromVarDecl(node.context, var_decl);
+                const text = try type_var.allocPrint(arena.allocator());
+                const token = node.getMainToken().next();
+                const range = try getRange(doc, token, encoding);
+                if (type_var.kind == .import) {
+                    try self.imports.append(lsp.DocumentSymbol{
+                        .name = token.getText(),
+                        .kind = .Module,
+                        .range = range,
+                        .selectionRange = range,
+                        .detail = text,
+                    });
+                } else {
+                    // TODO: recursive if container
+                    return lsp.DocumentSymbol{
+                        .name = token.getText(),
+                        .kind = .Variable,
+                        .range = range,
+                        .selectionRange = range,
+                        .detail = text,
+                    };
+                }
+            },
+            .container_field => |container_field| {
+                const type_var = VarType.fromContainerField(node.context, container_field);
+                const text = try type_var.allocPrint(arena.allocator());
+                const token = AstToken.init(&node.context.tree, container_field.ast.name_token);
+                const range = try getRange(doc, token, encoding);
+                    return lsp.DocumentSymbol{
+                        .name = token.getText(),
+                        .kind = .Property,
+                        .range = range,
+                        .selectionRange = range,
+                        .detail = text,
+                    };
+            },
+            else => {
+                switch (node.getTag()) {
+                    .fn_decl => {
+                        const fn_proto_node = AstNode.init(node.context, node.getData().lhs);
+                        var buf2: [2]u32 = undefined;
+                        if (fn_proto_node.getFnProto(&buf2)) |fn_proto| {
+                            if (fn_proto.name_token) |name_token| {
+                                const token = AstToken.init(&node.context.tree, name_token);
+                                const range = try getRange(doc, token, encoding);
+                                return lsp.DocumentSymbol{
+                                    .name = token.getText(),
+                                    .kind = .Function,
+                                    .range = range,
+                                    .selectionRange = range,
+                                    .detail = "",
+                                    // .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
+                                };
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            },
+        }
+        return null;
+    }
+};
+
+pub fn to_symbols(arena: *std.heap.ArenaAllocator, doc: *Document, encoding: Line.Encoding) anyerror![]lsp.DocumentSymbol {
+    var symbol_tree = SymbolTree.init(arena.allocator());
+    try symbol_tree.process(arena, doc, encoding);
+    return symbol_tree.toOwnedSlice();
 }

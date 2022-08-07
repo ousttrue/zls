@@ -7,24 +7,109 @@ const Declaration = @import("./Declaration.zig");
 const Self = @This();
 
 node: AstNode,
+kind: union(enum) {
+    import,
+    this,
+    builtin,
+    call,
+    array,
+    ptr,
+    container,
+    ref: Declaration,
+    unknown,
+} = .unknown,
+
+pub fn init(node: AstNode) Self {
+    var buf: [2]u32 = undefined;
+    switch (node.getChildren(&buf)) {
+        .builtin_call => {
+            const builtin = node.getMainToken().getText();
+            if (std.mem.eql(u8, builtin, "@import")) {
+                return Self{
+                    .node = node,
+                    .kind = .import,
+                };
+            } else if (std.mem.eql(u8, builtin, "@This")) {
+                // TODO: eval
+                return Self{
+                    .node = node,
+                    .kind = .this,
+                };
+            } else {
+                return Self{
+                    .node = node,
+                    .kind = .builtin,
+                };
+            }
+        },
+        .call => {
+            // TODO: eval
+            return Self{
+                .node = node,
+                .kind = .call,
+            };
+        },
+        .array_type => {
+            return Self{
+                .node = node,
+                .kind = .array,
+            };
+        },
+        .ptr_type => {
+            // TODO: deref
+            return Self{
+                .node = node,
+                .kind = .ptr,
+            };
+        },
+        .container_decl => {
+            return Self{
+                .node = node,
+                .kind = .container,
+            };
+        },
+        else => {
+            switch (node.getTag()) {
+                .identifier => {
+                    if (Declaration.fromToken(node.context, node.getMainToken())) |decl| {
+                        // deref
+                        return Self{
+                            .node = node,
+                            .kind = .{ .ref = decl },
+                        };
+                    } else {
+                        // try w.print("no ref: {s}", .{node.getMainToken().getText()});
+                    }
+                },
+                else => {
+                    // try w.print("node [{s}]: {s}", .{ node.getMainToken().getText(), @tagName(node.getTag()) });
+                },
+            }
+        },
+    }
+
+    return Self{
+        .node = node,
+    };
+}
 
 pub fn fromVarDecl(context: *const AstContext, var_decl: Ast.full.VarDecl) Self {
     const node_idx = if (var_decl.ast.type_node != 0)
         var_decl.ast.type_node
     else
         var_decl.ast.init_node;
-    const node = AstNode.init(context, node_idx);
-    return Self{
-        .node = node,
-    };
+    return init(AstNode.init(context, node_idx));
 }
 
 pub fn fromParam(context: *const AstContext, param: Ast.full.FnProto.Param) Self {
     const node_idx = param.type_expr;
-    const node = AstNode.init(context, node_idx);
-    return Self{
-        .node = node,
-    };
+    return init(AstNode.init(context, node_idx));
+}
+
+pub fn fromContainerField(context: *const AstContext, field: Ast.full.ContainerField) Self
+{
+    const node_idx = field.ast.type_expr;
+    return init(AstNode.init(context, node_idx));
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -80,7 +165,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
                     }
                 },
                 else => {
-                    try w.print("node [{s}]: {s}", .{self.node.getMainToken().getText(), @tagName(self.node.getTag())});
+                    try w.print("node [{s}]: {s}", .{ self.node.getMainToken().getText(), @tagName(self.node.getTag()) });
                 },
             }
         },

@@ -54,7 +54,7 @@ tokens: []std.zig.Token,
 tokens_node: []u32,
 
 pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
-    const tree = std.zig.parse(allocator, text) catch unreachable;
+    const tree = try std.zig.parse(allocator, text);
     var self = allocator.create(Self) catch unreachable;
     self.* = Self{
         .allocator = allocator,
