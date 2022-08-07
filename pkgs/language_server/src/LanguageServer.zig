@@ -14,7 +14,7 @@ const UriBytePosition = ws.UriBytePosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
-const SymbolTree = ws.SymbolTree;
+const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const AstSemantic = astutil.AstSemantic;
@@ -302,9 +302,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = workspace.getDocument(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
-    var symbol_tree = SymbolTree.init(arena.allocator(), doc.ast_context.tree);
-    try symbol_tree.traverse(0);
-    const symbols = try textdocument.to_symbols(arena.allocator(), doc, self.encoding, symbol_tree.symbols.items, 0);
+    const symbols = try textdocument.to_symbols(arena, doc, self.encoding);
     return lsp.Response{
         .id = id,
         .result = .{
