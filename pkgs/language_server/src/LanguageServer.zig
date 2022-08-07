@@ -58,9 +58,9 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     .documentHighlightProvider = false,
     .hoverProvider = true,
     .codeActionProvider = false,
-    .codeLensProvider = .{
-        .resolveProvider = true,
-    },
+    // .codeLensProvider = .{
+    //     .resolveProvider = true,
+    // },
     .declarationProvider = false,
     .definitionProvider = true,
     .typeDefinitionProvider = true,

@@ -78,7 +78,7 @@ pub const ServerCapabilities = struct {
     codeActionProvider: bool,
     codeLensProvider: ?struct {
         resolveProvider: ?bool,
-    },
+    } = null,
     declarationProvider: bool,
     definitionProvider: bool,
     typeDefinitionProvider: bool,

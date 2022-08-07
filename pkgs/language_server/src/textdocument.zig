@@ -12,6 +12,7 @@ const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const VarType = astutil.VarType;
 const ast = astutil.ast;
+const logger = std.log.scoped(.textdocument);
 
 // TODO: Is this correct or can we get a better end?
 fn astLocationToRange(loc: Ast.Location) lsp.Range {
@@ -175,7 +176,7 @@ const SymbolTree = struct {
         doc: *Document,
         node: AstNode,
         encoding: Line.Encoding,
-    ) !?lsp.DocumentSymbol {
+    ) anyerror!?lsp.DocumentSymbol {
         _ = self;
         _ = arena;
         var buf: [2]u32 = undefined;
@@ -194,14 +195,28 @@ const SymbolTree = struct {
                         .detail = text,
                     });
                 } else {
-                    // TODO: recursive if container
-                    return lsp.DocumentSymbol{
+                    var symbol = lsp.DocumentSymbol{
                         .name = token.getText(),
                         .kind = .Variable,
                         .range = range,
                         .selectionRange = range,
                         .detail = text,
                     };
+
+                    if (type_var.kind == .container) {
+                        var buf2: [2]u32 = undefined;
+                        if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
+                            var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
+                            for (container_decl.ast.members) |decl| {
+                                if (try self.traverse(arena, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+                                    try children.append(child);
+                                }
+                            }
+                            symbol.children = children.toOwnedSlice();
+                        }
+                    }
+
+                    return symbol;
                 }
             },
             .container_field => |container_field| {
@@ -209,13 +224,13 @@ const SymbolTree = struct {
                 const text = try type_var.allocPrint(arena.allocator());
                 const token = AstToken.init(&node.context.tree, container_field.ast.name_token);
                 const range = try getRange(doc, token, encoding);
-                    return lsp.DocumentSymbol{
-                        .name = token.getText(),
-                        .kind = .Property,
-                        .range = range,
-                        .selectionRange = range,
-                        .detail = text,
-                    };
+                return lsp.DocumentSymbol{
+                    .name = token.getText(),
+                    .kind = .Property,
+                    .range = range,
+                    .selectionRange = range,
+                    .detail = text,
+                };
             },
             else => {
                 switch (node.getTag()) {
@@ -224,6 +239,8 @@ const SymbolTree = struct {
                         var buf2: [2]u32 = undefined;
                         if (fn_proto_node.getFnProto(&buf2)) |fn_proto| {
                             if (fn_proto.name_token) |name_token| {
+                                const type_var = VarType.fromFnProtoReturn(node.context, fn_proto);
+                                const text = try type_var.allocPrint(arena.allocator());
                                 const token = AstToken.init(&node.context.tree, name_token);
                                 const range = try getRange(doc, token, encoding);
                                 return lsp.DocumentSymbol{
@@ -231,8 +248,7 @@ const SymbolTree = struct {
                                     .kind = .Function,
                                     .range = range,
                                     .selectionRange = range,
-                                    .detail = "",
-                                    // .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
+                                    .detail = text,
                                 };
                             }
                         }

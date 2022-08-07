@@ -79,6 +79,14 @@ pub fn getFnProto(self: Self, buffer: []u32) ?Ast.full.FnProto {
     };
 }
 
+pub fn getContainerDecl(self: Self, buffer: []u32) ?Ast.full.ContainerDecl {
+    const children = self.getChildren(buffer);
+    return switch (children) {
+        .container_decl => |container_decl| container_decl,
+        else => null,
+    };
+}
+
 pub fn getParent(self: Self) ?Self {
     if (self.index == 0) {
         return null;
