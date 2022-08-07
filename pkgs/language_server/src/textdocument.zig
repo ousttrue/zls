@@ -11,6 +11,7 @@ const SymbolTree = ws.SymbolTree;
 const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
+const VarType = astutil.VarType;
 const ast = astutil.ast;
 
 // TODO: Is this correct or can we get a better end?
@@ -134,8 +135,10 @@ fn traverse(
     _ = arena;
     var buf: [2]u32 = undefined;
     switch (node.getChildren(&buf)) {
-        .var_decl => {
+        .var_decl => |var_decl| {
             // recursive if container
+            const type_var = VarType.fromVarDecl(node.context, var_decl);
+            const text = try type_var.allocPrint(arena.allocator());
             const token = node.getMainToken().next();
             const range = try getRange(doc, token, encoding);
             return lsp.DocumentSymbol{
@@ -143,7 +146,7 @@ fn traverse(
                 .kind = .Variable,
                 .range = range,
                 .selectionRange = range,
-                .detail = "",
+                .detail = text,
                 // .children = try to_symbols(allocator, doc, encoding, src, symbol.node),
             };
         },
