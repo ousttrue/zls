@@ -790,40 +790,45 @@ fn completeImport(
         .insertText = "builtin",
     });
 
-    for (workspace.build_file.packages.items) |pkg| {
-        try items.append(.{
-            .label = pkg.name,
-            .kind = .Text,
-            // .textEdit=,
-            // .filterText=,
-            .insertText = pkg.name,
-            // .insertTextFormat=,
-            // .detail=,
-            // .documentation=,
-        });
+    {
+        var it = workspace.build_file.packages.keyIterator();
+        while (it.next()) |key| {
+            try items.append(.{
+                .label = key.*,
+                .kind = .Text,
+                // .textEdit=,
+                // .filterText=,
+                .insertText = key.*,
+                // .insertTextFormat=,
+                // .detail=,
+                // .documentation=,
+            });
+        }
     }
 
-    const dir = doc.path.parent().?;
-    var it = try dir.iterateChildren();
-    defer it.deinit();
-    while (try it.next()) |entry| {
-        switch (entry.kind) {
-            .File => {
-                if (std.mem.endsWith(u8, entry.name, ".zig")) {
-                    const copy = try std.fmt.allocPrint(arena.allocator(), "./{s}", .{entry.name});
-                    try items.append(.{
-                        .label = copy,
-                        .kind = .Text,
-                        // .textEdit=,
-                        // .filterText=,
-                        .insertText = copy,
-                        // .insertTextFormat=,
-                        // .detail=,
-                        // .documentation=,
-                    });
-                }
-            },
-            else => {},
+    {
+        const dir = doc.path.parent().?;
+        var it = try dir.iterateChildren();
+        defer it.deinit();
+        while (try it.next()) |entry| {
+            switch (entry.kind) {
+                .File => {
+                    if (std.mem.endsWith(u8, entry.name, ".zig")) {
+                        const copy = try std.fmt.allocPrint(arena.allocator(), "./{s}", .{entry.name});
+                        try items.append(.{
+                            .label = copy,
+                            .kind = .Text,
+                            // .textEdit=,
+                            // .filterText=,
+                            .insertText = copy,
+                            // .insertTextFormat=,
+                            // .detail=,
+                            // .documentation=,
+                        });
+                    }
+                },
+                else => {},
+            }
         }
     }
 

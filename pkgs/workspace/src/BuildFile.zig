@@ -4,15 +4,11 @@ const BuildAssociatedConfig = @import("./BuildAssociatedConfig.zig");
 const FixedPath = astutil.FixedPath;
 const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
-const Pkg = struct {
-    name: []const u8,
-    path: FixedPath,
-};
 const Self = @This();
 
 allocator: std.mem.Allocator,
 path: FixedPath,
-packages: std.ArrayListUnmanaged(Pkg),
+packages: std.StringHashMap(FixedPath),
 builtin_path: ?FixedPath = null,
 
 pub fn new(allocator: std.mem.Allocator, path: FixedPath) !*Self {
@@ -20,16 +16,13 @@ pub fn new(allocator: std.mem.Allocator, path: FixedPath) !*Self {
     self.* = Self{
         .allocator = allocator,
         .path = path,
-        .packages = .{},
+        .packages = std.StringHashMap(FixedPath).init(allocator),
     };
     return self;
 }
 
 pub fn delete(self: *Self) void {
-    for (self.packages.items) |pkg| {
-        self.allocator.free(pkg.name);
-    }
-    self.packages.deinit(self.allocator);
+    self.packages.deinit();
     self.allocator.destroy(self);
 }
 
@@ -61,9 +54,9 @@ fn loadBuildAssociatedConfiguration(self: *Self, allocator: std.mem.Allocator) !
     }
 }
 
-pub fn loadPackages(self: *Self, allocator: std.mem.Allocator, zigenv: ZigEnv) !void {
+pub fn loadPackages(self: *Self, zigenv: ZigEnv) !void {
     const directory_path = self.path.parent().?;
-    const zig_run_result = try zigenv.exe.exec(allocator, &.{
+    const zig_run_result = try zigenv.exe.exec(self.allocator, &.{
         "run",
         zigenv.build_runner_path.slice(),
         "--cache-dir",
@@ -79,34 +72,25 @@ pub fn loadPackages(self: *Self, allocator: std.mem.Allocator, zigenv: ZigEnv) !
         zigenv.global_cache_root.slice(),
     });
     defer {
-        allocator.free(zig_run_result.stdout);
-        allocator.free(zig_run_result.stderr);
+        self.allocator.free(zig_run_result.stdout);
+        self.allocator.free(zig_run_result.stderr);
     }
 
     switch (zig_run_result.term) {
         .Exited => |exit_code| {
             if (exit_code == 0) {
-                for (self.packages.items) |old_pkg| {
-                    allocator.free(old_pkg.name);
-                }
-
-                self.packages.shrinkAndFree(allocator, 0);
+                self.packages.deinit();
+                self.packages = std.StringHashMap(FixedPath).init(self.allocator);
                 var line_it = std.mem.split(u8, zig_run_result.stdout, "\n");
                 while (line_it.next()) |line| {
                     if (std.mem.indexOfScalar(u8, line, '\x00')) |zero_byte_idx| {
                         const name = line[0..zero_byte_idx];
                         const rel_path = line[zero_byte_idx + 1 ..];
 
-                        const pkg_abs_path = try std.fs.path.resolve(allocator, &[_][]const u8{ self.path.parent().?.slice(), rel_path });
-                        defer allocator.free(pkg_abs_path);
+                        const pkg_abs_path = try std.fs.path.resolve(self.allocator, &[_][]const u8{ self.path.parent().?.slice(), rel_path });
+                        defer self.allocator.free(pkg_abs_path);
 
-                        const duped_name = try allocator.dupe(u8, name);
-                        errdefer allocator.free(duped_name);
-
-                        (try self.packages.addOne(allocator)).* = .{
-                            .name = duped_name,
-                            .path = FixedPath.fromFullpath(pkg_abs_path),
-                        };
+                        try self.packages.put(name, FixedPath.fromFullpath(pkg_abs_path));
                     }
                 }
             } else {
@@ -138,7 +122,7 @@ pub fn extractPackages(allocator: std.mem.Allocator, path: FixedPath, zigenv: Zi
 
     // TODO: Do this in a separate thread?
     // It can take quite long.
-    if (build_file.loadPackages(allocator, zigenv)) {
+    if (build_file.loadPackages(zigenv)) {
         logger.info("loadPackages: {s} => ok", .{build_file.path.slice()});
     } else |err| {
         logger.debug("loadPackages: {s} => {}", .{ build_file.path.slice(), err });

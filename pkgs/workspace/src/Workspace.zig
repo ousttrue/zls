@@ -96,9 +96,10 @@ pub fn resolveImportPath(
         return self.zigenv.builtin_path;
     } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
         // std.build.Pkg
-        for (self.build_file.packages.items) |pkg| {
-            if (std.mem.eql(u8, import_str, pkg.name)) {
-                return pkg.path;
+        var it = self.build_file.packages.iterator();
+        while(it.next())|entry|{
+            if (std.mem.eql(u8, import_str, entry.key_ptr.*)) {
+                return entry.value_ptr.*;
             }
         }
         return error.PkgNotFound;
