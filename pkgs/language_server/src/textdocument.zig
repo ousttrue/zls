@@ -110,7 +110,7 @@ pub fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Docu
 }
 
 fn getRange(doc: *Document, token: AstToken, encoding: Line.Encoding) !lsp.Range {
-    const loc = token.getRange();
+    const loc = token.getLoc();
     var start_loc = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, encoding);
     var end_loc = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, encoding);
     var range = lsp.Range{

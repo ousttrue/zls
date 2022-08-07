@@ -81,7 +81,7 @@ pub const ServerCapabilities = struct {
     } = null,
     declarationProvider: bool,
     definitionProvider: bool,
-    typeDefinitionProvider: bool,
+    typeDefinitionProvider: bool = false,
     implementationProvider: bool,
     referencesProvider: bool,
     documentSymbolProvider: bool,

@@ -54,7 +54,7 @@ pub fn getHover(
                 try w.print("{s}", .{text});
                 return Hover{
                     .text = text_buffer.items,
-                    .loc = decl.token.getRange(),
+                    .loc = decl.token.getLoc(),
                 };
             }
 
@@ -101,10 +101,11 @@ pub fn getGoto(
     workspace: *Workspace,
     doc: *Document,
     token: AstToken,
-    resolve_alias: bool,
 ) !?PathPosition {
+    _ = arena;
     switch (token.getTag()) {
         .string_literal => {
+            // goto import file
             const text = token.getText();
             if (text.len > 2) {
                 const path = try workspace.resolveImportPath(doc, text[1 .. text.len - 1]);
@@ -114,20 +115,24 @@ pub fn getGoto(
             }
         },
         .identifier => {
-            // continue;
+            if (Declaration.fromToken(doc.ast_context, token)) |decl| {
+                return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
+            } else {
+                return null;
+            }
         },
         else => {
             return null;
         },
     }
 
-    var lookup = SymbolLookup.init(arena.allocator());
-    defer lookup.deinit();
-    const decl = lookup.lookupIdentifier(arena, workspace, doc, token) orelse {
-        return null;
-    };
+    // var lookup = SymbolLookup.init(arena.allocator());
+    // defer lookup.deinit();
+    // const decl = lookup.lookupIdentifier(arena, workspace, doc, token) orelse {
+    //     return null;
+    // };
 
-    return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
+    // return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
 }
 
 pub fn getRenferences(

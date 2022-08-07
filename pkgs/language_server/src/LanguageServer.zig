@@ -63,7 +63,7 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     // },
     .declarationProvider = false,
     .definitionProvider = true,
-    .typeDefinitionProvider = true,
+    // .typeDefinitionProvider = true,
     .implementationProvider = false,
     .referencesProvider = true,
     .documentSymbolProvider = true,
@@ -382,7 +382,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
                 const token_idx = fn_proto.ast.fn_token;
                 const token = AstToken.init(&doc.ast_context.tree, token_idx);
                 const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token, true, self.config)) |refs| refs.len else 0;
-                const loc = token.getRange();
+                const loc = token.getLoc();
                 const start = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, self.encoding);
                 const end = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, self.encoding);
                 const text = try std.fmt.allocPrint(allocator, "references {}", .{n});
@@ -492,46 +492,8 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, workspace, doc, token, true)) |location| {
+    if (try textdocument_position.getGoto(arena, workspace, doc, token)) |location| {
         const goto_doc = workspace.getOrLoadDocument(location.path) orelse return error.DocumentNotFound;
-        const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
-        const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
-
-        const uri = try URI.fromPath(arena.allocator(), location.path.slice());
-        return lsp.Response{
-            .id = id,
-            .result = .{
-                .Location = .{
-                    .uri = uri,
-                    .range = .{
-                        .start = goto_pos,
-                        .end = goto_pos,
-                    },
-                },
-            },
-        };
-    } else {
-        return lsp.Response.createNull(id);
-    }
-}
-
-/// # language feature
-/// ## document position request
-/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_typeDefinition
-pub fn @"textDocument/typeDefinition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
-    const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
-    logger.debug("[definition]{s} {}", .{ (try FixedPath.fromUri(params.textDocument.uri)).slice(), params.position });
-    const doc = workspace.getDocument(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
-    const position = params.position;
-    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
-    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
-        return lsp.Response.createNull(id);
-    };
-
-    if (try textdocument_position.getGoto(arena, workspace, doc, token, true)) |location| {
-        const goto_doc = workspace.getDocument(location.path) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 

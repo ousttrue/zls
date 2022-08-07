@@ -194,7 +194,6 @@ pub fn main() anyerror!void {
     dispatcher.registerRequest(&language_server, "textDocument/hover");
     dispatcher.registerRequest(&language_server, "textDocument/formatting");
     dispatcher.registerRequest(&language_server, "textDocument/definition");
-    dispatcher.registerRequest(&language_server, "textDocument/typeDefinition");
     dispatcher.registerNotify(&language_server, "$/cancelRequest");
     dispatcher.registerRequest(&language_server, "textDocument/completion");
     dispatcher.registerRequest(&language_server, "textDocument/rename");

@@ -68,7 +68,7 @@ pub fn getStart(self: Self) u32 {
     return token_start[self.index];
 }
 
-pub fn getRange(self: Self) std.zig.Token.Loc {
+pub fn getLoc(self: Self) std.zig.Token.Loc {
     const start = self.getStart();
     const text = self.getText();
     return .{ .start = start, .end = start + text.len };
@@ -101,7 +101,7 @@ test {
     try std.testing.expect(token.index == 0);
     try std.testing.expectEqualSlices(u8, token.getText(), "pub");
     try std.testing.expectEqual(token.getTag(), .keyword_pub);
-    try std.testing.expectEqual(token.getRange(), .{ .start = 0, .end = 3 });
+    try std.testing.expectEqual(token.getLoc(), .{ .start = 0, .end = 3 });
 
     try std.testing.expect(fromBytePosition(&tree, 3) == null);
 

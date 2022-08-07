@@ -124,7 +124,7 @@ pub fn lookupSymbolGlobalTokenIndex(
     handle: *Document,
     token: AstToken,
 ) ?DeclWithHandle {
-    const loc = token.getRange();
+    const loc = token.getLoc();
     const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(loc.start);
 
     var curr = innermost_scope_idx;
