@@ -150,3 +150,29 @@ pub fn readContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         0,
     );
 }
+
+pub const FileIterator = struct {
+    base: Self,
+    dir: std.fs.IterableDir,
+    it: std.fs.IterableDir.Iterator = undefined,
+    pub fn deinit(self: *@This()) void {
+        self.dir.close();
+    }
+
+    pub fn next(self: *@This()) !?std.fs.IterableDir.Entry {
+        if (try self.it.next()) |entry| {
+            return entry;
+        } else {
+            return null;
+        }
+    }
+};
+
+pub fn iterateChildren(self: Self) !FileIterator {
+    var it = FileIterator{
+        .base = self,
+        .dir = try std.fs.openIterableDirAbsolute(self.slice(), .{}),
+    };
+    it.it = it.dir.iterate();
+    return it;
+}

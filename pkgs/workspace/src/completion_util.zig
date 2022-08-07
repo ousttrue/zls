@@ -12,6 +12,7 @@ const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
 const ast = astutil.ast;
 const AstToken = astutil.AstToken;
+const AstNode = astutil.AstNode;
 const Ast = std.zig.Ast;
 const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.Completion);
@@ -767,6 +768,68 @@ fn completeFieldAccess(
 //     return completions;
 // }
 
+fn completeImport(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    doc: *Document,
+    token: AstToken,
+) ![]lsp.CompletionItem {
+    var items = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
+
+    _ = doc;
+    _ = token;
+
+    try items.append(.{
+        .label = "std",
+        .kind = .Text,
+        .insertText = "std",
+    });
+    try items.append(.{
+        .label = "builtin",
+        .kind = .Text,
+        .insertText = "builtin",
+    });
+
+    for (workspace.build_file.packages.items) |pkg| {
+        try items.append(.{
+            .label = pkg.name,
+            .kind = .Text,
+            // .textEdit=,
+            // .filterText=,
+            .insertText = pkg.name,
+            // .insertTextFormat=,
+            // .detail=,
+            // .documentation=,
+        });
+    }
+
+    const dir = doc.path.parent().?;
+    var it = try dir.iterateChildren();
+    defer it.deinit();
+    while (try it.next()) |entry| {
+        switch (entry.kind) {
+            .File => {
+                if (std.mem.endsWith(u8, entry.name, ".zig")) {
+                    const copy = try std.fmt.allocPrint(arena.allocator(), "./{s}", .{entry.name});
+                    try items.append(.{
+                        .label = copy,
+                        .kind = .Text,
+                        // .textEdit=,
+                        // .filterText=,
+                        .insertText = copy,
+                        // .insertTextFormat=,
+                        // .detail=,
+                        // .documentation=,
+                    });
+                }
+            },
+            else => {},
+        }
+    }
+
+    return items.toOwnedSlice();
+}
+
 pub fn process(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
@@ -807,7 +870,16 @@ pub fn process(
                 // }
                 return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
             },
+            .string_literal => {
+                const prev = token.getPrev(); // lparen
+                const prev_prev = prev.getPrev(); //
+                if (std.mem.eql(u8, prev_prev.getText(), "@import")) {
+                    return try completeImport(arena, workspace, doc, token);
+                }
+                return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
+            },
             else => {
+                // const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
                 return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
             },
         }

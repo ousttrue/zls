@@ -184,7 +184,7 @@ const SymbolTree = struct {
             .var_decl => |var_decl| {
                 const type_var = VarType.fromVarDecl(node.context, var_decl);
                 const text = try type_var.allocPrint(arena.allocator());
-                const token = node.getMainToken().next();
+                const token = node.getMainToken().getNext();
                 const range = try getRange(doc, token, encoding);
                 switch (type_var.kind) {
                     .import => |import| {

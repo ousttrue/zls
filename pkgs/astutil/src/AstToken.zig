@@ -42,11 +42,11 @@ pub fn fromBytePosition(tree: *const Ast, byte_position: usize) ?Self {
         null;
 }
 
-pub fn next(self: Self) Self {
+pub fn getNext(self: Self) Self {
     return init(self.tree, self.index + 1);
 }
 
-pub fn prev(self: Self) Self {
+pub fn getPrev(self: Self) Self {
     return init(self.tree, self.index - 1);
 }
 

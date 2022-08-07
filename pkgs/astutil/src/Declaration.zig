@@ -32,7 +32,7 @@ pub fn findFromBlockNode(scope: AstNode, symbol: []const u8) ?Self {
                 var buffer2: [2]u32 = undefined;
                 switch (statement_node.getChildren(&buffer2)) {
                     .var_decl => |full| {
-                        const token = statement_node.getMainToken().next();
+                        const token = statement_node.getMainToken().getNext();
                         if (std.mem.eql(u8, token.getText(), symbol)) {
                             return Self{
                                 .context = scope.context,
@@ -126,7 +126,7 @@ pub fn findFromContainerNode(scope: AstNode, symbol: []const u8) ?Self {
                 var buf2: [2]u32 = undefined;
                 switch (member_node.getChildren(&buf2)) {
                     .var_decl => |full| {
-                        const token = member_node.getMainToken().next();
+                        const token = member_node.getMainToken().getNext();
                         if (std.mem.eql(u8, token.getText(), symbol)) {
                             return Self{
                                 .context = scope.context,
