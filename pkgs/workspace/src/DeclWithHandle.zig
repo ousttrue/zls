@@ -3,7 +3,7 @@ const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
 const Document = @import("./Document.zig");
-const UriBytePosition = @import("./UriBytePosition.zig");
+const PathPosition = astutil.PathPosition;
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
 const Declaration = Scope.Declaration;
@@ -170,7 +170,7 @@ pub fn gotoDefinitionSymbol(
     workspace: *Workspace,
     arena: *std.heap.ArenaAllocator,
     resolve_alias: bool,
-) ?UriBytePosition {
+) ?PathPosition {
     var handle = self.handle;
 
     const byte_position = switch (self.decl.*) {
@@ -191,7 +191,7 @@ pub fn gotoDefinitionSymbol(
         else => self.bytePosition(),
     };
 
-    return UriBytePosition{
+    return PathPosition{
         .path = handle.path,
         .loc = .{ .start = byte_position, .end = byte_position },
     };
@@ -201,9 +201,9 @@ pub fn renameSymbol(
     self: Self,
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
-) ![]UriBytePosition {
+) ![]PathPosition {
     std.debug.assert(self.decl.* != .label_decl);
-    var locations = std.ArrayList(UriBytePosition).init(arena.allocator());
+    var locations = std.ArrayList(PathPosition).init(arena.allocator());
     try self.symbolReferences(arena, workspace, true, &locations, true);
     return locations.items;
 }
@@ -211,14 +211,14 @@ pub fn renameSymbol(
 pub fn renameLabel(
     self: Self,
     arena: *std.heap.ArenaAllocator,
-) ![]UriBytePosition {
+) ![]PathPosition {
     std.debug.assert(self.decl.* == .label_decl);
-    var locations = std.ArrayList(UriBytePosition).init(arena.allocator());
+    var locations = std.ArrayList(PathPosition).init(arena.allocator());
     try self.labelReferences(true, &locations);
     return locations.items;
 }
 
-pub fn labelReferences(decl: Self, include_decl: bool, locations: *std.ArrayList(UriBytePosition)) !void {
+pub fn labelReferences(decl: Self, include_decl: bool, locations: *std.ArrayList(PathPosition)) !void {
     std.debug.assert(decl.decl.* == .label_decl);
     const handle = decl.handle;
     const tree = handle.ast_context.tree;
@@ -253,7 +253,7 @@ fn symbolReferencesInternal(
     workspace: *Workspace,
     doc: *Document,
     node: Ast.Node.Index,
-    locations: *std.ArrayList(UriBytePosition),
+    locations: *std.ArrayList(PathPosition),
 ) error{OutOfMemory}!void {
     const tree = doc.ast_context.tree;
     if (node > tree.nodes.len) return;
@@ -736,7 +736,7 @@ pub fn symbolReferences(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     include_decl: bool,
-    locations: *std.ArrayList(UriBytePosition),
+    locations: *std.ArrayList(PathPosition),
     skip_std_references: bool,
 ) !void {
     std.debug.assert(self.decl.* != .label_decl);

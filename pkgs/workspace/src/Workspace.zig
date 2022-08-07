@@ -10,7 +10,7 @@ const FixedPath = astutil.FixedPath;
 const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
-const UriBytePosition = @import("./UriBytePosition.zig");
+const PathPosition = astutil.PathPosition;
 const logger = std.log.scoped(.Workspace);
 const Self = @This();
 

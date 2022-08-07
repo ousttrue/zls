@@ -4,7 +4,7 @@ const ws = @import("workspace");
 const Config = ws.Config;
 const Workspace = ws.Workspace;
 const Document = ws.Document;
-const UriBytePosition = ws.UriBytePosition;
+const PathPosition = astutil.PathPosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const SymbolLookup = ws.SymbolLookup;
 const FixedPath = ws.FixedPath;
@@ -82,7 +82,7 @@ pub fn getRename(
     workspace: *Workspace,
     doc: *Document,
     token: AstToken,
-) !?[]const UriBytePosition {
+) !?[]const PathPosition {
     if (token.getTag() != .identifier) {
         return null;
     }
@@ -102,13 +102,13 @@ pub fn getGoto(
     doc: *Document,
     token: AstToken,
     resolve_alias: bool,
-) !?UriBytePosition {
+) !?PathPosition {
     switch (token.getTag()) {
         .string_literal => {
             const text = token.getText();
             if (text.len > 2) {
                 const path = try workspace.resolveImportPath(doc, text[1 .. text.len - 1]);
-                return UriBytePosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
             } else {
                 return null;
             }
@@ -137,7 +137,7 @@ pub fn getRenferences(
     token: AstToken,
     include_decl: bool,
     config: *Config,
-) !?[]UriBytePosition {
+) !?[]PathPosition {
     if (token.getTag() != .identifier) {
         return null;
     }
@@ -148,7 +148,7 @@ pub fn getRenferences(
         return null;
     };
 
-    var locs = std.ArrayList(UriBytePosition).init(arena.allocator());
+    var locs = std.ArrayList(PathPosition).init(arena.allocator());
     try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
     return locs.items;
 }

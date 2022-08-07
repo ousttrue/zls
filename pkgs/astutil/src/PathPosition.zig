@@ -1,6 +1,5 @@
 const std = @import("std");
-const astutil = @import("astutil");
-const FixedPath = astutil.FixedPath;
+const FixedPath = @import("./FixedPath.zig");
 const Self = @This();
 
 path: FixedPath,

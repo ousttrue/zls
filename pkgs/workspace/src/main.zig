@@ -3,7 +3,6 @@ const astutil = @import("astutil");
 pub const Workspace = @import("./Workspace.zig");
 pub const Document = @import("./Document.zig");
 pub const Line = @import("./Line.zig");
-pub const UriBytePosition = @import("./UriBytePosition.zig");
 pub const Config = @import("./Config.zig");
 pub const ZigEnv = @import("./ZigEnv.zig");
 pub const Builtin = @import("./Builtin.zig");

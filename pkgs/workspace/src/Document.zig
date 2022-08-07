@@ -6,7 +6,7 @@ const Line = @import("./Line.zig");
 const ast = astutil.ast;
 const Utf8Buffer = @import("./Utf8Buffer.zig");
 const AstContext = astutil.AstContext;
-const UriBytePosition = @import("./UriBytePosition.zig");
+const PathPosition = astutil.PathPosition;
 const FixedPath = astutil.FixedPath;
 const DocumentScope = @import("./DocumentScope.zig");
 const logger = std.log.scoped(.Document);
@@ -67,9 +67,9 @@ pub fn update(self: *Self, text: []const u8) !void {
 //     }
 // }
 
-pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) UriBytePosition {
+pub fn tokenReference(self: Self, token_idx: Ast.TokenIndex) PathPosition {
     const token = self.ast_context.tokens[token_idx];
-    return UriBytePosition{
+    return PathPosition{
         .path = self.path,
         .loc = token.loc,
     };
