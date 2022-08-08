@@ -5,18 +5,14 @@ const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
 const Primitive = @import("./Primitive.zig");
+const ImportSolver = @import("./ImportSolver.zig");
 const logger = std.log.scoped(.VarType);
-
-pub const ImportType = union(enum) {
-    Pkg: []const u8,
-    File: []const u8,
-};
 
 const Self = @This();
 
 node: AstNode,
 kind: union(enum) {
-    import: ImportType,
+    import: ImportSolver.ImportType,
     this,
     builtin,
     call,
@@ -45,7 +41,7 @@ pub fn init(node: AstNode) Self {
                         .node = node,
                         .kind = .{
                             .import = .{
-                                .File = text,
+                                .file = text,
                             },
                         },
                     };
@@ -54,7 +50,7 @@ pub fn init(node: AstNode) Self {
                         .node = node,
                         .kind = .{
                             .import = .{
-                                .Pkg = text,
+                                .pkg = text,
                             },
                         },
                     };
@@ -230,10 +226,10 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         },
         .import => |import| {
             switch (import) {
-                .Pkg => |pkg| {
+                .pkg => |pkg| {
                     try w.print("@import pkg {s}", .{pkg});
                 },
-                .File => |file| {
+                .file => |file| {
                     try w.print("@import file {s}", .{file});
                 },
             }

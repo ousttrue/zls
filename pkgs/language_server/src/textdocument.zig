@@ -192,8 +192,8 @@ const SymbolTree = struct {
                         try self.imports.append(lsp.DocumentSymbol{
                             .name = token.getText(),
                             .kind = switch (import) {
-                                .Pkg => .Package,
-                                .File => .File,
+                                .pkg => .Package,
+                                .file => .File,
                             },
                             .range = range,
                             .selectionRange = range,
