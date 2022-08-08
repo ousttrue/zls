@@ -6,11 +6,6 @@ const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
 const Primitive = @import("./Primitive.zig");
 
-pub const ContainerType = enum {
-    Struct,
-    Enum,
-};
-
 pub const ImportType = union(enum) {
     Pkg: []const u8,
     File: []const u8,
@@ -30,7 +25,8 @@ kind: union(enum) {
     field_access,
     error_union,
     enum_literal,
-    container: ContainerType,
+    container,
+    enum_type,
     primitive: Primitive,
     unknown,
 } = .unknown,
@@ -104,12 +100,12 @@ pub fn init(node: AstNode) Self {
             if (std.mem.eql(u8, token.getText(), "enum")) {
                 return Self{
                     .node = node,
-                    .kind = .{ .container = .Enum },
+                    .kind = .enum_type,
                 };
             } else {
                 return Self{
                     .node = node,
-                    .kind = .{ .container = .Struct },
+                    .kind = .container,
                 };
             }
         },

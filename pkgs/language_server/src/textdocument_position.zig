@@ -121,18 +121,81 @@ pub fn getGoto(
             }
         },
         .identifier => {
-            switch (node.getTag()) {
-                .identifier => {
-                    if (Declaration.findFromBlock(node)) |decl| {
-                        return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
-                    } else {
-                        return error.DeclNotFound;
-                    }
+            var buf: [2]u32 = undefined;
+            switch (node.getChildren(&buf)) {
+                .var_decl => |var_decl| {
+                    // to rhs
+                    const init_node = AstNode.init(node.context, var_decl.ast.init_node);
+                    // TODO: GetType
+                    return PathPosition{ .path = doc.path, .loc = init_node.getMainToken().getLoc() };
+                },
+                .fn_proto => {
+                    return null;
                 },
                 else => {
-                    const var_type = VarType.init(node);
-                    _ = var_type;
-                    return null;
+                    switch (node.getTag()) {
+                        .identifier => {
+                            if (Declaration.findFromBlock(node)) |decl| {
+                                // local variable
+                                return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
+                            } else if (Declaration.findFromContainer(node)) |decl| {
+                                // container variable
+                                return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
+                            } else {
+                                return error.DeclNotFound;
+                            }
+                        },
+                        .field_access => {
+                            var data = node.getData();
+                            var lhs = AstNode.init(node.context, data.lhs);
+                            var var_type = VarType.init(lhs);
+                            var rhs = AstToken.init(&node.context.tree, data.rhs);
+                            switch (var_type.kind) {
+                                .container => {
+                                    var buf2: [2]u32 = undefined;
+                                    if (var_type.node.getMember(rhs.getText(), &buf2)) |member| {
+                                        switch (member) {
+                                            .field => |field| {
+                                                const dst_token = AstToken.init(&node.context.tree, field.ast.name_token);
+                                                return PathPosition{ .path = doc.path, .loc = dst_token.getLoc() };
+                                            },
+                                            .var_decl => |var_decl| {
+                                                const dst_token = AstToken.init(&node.context.tree, var_decl.ast.mut_token).getNext();
+                                                return PathPosition{ .path = doc.path, .loc = dst_token.getLoc() };
+                                            },
+                                            .fn_decl => |fn_decl| {
+                                                const fn_proto_node = AstNode.init(node.context, fn_decl.getData().lhs);
+                                                var buf3: [2]u32 = undefined;
+                                                if (fn_proto_node.getFnProto(&buf3)) |fn_proto| {
+                                                    if (fn_proto.name_token) |name_token| {
+                                                        const dst_token = AstToken.init(&node.context.tree, name_token);
+                                                        return PathPosition{ .path = doc.path, .loc = dst_token.getLoc() };
+                                                    } else {
+                                                        return error.NoNameToken;
+                                                    }
+                                                } else {
+                                                    return error.NoFnProto;
+                                                }
+                                            },
+                                        }
+                                    } else {
+                                        logger.debug("{s}.{s}", .{ var_type.node.getMainToken().getPrev().getPrev().getText(), rhs.getText() });
+                                        return error.NoField;
+                                    }
+                                },
+                                else => {
+                                    return error.NotContainer;
+                                },
+                            }
+                        },
+                        .fn_decl => {
+                            return null;
+                        },
+                        else => {
+                            logger.debug("unknown node tag: {s}", .{@tagName(node.getTag())});
+                            return null;
+                        },
+                    }
                 },
             }
         },

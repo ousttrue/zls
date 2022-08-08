@@ -3,6 +3,7 @@ const Ast = std.zig.Ast;
 const AstContext = @import("./AstContext.zig");
 const AstToken = @import("./AstToken.zig");
 const AstNodeIterator = @import("./AstNodeIterator.zig");
+const logger = std.log.scoped(.AstNode);
 const Self = @This();
 
 context: *const AstContext,
@@ -77,6 +78,46 @@ pub fn getFnProto(self: Self, buffer: []u32) ?Ast.full.FnProto {
         .fn_proto => |fn_proto| fn_proto,
         else => null,
     };
+}
+
+pub const Member = union(enum) {
+    field: Ast.full.ContainerField,
+    fn_decl: Self,
+    var_decl: Ast.full.VarDecl,
+};
+
+pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
+    var buf: [2]u32 = undefined;
+    switch (self.getChildren(&buf)) {
+        .container_decl => |container_decl| {
+            for (container_decl.ast.members) |member| {
+                const child_node = init(self.context, member);
+                switch (child_node.getChildren(buffer)) {
+                    .container_field => |container_field| {
+                        const token = AstToken.init(&self.context.tree, container_field.ast.name_token);
+                        logger.debug("{s} <=> {s}", .{ token.getText(), name });
+                        if (std.mem.eql(u8, token.getText(), name)) {
+                            return Member{ .field = container_field };
+                        }
+                    },
+                    .var_decl => |var_decl| {
+                        return Member{ .var_decl = var_decl };
+                    },
+                    else => {
+                        if (child_node.getTag() == .fn_decl) {
+                            return Member{ .fn_decl = child_node };
+                        } else {
+                            logger.err("not field and fn: {s}", .{@tagName(child_node.getTag())});
+                        }
+                    },
+                }
+            }
+        },
+        else => {
+            logger.err("not container", .{});
+        },
+    }
+    return null;
 }
 
 pub fn getContainerDecl(self: Self, buffer: []u32) ?Ast.full.ContainerDecl {
