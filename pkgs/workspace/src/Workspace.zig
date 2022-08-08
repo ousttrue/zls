@@ -11,6 +11,7 @@ const Document = @import("./Document.zig");
 const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const PathPosition = astutil.PathPosition;
+const ImportSolver = astutil.ImportSolver;
 const logger = std.log.scoped(.Workspace);
 const Self = @This();
 
@@ -84,34 +85,9 @@ pub fn getOrLoadDocument(self: *Self, path: FixedPath) ?*Document {
     return self.openDocument(path, contents) catch unreachable;
 }
 
-pub fn resolveImportPath(
-    self: Self,
-    doc: *Document,
-    import_str: []const u8,
-) !FixedPath {
-    if (std.mem.eql(u8, import_str, "std")) {
-        // special path
-        return self.zigenv.std_path;
-    } else if (std.mem.eql(u8, import_str, "builtin")) {
-        // special path
-        return self.zigenv.builtin_path;
-    } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
-        // std.build.Pkg
-        var it = self.build_file.packages.iterator();
-        while(it.next())|entry|{
-            if (std.mem.eql(u8, import_str, entry.key_ptr.*)) {
-                return entry.value_ptr.*;
-            }
-        }
-        return error.PkgNotFound;
-    } else {
-        // relative path
-        const resolved = doc.path.parent().?.child(import_str);
-        return resolved;
-    }
-}
-
-pub fn resolveImport(self: *Self, doc: *Document, import_str: []const u8) ?*Document {
-    const path = self.resolveImportPath(doc, import_str) catch return null;
-    return self.getOrLoadDocument(path);
+pub fn resolveImport(self: *Self, doc: *Document, text: []const u8) ?*Document {
+    return if (self.build_file.import_solver.solve(doc.path, ImportSolver.ImportType.fromText(text))) |path|
+        self.getOrLoadDocument(path)
+    else
+        null;
 }

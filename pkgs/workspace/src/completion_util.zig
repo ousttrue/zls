@@ -14,6 +14,7 @@ const Line = astutil.Line;
 const ast = astutil.ast;
 const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
+const ImportSolver = astutil.ImportSolver;
 const Ast = std.zig.Ast;
 const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.Completion);
@@ -786,7 +787,7 @@ fn tokenToRange(doc: *Document, loc: std.zig.Token.Loc, encoding: Line.Encoding)
 
 fn completeImport(
     arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
+    import_solver: ImportSolver,
     doc: *Document,
     token: AstToken,
     encoding: Line.Encoding,
@@ -808,7 +809,7 @@ fn completeImport(
 
     {
         // pckages
-        var it = workspace.build_file.packages.keyIterator();
+        var it = import_solver.pkg_path_map.keyIterator();
         while (it.next()) |key| {
             const copy = try std.fmt.allocPrint(arena.allocator(), "{s}", .{key.*});
             // logger.debug("pkg: {s} => {s}", .{ token.getText(), copy });
@@ -906,7 +907,7 @@ pub fn process(
                 const prev = token.getPrev(); // lparen
                 const prev_prev = prev.getPrev(); //
                 if (std.mem.eql(u8, prev_prev.getText(), "@import")) {
-                    return try completeImport(arena, workspace, doc, token, encoding);
+                    return try completeImport(arena, workspace.build_file.import_solver, doc, token, encoding);
                 }
                 return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
             },

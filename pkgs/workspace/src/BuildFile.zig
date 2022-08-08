@@ -1,21 +1,28 @@
 const std = @import("std");
 const astutil = @import("astutil");
 const FixedPath = astutil.FixedPath;
+const ImportSolver = astutil.ImportSolver;
 const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
 const Self = @This();
 
 allocator: std.mem.Allocator,
 path: FixedPath,
-packages: std.StringHashMap(FixedPath),
+import_solver: ImportSolver,
 
 pub fn new(allocator: std.mem.Allocator, path: FixedPath, zigenv: ZigEnv) !*Self {
     var self = try allocator.create(Self);
     self.* = Self{
         .allocator = allocator,
         .path = path,
-        .packages = std.StringHashMap(FixedPath).init(allocator),
+        .import_solver = ImportSolver.init(allocator),
     };
+
+    try self.import_solver.push("std", zigenv.std_path);
+
+    // } else if (std.mem.eql(u8, import_str, "builtin")) {
+    //     // special path
+    //     return self.zigenv.builtin_path;
 
     // TODO: Do this in a separate thread?
     // It can take quite long.
@@ -29,11 +36,7 @@ pub fn new(allocator: std.mem.Allocator, path: FixedPath, zigenv: ZigEnv) !*Self
 }
 
 pub fn delete(self: *Self) void {
-    var it = self.packages.iterator();
-    while (it.next()) |entry| {
-        self.allocator.free(entry.key_ptr.*);
-    }
-    self.packages.deinit();
+    self.import_solver.deinit();
     self.allocator.destroy(self);
 }
 
@@ -60,8 +63,6 @@ fn loadPackages(self: *Self, zigenv: ZigEnv) !void {
 
     const base_dir = self.path.parent().?;
     for (project.packages) |pkg| {
-        const copy = try self.allocator.dupe(u8, pkg.name);
-        // logger.debug("{s}: {s}", .{ pkg.name, pkg.path });
-        try self.packages.put(copy, base_dir.child(pkg.path));
+        try self.import_solver.push(pkg.name, base_dir.child(pkg.path));
     }
 }

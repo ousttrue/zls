@@ -8,4 +8,5 @@ pub const FixedPath = @import("./FixedPath.zig");
 pub const PathPosition = @import("./PathPosition.zig");
 pub const Utf8Buffer = @import("./Utf8Buffer.zig");
 pub const Line = @import("./Line.zig");
+pub const ImportSolver = @import("./ImportSolver.zig");
 pub const ast = @import("./ast.zig");

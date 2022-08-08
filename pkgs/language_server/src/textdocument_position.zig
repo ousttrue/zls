@@ -12,6 +12,7 @@ const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
 const VarType = astutil.VarType;
+const ImportSolver = astutil.ImportSolver;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
@@ -102,7 +103,7 @@ pub fn getRename(
 
 pub fn getGoto(
     arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
+    import_solver: ImportSolver,
     doc: *Document,
     token: AstToken,
 ) !?PathPosition {
@@ -112,13 +113,21 @@ pub fn getGoto(
     switch (token.getTag()) {
         .string_literal => {
             // goto import file
-            const text = token.getText();
+            var text = token.getText();
             if (text.len > 2) {
-                const path = try workspace.resolveImportPath(doc, text[1 .. text.len - 1]);
-                return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
-            } else {
-                return null;
+                // unquote
+                text = text[1 .. text.len - 1];
+                if (std.mem.endsWith(u8, text, ".zig")) {
+                    if (import_solver.solve(doc.path, .{ .file = text })) |path| {
+                        return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                    }
+                } else {
+                    if (import_solver.solve(doc.path, .{ .pkg = text })) |path| {
+                        return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                    }
+                }
             }
+            return null;
         },
         .identifier => {
             var buf: [2]u32 = undefined;
