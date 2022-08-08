@@ -5,6 +5,7 @@ const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
 const Primitive = @import("./Primitive.zig");
+const logger = std.log.scoped(.VarType);
 
 pub const ImportType = union(enum) {
     Pkg: []const u8,
@@ -22,7 +23,6 @@ kind: union(enum) {
     array,
     ptr,
     optional,
-    field_access,
     error_union,
     enum_literal,
     container,
@@ -136,10 +136,16 @@ pub fn init(node: AstNode) Self {
                     };
                 },
                 .field_access => {
-                    return Self{
-                        .node = node,
-                        .kind = .field_access,
-                    };
+                    // resolve field_access
+                    var data = node.getData();
+                    var lhs = AstNode.init(node.context, data.lhs);
+                    var var_type = init(lhs);
+                    var rhs = AstToken.init(&node.context.tree, data.rhs);
+                    if (var_type.getMember(rhs.getText())) |member| {
+                        return init(member.getNode());
+                    } else {
+                        logger.err("fail to getMember", .{});
+                    }
                 },
                 .error_union => {
                     return Self{
@@ -148,7 +154,7 @@ pub fn init(node: AstNode) Self {
                     };
                 },
                 else => {
-                    // try w.print("node [{s}]: {s}", .{ node.getMainToken().getText(), @tagName(node.getTag()) });
+                    logger.err("unknown node tag: {s}", .{@tagName(node.getTag())});
                 },
             }
         },
@@ -188,6 +194,19 @@ pub fn fromContainerField(context: *const AstContext, field: Ast.full.ContainerF
         };
     } else {
         return init(node);
+    }
+}
+
+pub fn getMember(self: Self, name: []const u8) ?AstNode.Member {
+    switch (self.kind) {
+        .container => {
+            var buf: [2]u32 = undefined;
+            return self.node.getMember(name, &buf);
+        },
+        else => {
+            logger.err("self.kind: {s}", .{@tagName(self.kind)});
+            return null;
+        },
     }
 }
 

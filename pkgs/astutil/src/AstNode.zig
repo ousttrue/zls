@@ -80,10 +80,21 @@ pub fn getFnProto(self: Self, buffer: []u32) ?Ast.full.FnProto {
     };
 }
 
-pub const Member = union(enum) {
-    field: Ast.full.ContainerField,
-    fn_decl: Self,
-    var_decl: Ast.full.VarDecl,
+pub const Member = struct {
+    container: Self,
+    data: union(enum) {
+        field: Ast.full.ContainerField,
+        fn_decl: Ast.Node.Index,
+        var_decl: Ast.full.VarDecl,
+    },
+
+    pub fn getNode(self: @This()) Self {
+        return switch (self.data) {
+            .field => |field| init(self.container.context, field.ast.type_expr),
+            .fn_decl => |index| init(self.container.context, index),
+            .var_decl => |var_decl| init(self.container.context, var_decl.ast.init_node),
+        };
+    }
 };
 
 pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
@@ -97,15 +108,15 @@ pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
                         const token = AstToken.init(&self.context.tree, container_field.ast.name_token);
                         logger.debug("{s} <=> {s}", .{ token.getText(), name });
                         if (std.mem.eql(u8, token.getText(), name)) {
-                            return Member{ .field = container_field };
+                            return Member{ .container = self, .data = .{ .field = container_field } };
                         }
                     },
                     .var_decl => |var_decl| {
-                        return Member{ .var_decl = var_decl };
+                        return Member{ .container = self, .data = .{ .var_decl = var_decl } };
                     },
                     else => {
                         if (child_node.getTag() == .fn_decl) {
-                            return Member{ .fn_decl = child_node };
+                            return Member{ .container = self, .data = .{ .fn_decl = child_node.index } };
                         } else {
                             logger.err("not field and fn: {s}", .{@tagName(child_node.getTag())});
                         }
