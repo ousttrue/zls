@@ -1,5 +1,6 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
+const FixedPath = @import("./FixedPath.zig");
 const AstNodeIterator = @import("./AstNodeIterator.zig");
 const AstNode = @import("./AstNode.zig");
 const AstToken = @import("./AstToken.zig");
@@ -48,15 +49,17 @@ pub fn traverse(context: *Self, parent_idx: Ast.Node.Index, idx: Ast.Node.Index)
 pub const AstPath = struct {};
 
 allocator: std.mem.Allocator,
+path: FixedPath,
 tree: std.zig.Ast,
 nodes_parent: []u32,
 tokens: []std.zig.Token,
 tokens_node: []u32,
 
-pub fn new(allocator: std.mem.Allocator, text: [:0]const u8) !*Self {
+pub fn new(allocator: std.mem.Allocator, path: FixedPath, text: [:0]const u8) !*Self {
     const tree = try std.zig.parse(allocator, text);
     var self = allocator.create(Self) catch unreachable;
     self.* = Self{
+        .path = path,
         .allocator = allocator,
         .tree = tree,
         .nodes_parent = allocator.alloc(u32, tree.nodes.len) catch unreachable,
