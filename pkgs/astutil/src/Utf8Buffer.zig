@@ -1,6 +1,5 @@
 const std = @import("std");
 const Line = @import("./Line.zig");
-const ZigEnv = @import("./ZigEnv.zig");
 const Self = @This();
 
 allocator: std.mem.Allocator,

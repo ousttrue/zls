@@ -782,12 +782,10 @@ fn completeImport(
     try items.append(.{
         .label = "std",
         .kind = .Text,
-        .insertText = "std",
     });
     try items.append(.{
         .label = "builtin",
         .kind = .Text,
-        .insertText = "builtin",
     });
 
     {
@@ -798,7 +796,7 @@ fn completeImport(
                 .kind = .Text,
                 // .textEdit=,
                 // .filterText=,
-                .insertText = key.*,
+                // .insertText = key.*,
                 // .insertTextFormat=,
                 // .detail=,
                 // .documentation=,
@@ -820,7 +818,7 @@ fn completeImport(
                             .kind = .Text,
                             // .textEdit=,
                             // .filterText=,
-                            .insertText = copy,
+                            // .insertText = copy,
                             // .insertTextFormat=,
                             // .detail=,
                             // .documentation=,
