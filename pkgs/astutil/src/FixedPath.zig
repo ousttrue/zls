@@ -1,23 +1,22 @@
 const std = @import("std");
+const FixedStringBuffer = @import("./FixedStringBuffer.zig");
 const logger = std.log.scoped(.FixedPath);
 const Self = @This();
 
-_buffer: [std.fs.MAX_PATH_BYTES]u8 = undefined,
-len: usize = 0,
+buffer: FixedStringBuffer = .{},
 
 pub fn fromFullpath(fullpath: []const u8) Self {
     var self = Self{};
-    std.mem.copy(u8, &self._buffer, fullpath);
+    self.buffer.assign(fullpath);
     var i: usize = 0;
     while (i < fullpath.len) {
         var c = fullpath[i];
-        var len = std.unicode.utf8ByteSequenceLength(c) catch unreachable;
+        var utf8len = std.unicode.utf8ByteSequenceLength(c) catch unreachable;
         if (c == '\\') {
-            self._buffer[i] = '/';
+            self.buffer._buffer[i] = '/';
         }
-        i += len;
+        i += utf8len;
     }
-    self.len = fullpath.len;
     return self;
 }
 
@@ -60,23 +59,27 @@ pub fn parseUri(self: *Self, str: []const u8) !void {
             if (j + 2 >= path.len) return error.UriBadEscape;
             const upper = try parseHex(path[j + 1]);
             const lower = try parseHex(path[j + 2]);
-            self._buffer[i] = (upper << 4) + lower;
+            self.buffer._buffer[i] = (upper << 4) + lower;
             j += 3;
         } else {
-            self._buffer[i] = if (path[j] == '/') std.fs.path.sep else path[j];
+            self.buffer._buffer[i] = if (path[j] == '/') std.fs.path.sep else path[j];
             j += 1;
         }
     }
 
     // Remove trailing separator
-    if (i > 0 and self._buffer[i - 1] == std.fs.path.sep) {
+    if (i > 0 and self.buffer._buffer[i - 1] == std.fs.path.sep) {
         i -= 1;
     }
-    self.len = i;
+    self.buffer.len = i;
+}
+
+pub fn len(self: Self) usize {
+    return self.buffer.len;
 }
 
 pub fn slice(self: Self) []const u8 {
-    return self._buffer[0..self.len];
+    return self.buffer.slice();
 }
 
 pub fn parent(self: Self) ?Self {
@@ -89,18 +92,17 @@ pub fn parent(self: Self) ?Self {
 // try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path,  name});
 pub fn child(self: Self, name: []const u8) Self {
     var copy = fromFullpath(self.slice());
-    copy._buffer[copy.len] = '/';
-    copy.len += 1;
+    copy.buffer.pushChar('/');
 
     if (std.mem.startsWith(u8, name, "./")) {
-        std.mem.copy(u8, copy._buffer[copy.len..], name[2..]);
-        copy.len += (name.len - 2);
+        std.mem.copy(u8, copy.buffer._buffer[copy.len()..], name[2..]);
+        copy.buffer.len += (name.len - 2);
     } else if (name[0] == '/') {
-        std.mem.copy(u8, copy._buffer[copy.len..], name[1..]);
-        copy.len += (name.len - 1);
+        std.mem.copy(u8, copy.buffer._buffer[copy.len()..], name[1..]);
+        copy.buffer.len += (name.len - 1);
     } else {
-        std.mem.copy(u8, copy._buffer[copy.len..], name);
-        copy.len += name.len;
+        std.mem.copy(u8, copy.buffer._buffer[copy.len()..], name);
+        copy.buffer.len += name.len;
     }
 
     return copy;
