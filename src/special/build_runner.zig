@@ -1,3 +1,5 @@
+///! This is a modified build runner to extract information out of build.zig
+///! Modified from the std.special.build_runner
 const root = @import("@build@");
 const std = @import("std");
 const fmt = std.fmt;
@@ -10,9 +12,21 @@ const InstallArtifactStep = std.build.InstallArtifactStep;
 const LibExeObjStep = std.build.LibExeObjStep;
 const ArrayList = std.ArrayList;
 
-///! This is a modified build runner to extract information out of build.zig
-///! Modified from the std.special.build_runner
+const NamePath = struct {
+    name: []const u8,
+    path: []const u8,
+};
 
+const Project = struct {
+    // LibExeObjStep
+    objects: []const NamePath,
+    // Pkg
+    packages: []const NamePath,
+};
+
+///
+/// path_to_zig/zig.exe run path_to_zls/zig-out/bin/build_runner.zig --pkg-begin @build@ path_to_project/build.zig --pkg-end -- arg1 arg2 arg3 arg4
+///
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -55,43 +69,80 @@ pub fn main() !void {
     builder.resolveInstallPrefix(null, Builder.DirList{});
     try runBuild(builder);
 
-    const stdout_stream = io.getStdOut().writer();
-
     // TODO: We currently add packages from every LibExeObj step that the install step depends on.
     //       Should we error out or keep one step or something similar?
     // We also flatten them, we should probably keep the nested structure.
+    var objects = std.ArrayList(NamePath).init(allocator);
+    defer objects.deinit();
+    var packages = std.ArrayList(NamePath).init(allocator);
+    defer packages.deinit();
     for (builder.top_level_steps.items) |tls| {
         for (tls.step.dependencies.items) |step| {
-            try processStep(stdout_stream, step);
+            try processStep(step, &objects, &packages);
         }
     }
+
+    // write json
+    try std.json.stringify(Project{
+        .objects = objects.items,
+        .packages = packages.items,
+    }, .{ .emit_null_optional_fields = false }, io.getStdOut().writer());
 }
 
-fn processStep(stdout_stream: anytype, step: *std.build.Step) anyerror!void {
+fn fileSourcePath(source: std.build.FileSource) ?[]const u8 {
+    return switch (source) {
+        .path => |path| path,
+        .generated => |generated| generated.path,
+    };
+}
+
+fn processStep(
+    step: *std.build.Step,
+    objects: *std.ArrayList(NamePath),
+    packages: *std.ArrayList(NamePath),
+) anyerror!void {
     if (step.cast(InstallArtifactStep)) |install_exe| {
+        const exe = install_exe.artifact;
+        if (exe.root_src) |root_src| {
+            if (fileSourcePath(root_src)) |path| {
+                try objects.append(.{
+                    .name = exe.name,
+                    .path = path,
+                });
+            }
+        }       
         for (install_exe.artifact.packages.items) |pkg| {
-            try processPackage(stdout_stream, pkg);
+            try processPackage(pkg, packages);
         }
     } else if (step.cast(LibExeObjStep)) |exe| {
+        if (exe.root_src) |root_src| {
+            if (fileSourcePath(root_src)) |path| {
+                try objects.append(.{
+                    .name = exe.name,
+                    .path = path,
+                });
+            }
+        }
         for (exe.packages.items) |pkg| {
-            try processPackage(stdout_stream, pkg);
+            try processPackage(pkg, packages);
         }
     } else {
         for (step.dependencies.items) |unknown_step| {
-            try processStep(stdout_stream, unknown_step);
+            try processStep(unknown_step, objects, packages);
         }
     }
 }
 
-fn processPackage(out_stream: anytype, pkg: Pkg) anyerror!void {
-    switch (pkg.source) {
-        .path => |path| try out_stream.print("{s}\x00{s}\n", .{ pkg.name, path }),
-        .generated => |generated| if (generated.path != null) try out_stream.print("{s}\x00{s}\n", .{ pkg.name, generated.path.? }),
+fn processPackage(pkg: Pkg, packages: *std.ArrayList(NamePath)) anyerror!void {
+    if (fileSourcePath(pkg.source)) |path| {
+        try packages.append(.{
+            .name = pkg.name,
+            .path = path,
+        });
     }
-
     if (pkg.dependencies) |dependencies| {
         for (dependencies) |dep| {
-            try processPackage(out_stream, dep);
+            try processPackage(dep, packages);
         }
     }
 }

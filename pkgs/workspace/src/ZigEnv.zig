@@ -102,7 +102,6 @@ fn getZigBuiltinAlloc(
 
 const Self = @This();
 
-allocator: std.mem.Allocator,
 exe: FixedPath,
 lib: FixedPath,
 std_path: FixedPath,
@@ -186,7 +185,6 @@ pub fn init(
     logger.info("Using build_cache_runner_path: {s}", .{build_runner_cache_path.slice()});
 
     return Self{
-        .allocator = allocator,
         .exe = zig_exe_path,
         .lib = zig_lib_path,
         .std_path = zig_lib_path.child("std/std.zig"),
@@ -217,4 +215,31 @@ pub fn spawnZigFmt(self: Self, allocator: std.mem.Allocator, src: []const u8) ![
             return error.ProcessError;
         },
     }
+}
+
+pub fn runBuildRunner(self: Self, allocator: std.mem.Allocator, build_file_path: FixedPath) ![]const u8 {
+    const directory_path = build_file_path.parent().?;
+    const zig_run_result = try self.exe.exec(allocator, &.{
+        "run",
+        self.build_runner_path.slice(),
+        "--cache-dir",
+        self.build_runner_cache_path.slice(),
+        "--pkg-begin",
+        "@build@",
+        build_file_path.slice(),
+        "--pkg-end",
+        "--",
+        self.exe.slice(),
+        directory_path.slice(),
+        self.cache_root.slice(),
+        self.global_cache_root.slice(),
+    });
+    defer allocator.free(zig_run_result.stderr);
+    return switch (zig_run_result.term) {
+        .Exited => |exit_code| if (exit_code == 0)
+            zig_run_result.stdout
+        else
+            return error.RunFailed,
+        else => return error.RunFailed,
+    };
 }

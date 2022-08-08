@@ -54,51 +54,34 @@ fn loadBuildAssociatedConfiguration(self: *Self, allocator: std.mem.Allocator) !
     }
 }
 
+const NamePath = struct {
+    name: []const u8,
+    path: []const u8,
+};
+
+const Project = struct {
+    // LibExeObjStep
+    objects: []const NamePath,
+    // Pkg
+    packages: []const NamePath,
+};
+
 pub fn loadPackages(self: *Self, zigenv: ZigEnv) !void {
-    const directory_path = self.path.parent().?;
-    const zig_run_result = try zigenv.exe.exec(self.allocator, &.{
-        "run",
-        zigenv.build_runner_path.slice(),
-        "--cache-dir",
-        zigenv.build_runner_cache_path.slice(),
-        "--pkg-begin",
-        "@build@",
-        self.path.slice(),
-        "--pkg-end",
-        "--",
-        zigenv.exe.slice(),
-        directory_path.slice(),
-        zigenv.cache_root.slice(),
-        zigenv.global_cache_root.slice(),
-    });
-    defer {
-        self.allocator.free(zig_run_result.stdout);
-        self.allocator.free(zig_run_result.stderr);
-    }
+    const zig_run_result = try zigenv.runBuildRunner(self.allocator, self.path);
+    defer self.allocator.free(zig_run_result);
+    self.packages.deinit();
+    self.packages = std.StringHashMap(FixedPath).init(self.allocator);
 
-    switch (zig_run_result.term) {
-        .Exited => |exit_code| {
-            if (exit_code == 0) {
-                self.packages.deinit();
-                self.packages = std.StringHashMap(FixedPath).init(self.allocator);
-                var line_it = std.mem.split(u8, zig_run_result.stdout, "\n");
-                while (line_it.next()) |line| {
-                    if (std.mem.indexOfScalar(u8, line, '\x00')) |zero_byte_idx| {
-                        const name = line[0..zero_byte_idx];
-                        const rel_path = line[zero_byte_idx + 1 ..];
+    var stream = std.json.TokenStream.init(zig_run_result);
+    const options = std.json.ParseOptions{ .allocator = self.allocator, .ignore_unknown_fields = true };
+    const project = try std.json.parse(Project, &stream, options);
+    defer std.json.parseFree(Project, project, options);
 
-                        const pkg_abs_path = try std.fs.path.resolve(self.allocator, &[_][]const u8{ self.path.parent().?.slice(), rel_path });
-                        defer self.allocator.free(pkg_abs_path);
-
-                        try self.packages.put(name, FixedPath.fromFullpath(pkg_abs_path));
-                    }
-                }
-            } else {
-                logger.debug("{s} => {s}", .{ self.path.slice(), zig_run_result.stderr });
-                return error.RunFailed;
-            }
-        },
-        else => return error.RunFailed,
+    const base_dir = self.path.parent().?;
+    for (project.packages) |pkg| {
+        const copy = try self.allocator.dupe(u8, pkg.name);
+        logger.debug("{s}: {s}", .{pkg.name, pkg.path});
+        try self.packages.put(copy, base_dir.child(pkg.path));
     }
 }
 
