@@ -26,12 +26,24 @@ pub fn new(
     root: FixedPath,
 ) !*Self {
     var self = try allocator.create(Self);
+
+    // build file is project_root/build.zig
+    var build_file = try BuildFile.new(allocator, root.child("build.zig"));
+
+    // TODO: Do this in a separate thread?
+    // It can take quite long.
+    if (build_file.loadPackages(zigenv)) {
+        logger.info("loadPackages: {s} => ok", .{build_file.path.slice()});
+    } else |err| {
+        logger.debug("loadPackages: {s} => {}", .{ build_file.path.slice(), err });
+    }
+
     self.* = Self{
         .allocator = allocator,
         .zigenv = zigenv,
         .root = root,
         .handles = std.StringHashMap(*Document).init(allocator),
-        .build_file = try BuildFile.extractPackages(self.allocator, root.child("build.zig"), zigenv),
+        .build_file = build_file,
     };
     return self;
 }
@@ -90,9 +102,6 @@ pub fn resolveImportPath(
         return self.zigenv.std_path;
     } else if (std.mem.eql(u8, import_str, "builtin")) {
         // special path
-        if (self.build_file.builtin_path) |builtin_path| {
-            return builtin_path;
-        }
         return self.zigenv.builtin_path;
     } else if (!std.mem.endsWith(u8, import_str, ".zig")) {
         // std.build.Pkg
