@@ -11,6 +11,7 @@ const FixedPath = ws.FixedPath;
 const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
+const VarType = astutil.VarType;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
@@ -49,25 +50,28 @@ pub fn getHover(
             }
         },
         .identifier => {
-            if (Declaration.fromToken(doc.ast_context, token)) |decl| {
-                const text = try decl.allocPrint(allocator);
-                try w.print("{s}", .{text});
-                return Hover{
-                    .text = text_buffer.items,
-                    .loc = decl.token.getLoc(),
-                };
+            switch (node.getTag()) {
+                .identifier => {
+                    if (Declaration.findFromBlock(node)) |decl| {
+                        const text = try decl.allocPrint(allocator);
+                        try w.print("local => {s}", .{text});
+                        return Hover{
+                            .text = text_buffer.items,
+                            .loc = decl.token.getLoc(),
+                        };
+                    } else {
+                        logger.debug("identifer: decl not found", .{});
+                    }
+                },
+                else => {
+                    const var_type = VarType.init(node);
+                    const text = try var_type.allocPrint(allocator);
+                    try w.print("var_type: {s}", .{text});
+                    return Hover{
+                        .text = text_buffer.items,
+                    };
+                },
             }
-
-            // var lookup = SymbolLookup.init(arena.allocator());
-            // defer lookup.deinit();
-            // if (lookup.lookupIdentifier(arena, workspace, doc, token)) |decl| {
-            //     const hover = try decl.hoverSymbol(arena, workspace, hover_kind);
-            //     return try std.fmt.allocPrint(
-            //         allocator,
-            //         "# {s}\n\n{s}\n\n## hover\n\n{?s}",
-            //         .{ name, context_info, hover },
-            //     );
-            // }
         },
         else => {},
     }
@@ -103,6 +107,8 @@ pub fn getGoto(
     token: AstToken,
 ) !?PathPosition {
     _ = arena;
+    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+
     switch (token.getTag()) {
         .string_literal => {
             // goto import file
@@ -115,24 +121,25 @@ pub fn getGoto(
             }
         },
         .identifier => {
-            if (Declaration.fromToken(doc.ast_context, token)) |decl| {
-                return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
-            } else {
-                return null;
+            switch (node.getTag()) {
+                .identifier => {
+                    if (Declaration.findFromBlock(node)) |decl| {
+                        return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
+                    } else {
+                        return error.DeclNotFound;
+                    }
+                },
+                else => {
+                    const var_type = VarType.init(node);
+                    _ = var_type;
+                    return null;
+                },
             }
         },
         else => {
             return null;
         },
     }
-
-    // var lookup = SymbolLookup.init(arena.allocator());
-    // defer lookup.deinit();
-    // const decl = lookup.lookupIdentifier(arena, workspace, doc, token) orelse {
-    //     return null;
-    // };
-
-    // return decl.gotoDefinitionSymbol(workspace, arena, resolve_alias);
 }
 
 pub fn getRenferences(

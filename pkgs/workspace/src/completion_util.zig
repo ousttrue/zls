@@ -811,7 +811,7 @@ fn completeImport(
         var it = workspace.build_file.packages.keyIterator();
         while (it.next()) |key| {
             const copy = try std.fmt.allocPrint(arena.allocator(), "{s}", .{key.*});
-            logger.debug("pkg: {s} => {s}", .{ token.getText(), copy });
+            // logger.debug("pkg: {s} => {s}", .{ token.getText(), copy });
             try items.append(.{
                 .label = copy,
                 .kind = .Text,
@@ -839,7 +839,7 @@ fn completeImport(
                 .File => {
                     if (std.mem.endsWith(u8, entry.name, ".zig")) {
                         const copy = try std.fmt.allocPrint(arena.allocator(), "{s}", .{entry.name});
-                        logger.debug("path: {s} => {s}", .{ token.getText(), copy });
+                        // logger.debug("path: {s} => {s}", .{ token.getText(), copy });
                         try items.append(.{
                             .label = copy,
                             .kind = .Text,

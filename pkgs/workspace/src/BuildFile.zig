@@ -61,7 +61,7 @@ fn loadPackages(self: *Self, zigenv: ZigEnv) !void {
     const base_dir = self.path.parent().?;
     for (project.packages) |pkg| {
         const copy = try self.allocator.dupe(u8, pkg.name);
-        logger.debug("{s}: {s}", .{ pkg.name, pkg.path });
+        // logger.debug("{s}: {s}", .{ pkg.name, pkg.path });
         try self.packages.put(copy, base_dir.child(pkg.path));
     }
 }

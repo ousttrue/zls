@@ -22,6 +22,7 @@ full: union(enum) {
     fn_decl: AstNode,
 },
 
+/// find local variable in from block scope
 pub fn findFromBlockNode(scope: AstNode, symbol: []const u8) ?Self {
     const tree = &scope.context.tree;
     var buffer: [2]u32 = undefined;
@@ -116,6 +117,7 @@ pub fn findFromBlockNode(scope: AstNode, symbol: []const u8) ?Self {
     return null;
 }
 
+/// find declaration from container scope
 pub fn findFromContainerNode(scope: AstNode, symbol: []const u8) ?Self {
     const tree = &scope.context.tree;
     var buffer: [2]u32 = undefined;
@@ -169,21 +171,13 @@ pub fn findFromContainerNode(scope: AstNode, symbol: []const u8) ?Self {
     return null;
 }
 
-pub fn fromToken(context: *const AstContext, token: AstToken) ?Self {
-    const symbol = token.getText();
-    const node = AstNode.init(context, context.tokens_node[token.index]);
-    // token がローカル変数であるか調べる
-    var it = node.parentIterator();
-    while (it.current) |current| : (it.next()) {
-        if (findFromBlockNode(current, symbol)) |local| {
-            return local;
-        }
-        if (current.getTag() == .fn_decl) {
-            break;
-        }
+pub fn findFromContainer(node: AstNode) ?Self {
+    if(node.getTag() != .identifier)
+    {
+        return null;        
     }
-    // token がConainer変数であるか調べる
-    it = node.parentIterator();
+    const symbol = node.getMainToken().getText();
+    var it = node.parentIterator();
     while (it.current) |current| : (it.next()) {
         if (findFromContainerNode(current, symbol)) |decl| {
             return decl;
@@ -197,7 +191,6 @@ pub fn findFromBlock(node: AstNode) ?Self {
         return null;
     }
     const symbol = node.getMainToken().getText();
-    // block スコープを遡ってローカル変数を探す
     var it = node.parentIterator();
     while (it.current) |current| : (it.next()) {
         if (findFromBlockNode(current, symbol)) |local| {
@@ -209,13 +202,6 @@ pub fn findFromBlock(node: AstNode) ?Self {
         var buf: [2]u32 = undefined;
         if (current.getChildren(&buf) == .container_decl) {
             break;
-        }
-    }
-    // container スコープを遡ってcontainer変数を探す
-    it = node.parentIterator();
-    while (it.current) |current| : (it.next()) {
-        if (findFromContainerNode(current, symbol)) |decl| {
-            return decl;
         }
     }
     return null;
