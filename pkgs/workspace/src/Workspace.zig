@@ -28,15 +28,7 @@ pub fn new(
     var self = try allocator.create(Self);
 
     // build file is project_root/build.zig
-    var build_file = try BuildFile.new(allocator, root.child("build.zig"));
-
-    // TODO: Do this in a separate thread?
-    // It can take quite long.
-    if (build_file.loadPackages(zigenv)) {
-        logger.info("loadPackages: {s} => ok", .{build_file.path.slice()});
-    } else |err| {
-        logger.debug("loadPackages: {s} => {}", .{ build_file.path.slice(), err });
-    }
+    var build_file = try BuildFile.new(allocator, root.child("build.zig"), zigenv);
 
     self.* = Self{
         .allocator = allocator,
