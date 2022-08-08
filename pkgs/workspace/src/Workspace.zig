@@ -12,6 +12,7 @@ const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const PathPosition = astutil.PathPosition;
 const ImportSolver = astutil.ImportSolver;
+const DocumentStore = astutil.DocumentStore;
 const logger = std.log.scoped(.Workspace);
 const Self = @This();
 
@@ -19,6 +20,7 @@ allocator: std.mem.Allocator,
 zigenv: ZigEnv,
 root: FixedPath,
 handles: std.StringHashMap(*Document),
+store: DocumentStore,
 build_file: *BuildFile,
 
 pub fn new(
@@ -36,12 +38,14 @@ pub fn new(
         .zigenv = zigenv,
         .root = root,
         .handles = std.StringHashMap(*Document).init(allocator),
+        .store = DocumentStore.init(allocator),
         .build_file = build_file,
     };
     return self;
 }
 
 pub fn delete(self: *Self) void {
+    self.store.deinit();
     var entry_iterator = self.handles.iterator();
     while (entry_iterator.next()) |entry| {
         self.allocator.free(entry.key_ptr.*);

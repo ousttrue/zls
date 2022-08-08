@@ -13,6 +13,7 @@ const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
 const VarType = astutil.VarType;
 const ImportSolver = astutil.ImportSolver;
+const DocumentStore = astutil.DocumentStore;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
@@ -24,10 +25,10 @@ pub const Hover = struct {
 
 pub fn getHover(
     arena: *std.heap.ArenaAllocator,
-    // workspace: *Workspace,
+    import_solver: ImportSolver,
+    store: *DocumentStore,
     doc: *Document,
     token: AstToken,
-    // hover_kind: ast.MarkupFormat,
 ) !?Hover {
     const allocator = arena.allocator();
     const token_info = try token.allocPrint(allocator);
@@ -65,7 +66,7 @@ pub fn getHover(
                     }
                 },
                 else => {
-                    const var_type = VarType.init(node);
+                    const var_type = try VarType.init(import_solver, store, node);
                     const text = try var_type.allocPrint(allocator);
                     try w.print("var_type: {s}", .{text});
                     return Hover{
@@ -104,6 +105,7 @@ pub fn getRename(
 pub fn getGoto(
     arena: *std.heap.ArenaAllocator,
     import_solver: ImportSolver,
+    store: *DocumentStore,
     doc: *Document,
     token: AstToken,
 ) !?PathPosition {
@@ -157,9 +159,13 @@ pub fn getGoto(
                         .field_access => {
                             var data = node.getData();
                             var lhs = AstNode.init(node.context, data.lhs);
-                            var var_type = VarType.init(lhs);
+                            var var_type = try VarType.init(
+                                import_solver,
+                                store,
+                                lhs,
+                            );
                             var rhs = AstToken.init(&node.context.tree, data.rhs);
-                            if (var_type.getMember(rhs.getText())) |member| {
+                            if (try var_type.getMember(import_solver, store, rhs.getText())) |member| {
                                 switch (member.data) {
                                     .field => |field| {
                                         const dst_token = AstToken.init(&node.context.tree, field.ast.name_token);

@@ -214,10 +214,11 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) anyerror![]const u8 
     switch (self.full) {
         .var_decl => |full| {
             // getType: var decl type part => eval expression
-            const var_type = VarType.fromVarDecl(self.context, full);
-            const info = try var_type.allocPrint(allocator);
-            defer allocator.free(info);
-            try w.print("{s}", .{info});
+            _ = full;
+            // const var_type = VarType.fromVarDecl(self.context, full);
+            // const info = try var_type.allocPrint(allocator);
+            // defer allocator.free(info);
+            // try w.print("{s}", .{info});
         },
         .if_payload => |full| {
             // getType: eval expression
@@ -236,10 +237,11 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) anyerror![]const u8 
         },
         .param => |full| {
             // getType: param decl
-            const var_type = VarType.fromParam(self.context, full);
-            const info = try var_type.allocPrint(allocator);
-            defer allocator.free(info);
-            try w.print("{s}: {s}", .{ self.token.getText(), info });
+            _ = full;
+            // const var_type = VarType.fromParam(self.context, full);
+            // const info = try var_type.allocPrint(allocator);
+            // defer allocator.free(info);
+            // try w.print("{s}: {s}", .{ self.token.getText(), info });
         },
         .fn_decl => {
             try w.print("[container] fn", .{});

@@ -1,5 +1,6 @@
 const std = @import("std");
 const FixedPath = @import("./FixedPath.zig");
+const logger = std.log.scoped(.ImportSolver);
 
 pub const ImportType = union(enum) {
     pkg: []const u8,
@@ -36,11 +37,17 @@ pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
 }
 
 pub fn solve(self: Self, base_path: FixedPath, import: ImportType) ?FixedPath {
-    return switch (import) {
-        .pkg => |pkg_name| if (self.pkg_path_map.get(pkg_name)) |found|
-            found
-        else
-            null,
-        .file => |relative_path| base_path.child(relative_path),
-    };
+    switch (import) {
+        .pkg => |pkg_name| {
+            if (self.pkg_path_map.get(pkg_name)) |found| {
+                return found;
+            } else {
+                logger.warn("pkg {s} not found", .{pkg_name});
+                return null;
+            }
+        },
+        .file => |relative_path| {
+            return base_path.child(relative_path);
+        },
+    }
 }
