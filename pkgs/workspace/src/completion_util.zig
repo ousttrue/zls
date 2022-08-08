@@ -10,6 +10,7 @@ const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
+const Line = astutil.Line;
 const ast = astutil.ast;
 const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
@@ -768,16 +769,33 @@ fn completeFieldAccess(
 //     return completions;
 // }
 
+fn tokenToRange(doc: *Document, loc: std.zig.Token.Loc, encoding: Line.Encoding) !lsp.Range {
+    const start = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, encoding);
+    const end = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, encoding);
+    return lsp.Range{
+        .start = .{
+            .line = start.line,
+            .character = start.x,
+        },
+        .end = .{
+            .line = end.line,
+            .character = end.x,
+        },
+    };
+}
+
 fn completeImport(
     arena: *std.heap.ArenaAllocator,
     workspace: *Workspace,
     doc: *Document,
     token: AstToken,
+    encoding: Line.Encoding,
 ) ![]lsp.CompletionItem {
     var items = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
-
-    _ = doc;
-    _ = token;
+    const loc = token.getLoc();
+    const text = token.getText();
+    var range = try tokenToRange(doc, .{ .start = loc.start + 1, .end = loc.end - 1 }, encoding);
+    _ = range;
 
     try items.append(.{
         .label = "std",
@@ -789,14 +807,20 @@ fn completeImport(
     });
 
     {
+        // pckages
         var it = workspace.build_file.packages.keyIterator();
         while (it.next()) |key| {
+            const copy = try std.fmt.allocPrint(arena.allocator(), "{s}", .{key.*});
+            logger.debug("pkg: {s} => {s}", .{ token.getText(), copy });
             try items.append(.{
-                .label = key.*,
+                .label = copy,
                 .kind = .Text,
-                // .textEdit=,
+                // .textEdit = .{
+                //     .range = range,
+                //     .newText = copy,
+                // },
                 // .filterText=,
-                // .insertText = key.*,
+                // .insertText = try std.fmt.allocPrint(arena.allocator(), "\"{s}\"", .{key.*}),
                 // .insertTextFormat=,
                 // .detail=,
                 // .documentation=,
@@ -804,7 +828,9 @@ fn completeImport(
         }
     }
 
+    if(std.mem.startsWith(u8, text, "\"./"))
     {
+        // current path
         const dir = doc.path.parent().?;
         var it = try dir.iterateChildren();
         defer it.deinit();
@@ -812,13 +838,17 @@ fn completeImport(
             switch (entry.kind) {
                 .File => {
                     if (std.mem.endsWith(u8, entry.name, ".zig")) {
-                        const copy = try std.fmt.allocPrint(arena.allocator(), "./{s}", .{entry.name});
+                        const copy = try std.fmt.allocPrint(arena.allocator(), "{s}", .{entry.name});
+                        logger.debug("path: {s} => {s}", .{ token.getText(), copy });
                         try items.append(.{
                             .label = copy,
                             .kind = .Text,
-                            // .textEdit=,
+                            // .textEdit = .{
+                            //     .range = range,
+                            //     .newText = copy,
+                            // },
                             // .filterText=,
-                            // .insertText = copy,
+                            // .insertText = copy[partial.len..], //
                             // .insertTextFormat=,
                             // .detail=,
                             // .documentation=,
@@ -841,6 +871,7 @@ pub fn process(
     token: AstToken,
     config: *Config,
     doc_kind: ast.MarkupFormat,
+    encoding: Line.Encoding,
 ) ![]const lsp.CompletionItem {
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
@@ -875,7 +906,7 @@ pub fn process(
                 const prev = token.getPrev(); // lparen
                 const prev_prev = prev.getPrev(); //
                 if (std.mem.eql(u8, prev_prev.getText(), "@import")) {
-                    return try completeImport(arena, workspace, doc, token);
+                    return try completeImport(arena, workspace, doc, token, encoding);
                 }
                 return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
             },

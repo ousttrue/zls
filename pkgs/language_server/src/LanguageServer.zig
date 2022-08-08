@@ -547,6 +547,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         AstToken.init(&doc.ast_context.tree, token_with_index.index),
         self.config,
         if (self.client_capabilities.hover_supports_md) .Markdown else .PlainText,
+        self.encoding,
     );
 
     return lsp.Response{
