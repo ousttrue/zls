@@ -39,7 +39,6 @@ pub fn new(
 }
 
 pub fn delete(self: *Self) void {
-    logger.info("delete", .{});
     self.store.deinit();
     self.import_solver.deinit();
     self.allocator.destroy(self);

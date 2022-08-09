@@ -125,7 +125,7 @@ fn initialize(allocator: std.mem.Allocator, config: *Config) !?FixedPath {
 
     if (config_dir == null) {
         if (known_folders.getPath(allocator, .local_configuration) catch unreachable) |dir| {
-            allocator.free(dir);
+            defer allocator.free(dir);
             if (Config.loadInFolder(allocator, dir)) |c| {
                 logger.info("local_configuration: {s}", .{dir});
                 config.* = c;
@@ -136,7 +136,7 @@ fn initialize(allocator: std.mem.Allocator, config: *Config) !?FixedPath {
 
     if (config_dir == null) {
         if (known_folders.getPath(allocator, .global_configuration) catch unreachable) |dir| {
-            allocator.free(dir);
+            defer allocator.free(dir);
             if (Config.loadInFolder(allocator, dir)) |c| {
                 logger.info("global_configuration: {s}", .{dir});
                 config.* = c;

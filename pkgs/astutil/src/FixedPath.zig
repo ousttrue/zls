@@ -144,13 +144,17 @@ pub fn allocReadContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     var file = try std.fs.cwd().openFile(self.slice(), .{});
     defer file.close();
 
-    return try file.readToEndAllocOptions(
+    return try file.readToEndAlloc(
         allocator,
         std.math.maxInt(usize),
-        null,
-        @alignOf(u8),
-        0,
     );
+    // return try file.readToEndAllocOptions(
+    //     allocator,
+    //     std.math.maxInt(usize),
+    //     null,
+    //     @alignOf(u8),
+    //     0,
+    // );
 }
 
 pub const FileIterator = struct {

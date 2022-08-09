@@ -12,7 +12,6 @@ line_heads: std.ArrayList(u32),
 pub fn init(allocator: std.mem.Allocator, text: []const u8) !Self {
     const duped_text = try allocator.dupeZ(u8, text);
     errdefer allocator.free(duped_text);
-
     var self = Self{
         .allocator = allocator,
         .text = duped_text,

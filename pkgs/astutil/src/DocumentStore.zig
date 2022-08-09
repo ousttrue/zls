@@ -16,6 +16,11 @@ pub fn init(allocator: std.mem.Allocator) Self {
 }
 
 pub fn deinit(self: *Self) void {
+    var it = self.path_document_map.iterator();
+    while(it.next())|entry|
+    {
+        entry.value_ptr.*.delete();
+    }
     self.path_document_map.deinit();
 }
 

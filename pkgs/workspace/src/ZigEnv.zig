@@ -133,6 +133,7 @@ pub fn init(
     }
     if (zig_exe_path.len() == 0) {
         if (try findZig(allocator)) |exe| {
+            defer allocator.free(exe);
             zig_exe_path = FixedPath.fromFullpath(exe);
         }
     }
