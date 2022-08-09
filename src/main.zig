@@ -1,4 +1,5 @@
 const std = @import("std");
+const astutil = @import("astutil");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
 const known_folders = @import("known-folders");
@@ -9,6 +10,7 @@ const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const requests = lsp.requests;
+const FixedPath = astutil.FixedPath;
 const Config = ws.Config;
 const Stdio = @import("./Stdio.zig");
 const ZigEnv = ws.ZigEnv;
@@ -52,7 +54,7 @@ pub fn log(
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    var message = std.fmt.allocPrint(arena.allocator(), "{s}> " ++ format, .{ @tagName(scope) } ++ args) catch {
+    var message = std.fmt.allocPrint(arena.allocator(), "{s}> " ++ format, .{@tagName(scope)} ++ args) catch {
         std.debug.print("Failed to allocPrint message.\n", .{});
         return;
     };
@@ -90,7 +92,7 @@ pub fn main() anyerror!void {
     if (!args_it.skip()) @panic("Could not find self argument");
 
     var config = Config{};
-    var config_dir: ?[]const u8 = null;
+    var config_dir: ?FixedPath = null;
     var next_arg_config_path = false;
     while (args_it.next()) |arg| {
         if (next_arg_config_path) {
@@ -98,7 +100,7 @@ pub fn main() anyerror!void {
                 logger.info("arg: {s}", .{arg});
                 config = c;
                 if (std.fs.path.dirname(arg)) |dir| {
-                    config_dir = allocator.dupe(u8, dir) catch unreachable;
+                    config_dir = FixedPath.fromFullpath(dir);
                 } else {
                     unreachable;
                 }
@@ -129,24 +131,22 @@ pub fn main() anyerror!void {
 
     if (config_dir == null) {
         if (known_folders.getPath(allocator, .local_configuration) catch unreachable) |dir| {
+            allocator.free(dir);
             if (Config.loadInFolder(allocator, dir)) |c| {
                 logger.info("local_configuration: {s}", .{dir});
                 config = c;
-                config_dir = dir;
-            } else {
-                allocator.free(dir);
+                config_dir = FixedPath.fromFullpath(dir);
             }
         }
     }
 
     if (config_dir == null) {
         if (known_folders.getPath(allocator, .global_configuration) catch unreachable) |dir| {
+            allocator.free(dir);
             if (Config.loadInFolder(allocator, dir)) |c| {
                 logger.info("global_configuration: {s}", .{dir});
                 config = c;
-                config_dir = dir;
-            } else {
-                allocator.free(dir);
+                config_dir = FixedPath.fromFullpath(dir);
             }
         }
     }

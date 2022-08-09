@@ -78,7 +78,7 @@ fn getZigLibAlloc(allocator: std.mem.Allocator, zig_exe_path: FixedPath) !FixedP
 fn getZigBuiltinAlloc(
     allocator: std.mem.Allocator,
     zig_exe_path: FixedPath,
-    config_dir: []const u8,
+    config_dir: FixedPath,
 ) !FixedPath {
     const result = try zig_exe_path.exec(allocator, &.{
         "build-exe",
@@ -87,14 +87,14 @@ fn getZigBuiltinAlloc(
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
 
-    var d = try std.fs.cwd().openDir(config_dir, .{});
+    var d = try std.fs.cwd().openDir(config_dir.slice(), .{});
     defer d.close();
 
     const f = try d.createFile("builtin.zig", .{});
     defer f.close();
     try f.writer().writeAll(result.stdout);
 
-    var path = FixedPath.fromFullpath(config_dir);
+    var path = FixedPath.fromFullpath(config_dir.slice());
     path = path.child("builtin.zig");
     logger.info("{s}", .{path.slice()});
 
@@ -114,7 +114,7 @@ global_cache_root: FixedPath,
 
 pub fn init(
     allocator: std.mem.Allocator,
-    config_dir: ?[]const u8,
+    config_dir: ?FixedPath,
     config_zig_exe_path: ?[]const u8,
     config_zig_lib_path: ?[]const u8,
     config_builtin_path: ?[]const u8,
