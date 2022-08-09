@@ -233,16 +233,16 @@ const SymbolTree = struct {
                             },
                             .container => {
                                 symbol.kind = .Struct;
-                                var buf2: [2]u32 = undefined;
-                                if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
-                                    var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
-                                    for (container_decl.ast.members) |decl| {
-                                        if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
-                                            try children.append(child);
-                                        }
-                                    }
-                                    symbol.children = children.toOwnedSlice();
-                                }
+                                // var buf2: [2]u32 = undefined;
+                                // if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
+                                //     var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
+                                //     for (container_decl.ast.members) |decl| {
+                                //         if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+                                //             try children.append(child);
+                                //         }
+                                //     }
+                                //     symbol.children = children.toOwnedSlice();
+                                // }
                             },
                             else => {},
                         }
