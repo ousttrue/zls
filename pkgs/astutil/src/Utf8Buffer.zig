@@ -100,6 +100,10 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line
 }
 
 pub fn getLineIndexFromBytePosition(self: Self, byte_position: usize) !usize {
+    if(byte_position>=self.text.len)
+    {
+        return error.OutOfRange;
+    }
     const line_count = self.line_heads.items.len;
     var top: usize = 0;
     var bottom: usize = line_count - 1;

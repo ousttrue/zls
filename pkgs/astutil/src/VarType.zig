@@ -4,7 +4,7 @@ const AstToken = @import("./AstToken.zig");
 const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
-const Primitive = @import("./Primitive.zig");
+const PrimitiveType = @import("./primitives.zig").PrimitiveType;
 const Project = @import("./Project.zig");
 const ImportSolver = @import("./ImportSolver.zig");
 const logger = std.log.scoped(.VarType);
@@ -24,7 +24,7 @@ kind: union(enum) {
     enum_literal,
     container,
     enum_type,
-    primitive: Primitive,
+    primitive: PrimitiveType,
     unknown,
 } = .unknown,
 
@@ -116,7 +116,7 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
             switch (node.getTag()) {
                 .identifier => {
                     const token = node.getMainToken();
-                    if (Primitive.fromName(token.getText())) |primitive| {
+                    if (PrimitiveType.fromName(token.getText())) |primitive| {
                         return Self{
                             .node = node,
                             .kind = .{ .primitive = primitive },
@@ -142,9 +142,8 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
                     var var_type = try init(project, lhs);
                     // rhs
                     var rhs = AstToken.init(&node.context.tree, data.rhs);
-                    var buf2:[2]u32=undefined;
-                    if (try var_type.getMember(project, rhs.getText(), &buf2)) |member| {
-                        return init(project, member.getNode());
+                    if (try var_type.getMember(project, rhs.getText())) |member| {
+                        return init(project, member);
                     } else {
                         logger.err("fail to field_access.getMember", .{});
                     }
@@ -219,11 +218,10 @@ pub fn getMember(
     self: Self,
     project: ?Project,
     name: []const u8,
-    buf: []u32,
-) anyerror!?AstNode.Member {
+) anyerror!?AstNode {
     switch (self.kind) {
         .container => {
-            return self.node.getMember(name, buf);
+            return self.node.getMember(name);
         },
         .import => |import| {
             // resolve import
@@ -231,7 +229,7 @@ pub fn getMember(
                 if (p.import_solver.solve(self.node.context.path, import)) |path| {
                     if (try p.store.getOrLoad(path)) |imported| {
                         const root = AstNode.init(imported.ast_context, 0);
-                        return root.getMember(name, buf);
+                        return root.getMember(name);
                     } else {
                         return null;
                     }

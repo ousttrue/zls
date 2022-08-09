@@ -120,7 +120,7 @@ pub const Member = struct {
     }
 };
 
-pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
+pub fn getMember(self: Self, name: []const u8) ?Self {
     // var debug_buf: [1024]u8 = undefined;
     // const allocator = std.heap.FixedBufferAllocator.init(&debug_buf).allocator();
     // std.debug.print("\n{s}.{s}\n", .{ self.allocPrint(allocator) catch unreachable, name });
@@ -130,30 +130,31 @@ pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
         .container_decl => |container_decl| {
             for (container_decl.ast.members) |member| {
                 const child_node = init(self.context, member);
-                switch (child_node.getChildren(buffer)) {
+                var buf2: [2]u32 = undefined;
+                switch (child_node.getChildren(&buf2)) {
                     .container_field => |container_field| {
                         const token = AstToken.init(&self.context.tree, container_field.ast.name_token);
                         logger.debug("{s} <=> {s}", .{ token.getText(), name });
                         if (std.mem.eql(u8, token.getText(), name)) {
-                            return Member{ .container = self, .data = .{ .field = container_field } };
+                            return child_node;
                         }
                     },
                     .var_decl => |var_decl| {
                         const token = AstToken.init(&self.context.tree, var_decl.ast.mut_token + 1);
                         if (std.mem.eql(u8, token.getText(), name)) {
-                            return Member{ .container = self, .data = .{ .var_decl = var_decl } };
+                            return child_node;
                         }
                     },
                     else => {
                         if (child_node.getTag() == .fn_decl) {
                             const data = child_node.getData();
                             const proto = Self.init(self.context, data.lhs);
-                            var buf2: [2]u32 = undefined;
-                            if (proto.getFnProto(&buf2)) |fn_proto| {
+                            var buf3: [2]u32 = undefined;
+                            if (proto.getFnProto(&buf3)) |fn_proto| {
                                 if (fn_proto.name_token) |name_token| {
                                     const token = AstToken.init(&self.context.tree, name_token);
                                     if (std.mem.eql(u8, token.getText(), name)) {
-                                        return Member{ .container = self, .data = .{ .fn_decl = child_node.index } };
+                                        return child_node;
                                     }
                                 }
                             }
@@ -279,31 +280,31 @@ test "@This" {
     try std.testing.expectEqual(pp, node.getContainerNodeForThis().?);
 }
 
-pub fn isType(self: Self) bool {
-    switch(self.getTag())
-    {
+// pub fn isType(self: Self) bool {
+//     switch(self.getTag())
+//     {
         
-    }
-    // init
-    // call param
-    // var/param : type
-    // fn_return
+//     }
+//     // init
+//     // call param
+//     // var/param : type
+//     // fn_return
 
-    return false;
-}
+//     return false;
+// }
 
-test "isType" {
-    const source =
-        \\const value: u32 = 0;
-    ;
-    const allocator = std.testing.allocator;
-    const text: [:0]const u8 = try allocator.dupeZ(u8, source);
-    defer allocator.free(text);
+// test "isType" {
+//     const source =
+//         \\const value: u32 = 0;
+//     ;
+//     const allocator = std.testing.allocator;
+//     const text: [:0]const u8 = try allocator.dupeZ(u8, source);
+//     defer allocator.free(text);
 
-    const context = try AstContext.new(allocator, .{}, text);
-    defer context.delete();
+//     const context = try AstContext.new(allocator, .{}, text);
+//     defer context.delete();
 
-    const node = Self.fromTokenIndex(context, 3);
-    std.debug.print("\nnode tag: {}\n", .{node.getTag()});
-    try std.testing.expect(node.isType());
-}
+//     const node = Self.fromTokenIndex(context, 3);
+//     std.debug.print("\nnode tag: {}\n", .{node.getTag()});
+//     try std.testing.expect(node.isType());
+// }

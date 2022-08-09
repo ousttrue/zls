@@ -1,6 +1,8 @@
 const std = @import("std");
 
-pub const Primitives = enum{
+pub const PrimitiveType = enum {
+    const Self = @This();
+
     i8,
     u8,
     i16,
@@ -34,23 +36,14 @@ pub const Primitives = enum{
     anyerror,
     comptime_int,
     comptime_float,
-};
 
-const Self = @This();
-
-kind: Primitives,
-
-pub fn fromName(symbol: []const u8) ?Self
-{
-    const info = @typeInfo(Primitives);
-    inline for(info.Enum.fields)|field|
-    {
-        if(std.mem.eql(u8, field.name, symbol))
-        {
-            return Self{
-                .kind= @intToEnum(Primitives, field.value),
-            };
+    pub fn fromName(symbol: []const u8) ?Self {
+        const info = @typeInfo(Self);
+        inline for (info.Enum.fields) |field| {
+            if (std.mem.eql(u8, field.name, symbol)) {
+                return @intToEnum(Self, field.value);
+            }
         }
+        return null;
     }
-    return null;
-}
+};
