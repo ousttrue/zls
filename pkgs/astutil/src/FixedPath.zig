@@ -68,7 +68,7 @@ pub fn parseUri(self: *Self, str: []const u8) !void {
     }
 
     // Remove trailing separator
-    if (i > 0 and self.buffer._buffer[i - 1] == std.fs.path.sep) {
+    if (i > 0 and self.buffer._buffer[i - 1] == '/') {
         i -= 1;
     }
     self.buffer.len = i;
@@ -89,20 +89,33 @@ pub fn parent(self: Self) ?Self {
         null;
 }
 
+fn extends(self: *Self, text: []const u8) void {
+    std.mem.copy(u8, self.buffer._buffer[self.len()..], text);
+    var i: usize = self.buffer.len;
+    const end = self.buffer.len + text.len;
+    while (i < end) {
+        const c = self.buffer._buffer[i];
+        const utf8len = std.unicode.utf8ByteSequenceLength(c) catch unreachable;
+        if (c == '\\') {
+            self.buffer._buffer[i] = '/';
+        }
+        i += utf8len;
+    }
+
+    self.buffer.len = end;
+}
+
 // try std.fs.path.resolve(allocator, &[_][]const u8{ exe_dir_path,  name});
 pub fn child(self: Self, name: []const u8) Self {
     var copy = fromFullpath(self.slice());
     copy.buffer.pushChar('/');
 
     if (std.mem.startsWith(u8, name, "./")) {
-        std.mem.copy(u8, copy.buffer._buffer[copy.len()..], name[2..]);
-        copy.buffer.len += (name.len - 2);
+        copy.extends(name[2..]);
     } else if (name[0] == '/') {
-        std.mem.copy(u8, copy.buffer._buffer[copy.len()..], name[1..]);
-        copy.buffer.len += (name.len - 1);
+        copy.extends(name[1..]);
     } else {
-        std.mem.copy(u8, copy.buffer._buffer[copy.len()..], name);
-        copy.buffer.len += name.len;
+        copy.extends(name);
     }
 
     return copy;

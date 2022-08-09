@@ -55,10 +55,10 @@ pub const SemanticTokensProvider = struct {
 
 // Only includes options we set in our initialize result.
 pub const ServerCapabilities = struct {
-    signatureHelpProvider: struct {
+    signatureHelpProvider: ?struct {
         triggerCharacters: []const string,
         retriggerCharacters: []const string,
-    },
+    } = null,
     textDocumentSync: enum(u32) {
         None = 0,
         Full = 1,
@@ -68,31 +68,31 @@ pub const ServerCapabilities = struct {
             try std.json.stringify(@enumToInt(value), options, out_stream);
         }
     },
-    renameProvider: bool,
+    renameProvider: bool = false,
     completionProvider: struct {
         resolveProvider: bool,
         triggerCharacters: []const string,
     },
-    documentHighlightProvider: bool,
-    hoverProvider: bool,
-    codeActionProvider: bool,
+    documentHighlightProvider: bool = false,
+    hoverProvider: bool = false,
+    codeActionProvider: bool = false,
     codeLensProvider: ?struct {
         resolveProvider: ?bool,
     } = null,
-    declarationProvider: bool,
-    definitionProvider: bool,
+    declarationProvider: bool = false,
+    definitionProvider: bool = false,
     typeDefinitionProvider: bool = false,
-    implementationProvider: bool,
-    referencesProvider: bool,
-    documentSymbolProvider: bool,
-    colorProvider: bool,
-    documentFormattingProvider: bool,
-    documentRangeFormattingProvider: bool,
-    foldingRangeProvider: bool,
-    selectionRangeProvider: bool,
-    workspaceSymbolProvider: bool,
-    rangeProvider: bool,
-    documentProvider: bool,
+    implementationProvider: bool = false,
+    referencesProvider: bool = false,
+    documentSymbolProvider: bool = false,
+    colorProvider: bool = false,
+    documentFormattingProvider: bool = false,
+    documentRangeFormattingProvider: bool = false,
+    foldingRangeProvider: bool = false,
+    selectionRangeProvider: bool = false,
+    workspaceSymbolProvider: bool = false,
+    rangeProvider: bool = false,
+    documentProvider: bool = false,
     workspace: ?struct {
         workspaceFolders: ?struct {
             supported: bool,

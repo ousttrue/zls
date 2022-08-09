@@ -45,12 +45,12 @@ workspace: ?*Workspace = null,
 client_capabilities: ClientCapabilities = .{},
 encoding: Line.Encoding = .utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
-    .signatureHelpProvider = .{
-        .triggerCharacters = &.{"("},
-        .retriggerCharacters = &.{","},
-    },
+    // .signatureHelpProvider = .{
+    //     .triggerCharacters = &.{"("},
+    //     .retriggerCharacters = &.{","},
+    // },
     .textDocumentSync = .Full,
-    .renameProvider = true,
+    // .renameProvider = true,
     .completionProvider = .{
         .resolveProvider = false,
         .triggerCharacters = &[_][]const u8{ ".", ":", "@" },
@@ -61,11 +61,11 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
     // .codeLensProvider = .{
     //     .resolveProvider = true,
     // },
-    .declarationProvider = false,
+    // .declarationProvider = false,
     .definitionProvider = true,
     // .typeDefinitionProvider = true,
-    .implementationProvider = false,
-    .referencesProvider = true,
+    // .implementationProvider = false,
+    // .referencesProvider = true,
     .documentSymbolProvider = true,
     .colorProvider = false,
     .documentFormattingProvider = true,
