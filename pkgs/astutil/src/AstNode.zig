@@ -41,6 +41,10 @@ fn printRec(self: Self, w: anytype) std.mem.Allocator.Error!void {
 }
 
 pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+    if (self.index == 0) {
+        return "[root]";
+    }
+
     var buffer = std.ArrayList(u8).init(allocator);
     const w = buffer.writer();
     try self.printRec(w);
@@ -98,6 +102,10 @@ pub const Member = struct {
 };
 
 pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
+    // var debug_buf: [1024]u8 = undefined;
+    // const allocator = std.heap.FixedBufferAllocator.init(&debug_buf).allocator();
+    // std.debug.print("\n{s}.{s}\n", .{ self.allocPrint(allocator) catch unreachable, name });
+
     var buf: [2]u32 = undefined;
     switch (self.getChildren(&buf)) {
         .container_decl => |container_decl| {
@@ -112,11 +120,24 @@ pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
                         }
                     },
                     .var_decl => |var_decl| {
-                        return Member{ .container = self, .data = .{ .var_decl = var_decl } };
+                        const token = AstToken.init(&self.context.tree, var_decl.ast.mut_token + 1);
+                        if (std.mem.eql(u8, token.getText(), name)) {
+                            return Member{ .container = self, .data = .{ .var_decl = var_decl } };
+                        }
                     },
                     else => {
                         if (child_node.getTag() == .fn_decl) {
-                            return Member{ .container = self, .data = .{ .fn_decl = child_node.index } };
+                            const data = child_node.getData();
+                            const proto = Self.init(self.context, data.lhs);
+                            var buf2: [2]u32 = undefined;
+                            if (proto.getFnProto(&buf2)) |fn_proto| {
+                                if (fn_proto.name_token) |name_token| {
+                                    const token = AstToken.init(&self.context.tree, name_token);
+                                    if (std.mem.eql(u8, token.getText(), name)) {
+                                        return Member{ .container = self, .data = .{ .fn_decl = child_node.index } };
+                                    }
+                                }
+                            }
                         } else {
                             logger.err("not field and fn: {s}", .{@tagName(child_node.getTag())});
                         }
@@ -129,7 +150,7 @@ pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
         },
     }
 
-    logger.err("not found: {s} from {s}", .{name, self.getMainToken().getText()});
+    logger.err("not found: {s} from {s}", .{ name, self.getMainToken().getText() });
     return null;
 }
 
@@ -204,7 +225,6 @@ pub fn getContainerNodeForThis(self: Self) ?Self {
 }
 
 test "@This" {
-
     const source =
         \\const Self = @This();
         \\
@@ -228,7 +248,7 @@ test "@This" {
     defer context.delete();
 
     const node = Self.fromTokenIndex(context, 3);
-    var buf:[2]u32 = undefined;
+    var buf: [2]u32 = undefined;
     try std.testing.expect(node.getChildren(&buf) == .builtin_call);
 
     const parent = node.getParent().?;

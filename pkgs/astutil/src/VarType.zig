@@ -136,10 +136,11 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
                     };
                 },
                 .field_access => {
-                    // resolve field_access
                     var data = node.getData();
+                    // lhs
                     var lhs = AstNode.init(node.context, data.lhs);
                     var var_type = try init(project, lhs);
+                    // rhs
                     var rhs = AstToken.init(&node.context.tree, data.rhs);
                     if (try var_type.getMember(project, rhs.getText())) |member| {
                         return init(project, member.getNode());
@@ -312,7 +313,27 @@ test "@This" {
     const context = try AstContext.new(allocator, .{}, text);
     defer context.delete();
 
-    const node = AstNode.fromTokenIndex(context, 3);
-    var buf: [2]u32 = undefined;
-    try std.testing.expect(node.getChildren(&buf) == .builtin_call);
+    {
+        const node = AstNode.fromTokenIndex(context, 3);
+        var buf: [2]u32 = undefined;
+        try std.testing.expect(node.getChildren(&buf) == .builtin_call);
+
+        var var_type = try Self.init(null, AstNode.fromTokenIndex(context, 1));
+        try std.testing.expectEqual(var_type.kind, .container);
+        try std.testing.expectEqual(var_type.node.index, 0);
+    }
+
+    {
+        const token = AstToken.init(&context.tree, context.tree.tokens.len - 6);
+        try std.testing.expectEqualStrings(token.getText(), "self");
+        var var_type = try Self.init(null, AstNode.fromTokenIndex(context, token.index));
+        try std.testing.expectEqual(var_type.kind, .container);
+    }
+
+    {
+        const token = AstToken.init(&context.tree, context.tree.tokens.len - 4);
+        try std.testing.expectEqualStrings(token.getText(), "value");
+        var var_type = try Self.init(null, AstNode.fromTokenIndex(context, token.index));
+        try std.testing.expectEqual(var_type.kind, .{ .primitive = .{ .kind = .u32 } });
+    }
 }
