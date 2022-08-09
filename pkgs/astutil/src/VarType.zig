@@ -142,7 +142,8 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
                     var var_type = try init(project, lhs);
                     // rhs
                     var rhs = AstToken.init(&node.context.tree, data.rhs);
-                    if (try var_type.getMember(project, rhs.getText())) |member| {
+                    var buf2:[2]u32=undefined;
+                    if (try var_type.getMember(project, rhs.getText(), &buf2)) |member| {
                         return init(project, member.getNode());
                     } else {
                         logger.err("fail to field_access.getMember", .{});
@@ -218,11 +219,11 @@ pub fn getMember(
     self: Self,
     project: ?Project,
     name: []const u8,
+    buf: []u32,
 ) anyerror!?AstNode.Member {
     switch (self.kind) {
         .container => {
-            var buf: [2]u32 = undefined;
-            return self.node.getMember(name, &buf);
+            return self.node.getMember(name, buf);
         },
         .import => |import| {
             // resolve import
@@ -230,8 +231,7 @@ pub fn getMember(
                 if (p.import_solver.solve(self.node.context.path, import)) |path| {
                     if (try p.store.getOrLoad(path)) |imported| {
                         const root = AstNode.init(imported.ast_context, 0);
-                        var buf: [2]u32 = undefined;
-                        return root.getMember(name, &buf);
+                        return root.getMember(name, buf);
                     } else {
                         return null;
                     }

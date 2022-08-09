@@ -173,16 +173,19 @@ pub fn getGoto(
                             var data = node.getData();
                             var lhs = AstNode.init(node.context, data.lhs);
                             var var_type = try VarType.init(project, lhs);
+                            // rhs
                             var rhs = AstToken.init(&node.context.tree, data.rhs);
-                            if (try var_type.getMember(project, rhs.getText())) |member| {
+                            var buf2: [2]u32 = undefined;
+                            if (try var_type.getMember(project, rhs.getText(), &buf2)) |member| {
                                 switch (member.data) {
                                     .field => |field| {
                                         const dst_token = AstToken.init(&node.context.tree, field.ast.name_token);
                                         return PathPosition{ .path = doc.path, .loc = dst_token.getLoc() };
                                     },
                                     .var_decl => |var_decl| {
-                                        const dst_token = AstToken.init(&node.context.tree, var_decl.ast.mut_token).getNext();
-                                        return PathPosition{ .path = doc.path, .loc = dst_token.getLoc() };
+                                        const var_const = AstToken.init(&node.context.tree, var_decl.ast.mut_token);
+                                        // const name = var_const.getNext();
+                                        return PathPosition{ .path = doc.path, .loc = var_const.getLoc() };
                                     },
                                     .fn_decl => {
                                         const fn_decl = member.getNode();
