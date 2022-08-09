@@ -62,7 +62,7 @@ pub fn parseUri(self: *Self, str: []const u8) !void {
             self.buffer._buffer[i] = (upper << 4) + lower;
             j += 3;
         } else {
-            self.buffer._buffer[i] = if (path[j] == '/') std.fs.path.sep else path[j];
+            self.buffer._buffer[i] = path[j];
             j += 1;
         }
     }
@@ -140,17 +140,21 @@ pub fn exec(self: Self, allocator: std.mem.Allocator, args: []const []const u8) 
     });
 }
 
-pub fn readContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+pub fn allocReadContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     var file = try std.fs.cwd().openFile(self.slice(), .{});
     defer file.close();
 
-    return try file.readToEndAllocOptions(
+    return try file.readToEndAlloc(
         allocator,
         std.math.maxInt(usize),
-        null,
-        @alignOf(u8),
-        0,
     );
+    // return try file.readToEndAllocOptions(
+    //     allocator,
+    //     std.math.maxInt(usize),
+    //     null,
+    //     @alignOf(u8),
+    //     0,
+    // );
 }
 
 pub const FileIterator = struct {

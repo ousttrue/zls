@@ -12,7 +12,6 @@ line_heads: std.ArrayList(u32),
 pub fn init(allocator: std.mem.Allocator, text: []const u8) !Self {
     const duped_text = try allocator.dupeZ(u8, text);
     errdefer allocator.free(duped_text);
-
     var self = Self{
         .allocator = allocator,
         .text = duped_text,
@@ -204,9 +203,9 @@ test "LinePosition" {
     const ls = try Self.init(std.testing.allocator, text);
     defer ls.deinit();
     std.debug.print("\n", .{});
-    try std.testing.expect((try ls.getLineIndexFromBytePosition(0, .utf8)) == @as(usize, 0));
-    try std.testing.expect((try ls.getLineIndexFromBytePosition(2, .utf8)) == @as(usize, 1));
-    try std.testing.expect((try ls.getLineIndexFromBytePosition(6, .utf8)) == @as(usize, 3));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(0)) == @as(usize, 0));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(2)) == @as(usize, 1));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(6)) == @as(usize, 3));
     std.debug.print("\n", .{});
 
     try std.testing.expectEqual((try ls.getPositionFromBytePosition(0, .utf8)), .{ .line = 0, .x = 0 });

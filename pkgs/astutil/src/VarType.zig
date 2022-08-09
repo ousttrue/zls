@@ -5,6 +5,7 @@ const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
 const Primitive = @import("./Primitive.zig");
+const Project = @import("./Project.zig");
 const ImportSolver = @import("./ImportSolver.zig");
 const logger = std.log.scoped(.VarType);
 
@@ -27,7 +28,7 @@ kind: union(enum) {
     unknown,
 } = .unknown,
 
-pub fn init(node: AstNode) Self {
+pub fn init(project: ?Project, node: AstNode) anyerror!Self {
     var buf: [2]u32 = undefined;
     const children = node.getChildren(&buf);
     switch (children) {
@@ -56,11 +57,9 @@ pub fn init(node: AstNode) Self {
                     };
                 }
             } else if (std.mem.eql(u8, builtin, "@This")) {
-                // TODO: eval
-                return Self{
-                    .node = node,
-                    .kind = .this,
-                };
+                if (node.getContainerNodeForThis()) |container_node| {
+                    return try init(project, container_node);
+                }
             } else {
                 return Self{
                     .node = node,
@@ -89,9 +88,17 @@ pub fn init(node: AstNode) Self {
             };
         },
         .var_decl => |var_decl| {
-            return fromVarDecl(node.context, var_decl);
+            return fromVarDecl(project, node.context, var_decl);
         },
         .container_decl => |container_decl| {
+            if (node.index == 0) {
+                // root
+                return Self{
+                    .node = node,
+                    .kind = .container,
+                };
+            }
+
             const token = AstToken.init(&node.context.tree, container_decl.ast.main_token);
             if (std.mem.eql(u8, token.getText(), "enum")) {
                 return Self{
@@ -114,15 +121,12 @@ pub fn init(node: AstNode) Self {
                             .node = node,
                             .kind = .{ .primitive = primitive },
                         };
+                    } else if (Declaration.findFromBlock(node)) |decl| {
+                        return init(project, AstNode.fromTokenIndex(node.context, decl.token.index));
                     } else if (Declaration.findFromContainer(node)) |decl| {
-                        // deref
-                        // return Self{
-                        //     .node = node,
-                        //     .kind = .{ .ref = decl },
-                        // };
-                        return init(AstNode.fromTokenIndex(node.context, decl.token.index));
+                        return init(project, AstNode.fromTokenIndex(node.context, decl.token.index));
                     } else {
-                        // try w.print("no ref: {s}", .{node.getMainToken().getText()});
+                        logger.warn("no ref: {s}", .{node.getMainToken().getText()});
                     }
                 },
                 .optional_type => {
@@ -132,15 +136,17 @@ pub fn init(node: AstNode) Self {
                     };
                 },
                 .field_access => {
-                    // resolve field_access
                     var data = node.getData();
+                    // lhs
                     var lhs = AstNode.init(node.context, data.lhs);
-                    var var_type = init(lhs);
+                    var var_type = try init(project, lhs);
+                    // rhs
                     var rhs = AstToken.init(&node.context.tree, data.rhs);
-                    if (var_type.getMember(rhs.getText())) |member| {
-                        return init(member.getNode());
+                    var buf2:[2]u32=undefined;
+                    if (try var_type.getMember(project, rhs.getText(), &buf2)) |member| {
+                        return init(project, member.getNode());
                     } else {
-                        logger.err("fail to getMember", .{});
+                        logger.err("fail to field_access.getMember", .{});
                     }
                 },
                 .error_union => {
@@ -161,25 +167,41 @@ pub fn init(node: AstNode) Self {
     };
 }
 
-pub fn fromVarDecl(context: *const AstContext, var_decl: Ast.full.VarDecl) Self {
+pub fn fromVarDecl(
+    project: ?Project,
+    context: *const AstContext,
+    var_decl: Ast.full.VarDecl,
+) !Self {
     const node_idx = if (var_decl.ast.type_node != 0)
         var_decl.ast.type_node
     else
         var_decl.ast.init_node;
-    return init(AstNode.init(context, node_idx));
+    return try init(project, AstNode.init(context, node_idx));
 }
 
-pub fn fromParam(context: *const AstContext, param: Ast.full.FnProto.Param) Self {
+pub fn fromParam(
+    project: ?Project,
+    context: *const AstContext,
+    param: Ast.full.FnProto.Param,
+) !Self {
     const node_idx = param.type_expr;
-    return init(AstNode.init(context, node_idx));
+    return try init(project, AstNode.init(context, node_idx));
 }
 
-pub fn fromFnProtoReturn(context: *const AstContext, fn_proto: Ast.full.FnProto) Self {
+pub fn fromFnProtoReturn(
+    project: ?Project,
+    context: *const AstContext,
+    fn_proto: Ast.full.FnProto,
+) !Self {
     const node_idx = fn_proto.ast.return_type;
-    return init(AstNode.init(context, node_idx));
+    return try init(project, AstNode.init(context, node_idx));
 }
 
-pub fn fromContainerField(context: *const AstContext, field: Ast.full.ContainerField) Self {
+pub fn fromContainerField(
+    project: ?Project,
+    context: *const AstContext,
+    field: Ast.full.ContainerField,
+) !Self {
     const node_idx = field.ast.type_expr;
     const node = AstNode.init(context, node_idx);
     if (node_idx == 0) {
@@ -189,18 +211,43 @@ pub fn fromContainerField(context: *const AstContext, field: Ast.full.ContainerF
             .kind = .enum_literal,
         };
     } else {
-        return init(node);
+        return try init(project, node);
     }
 }
 
-pub fn getMember(self: Self, name: []const u8) ?AstNode.Member {
+pub fn getMember(
+    self: Self,
+    project: ?Project,
+    name: []const u8,
+    buf: []u32,
+) anyerror!?AstNode.Member {
     switch (self.kind) {
         .container => {
-            var buf: [2]u32 = undefined;
-            return self.node.getMember(name, &buf);
+            return self.node.getMember(name, buf);
+        },
+        .import => |import| {
+            // resolve import
+            if (project) |p| {
+                if (p.import_solver.solve(self.node.context.path, import)) |path| {
+                    if (try p.store.getOrLoad(path)) |imported| {
+                        const root = AstNode.init(imported.ast_context, 0);
+                        return root.getMember(name, buf);
+                    } else {
+                        return null;
+                    }
+                }
+            }
+            return null;
         },
         else => {
-            logger.err("self.kind: {s}", .{@tagName(self.kind)});
+            logger.err(
+                "getMember: {s} => {s}: {s}",
+                .{
+                    @tagName(self.kind),
+                    @tagName(self.node.getTag()),
+                    self.node.getMainToken().getText(),
+                },
+            );
             return null;
         },
     }
@@ -235,9 +282,58 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             }
         },
         else => {
-            try w.print("else {s}", .{@tagName(self.kind)});
+            try w.print("{s}", .{@tagName(self.kind)});
         },
     }
 
     return buffer.items;
+}
+
+test "@This" {
+    const source =
+        \\const Self = @This();
+        \\
+        \\value: u32 = 0,
+        \\
+        \\fn init() Self
+        \\{
+        \\    return .{};
+        \\}
+        \\
+        \\fn get(self: Self) u32
+        \\{
+        \\    return self.value;
+        \\}
+    ;
+
+    const allocator = std.testing.allocator;
+    const text: [:0]const u8 = try allocator.dupeZ(u8, source);
+    defer allocator.free(text);
+
+    const context = try AstContext.new(allocator, .{}, text);
+    defer context.delete();
+
+    {
+        const node = AstNode.fromTokenIndex(context, 3);
+        var buf: [2]u32 = undefined;
+        try std.testing.expect(node.getChildren(&buf) == .builtin_call);
+
+        var var_type = try Self.init(null, AstNode.fromTokenIndex(context, 1));
+        try std.testing.expectEqual(var_type.kind, .container);
+        try std.testing.expectEqual(var_type.node.index, 0);
+    }
+
+    {
+        const token = AstToken.init(&context.tree, context.tree.tokens.len - 6);
+        try std.testing.expectEqualStrings(token.getText(), "self");
+        var var_type = try Self.init(null, AstNode.fromTokenIndex(context, token.index));
+        try std.testing.expectEqual(var_type.kind, .container);
+    }
+
+    {
+        const token = AstToken.init(&context.tree, context.tree.tokens.len - 4);
+        try std.testing.expectEqualStrings(token.getText(), "value");
+        var var_type = try Self.init(null, AstNode.fromTokenIndex(context, token.index));
+        try std.testing.expectEqual(var_type.kind, .{ .primitive = .{ .kind = .u32 } });
+    }
 }

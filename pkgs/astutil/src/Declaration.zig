@@ -3,6 +3,7 @@ const Ast = std.zig.Ast;
 const AstToken = @import("./AstToken.zig");
 const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
+const Project = @import("./Project.zig");
 const VarType = @import("./VarType.zig");
 const logger = std.log.scoped(.Declaration);
 const Self = @This();
@@ -97,9 +98,11 @@ pub fn findFromBlockNode(scope: AstNode, symbol: []const u8) ?Self {
                             if (param.name_token) |name_token| {
                                 const token = AstToken.init(tree, name_token);
                                 if (std.mem.eql(u8, token.getText(), symbol)) {
+                                    const param_type = AstNode.init(scope.context, param.type_expr);
+                                    // param
                                     return Self{
                                         .context = scope.context,
-                                        .token = token,
+                                        .token = param_type.getMainToken(),
                                         .scope = .{ .block = scope },
                                         .full = .{ .param = param },
                                     };
@@ -172,9 +175,8 @@ pub fn findFromContainerNode(scope: AstNode, symbol: []const u8) ?Self {
 }
 
 pub fn findFromContainer(node: AstNode) ?Self {
-    if(node.getTag() != .identifier)
-    {
-        return null;        
+    if (node.getTag() != .identifier) {
+        return null;
     }
     const symbol = node.getMainToken().getText();
     var it = node.parentIterator();
@@ -207,42 +209,47 @@ pub fn findFromBlock(node: AstNode) ?Self {
     return null;
 }
 
-pub fn allocPrint(self: Self, allocator: std.mem.Allocator) anyerror![]const u8 {
+pub fn allocPrint(
+    self: Self,
+    allocator: std.mem.Allocator,
+    project: ?Project,
+) anyerror![]const u8 {
     var buffer = std.ArrayList(u8).init(allocator);
     const w = buffer.writer();
 
     switch (self.full) {
         .var_decl => |full| {
             // getType: var decl type part => eval expression
-            const var_type = VarType.fromVarDecl(self.context, full);
-            const info = try var_type.allocPrint(allocator);
-            defer allocator.free(info);
-            try w.print("{s}", .{info});
+            _ = full;
+            // const var_type = VarType.fromVarDecl(self.context, full);
+            // const info = try var_type.allocPrint(allocator);
+            // defer allocator.free(info);
+            try w.print("[var_decl]", .{});
         },
         .if_payload => |full| {
             // getType: eval expression
             _ = full;
-            try w.print("[local] if_payload", .{});
+            try w.print("[if_payload]", .{});
         },
         .while_payload => |full| {
             // getType: eval expression
             _ = full;
-            try w.print("[local] while_payload", .{});
+            try w.print("[while_payload]", .{});
         },
         .switch_case_payload => |full| {
             // getType: union type part
             _ = full;
-            try w.print("[local] swtich_case_payload", .{});
+            try w.print("[swtich_case_payload]", .{});
         },
         .param => |full| {
             // getType: param decl
-            const var_type = VarType.fromParam(self.context, full);
+            const var_type = try VarType.fromParam(project, self.context, full);
             const info = try var_type.allocPrint(allocator);
             defer allocator.free(info);
-            try w.print("{s}: {s}", .{ self.token.getText(), info });
+            try w.print("[param] {s}", .{info});
         },
         .fn_decl => {
-            try w.print("[container] fn", .{});
+            try w.print("[global] fn", .{});
         },
     }
 

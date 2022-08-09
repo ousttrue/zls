@@ -1,12 +1,20 @@
 const std = @import("std");
 const FixedPath = @import("./FixedPath.zig");
+const logger = std.log.scoped(.ImportSolver);
+
+pub fn unquote(text: []const u8) []const u8 {
+    return if (text.len > 2 and text[0] == '"' and text[text.len - 1] == '"')
+        text[1 .. text.len - 1]
+    else
+        text;
+}
 
 pub const ImportType = union(enum) {
     pkg: []const u8,
     file: []const u8,
 
     pub fn fromText(text: []const u8) @This() {
-        return if (std.mem.endsWith(u8, text, ".zig")) .{ .file = text } else .{ .pkg = text };
+        return if (std.mem.endsWith(u8, text, ".zig")) .{ .file = unquote(text) } else .{ .pkg = unquote(text) };
     }
 };
 
@@ -31,16 +39,33 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
+    if(self.pkg_path_map.get(pkg))|_|
+    {
+        return;
+    }
+
     const copy = try self.allocator.dupe(u8, pkg);
     try self.pkg_path_map.put(copy, path);
 }
 
-pub fn solve(self: Self, base_path: FixedPath, import: ImportType) ?FixedPath {
-    return switch (import) {
-        .pkg => |pkg_name| if (self.pkg_path_map.get(pkg_name)) |found|
-            found
-        else
-            null,
-        .file => |relative_path| base_path.child(relative_path),
-    };
+pub fn solve(self: Self, import_from: FixedPath, import: ImportType) ?FixedPath {
+    switch (import) {
+        .pkg => |pkg_name| {
+            const text = unquote(pkg_name);
+            if (self.pkg_path_map.get(text)) |found| {
+                return found;
+            } else {
+                logger.warn("pkg {s} not found", .{text});
+                return null;
+            }
+        },
+        .file => |relative_path| {
+            const text = unquote(relative_path);
+            if (import_from.parent()) |parent| {
+                return parent.child(text);
+            } else {
+                return null;
+            }
+        },
+    }
 }
