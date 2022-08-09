@@ -5,8 +5,8 @@ const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Declaration = @import("./Declaration.zig");
 const Primitive = @import("./Primitive.zig");
+const Project = @import("./Project.zig");
 const ImportSolver = @import("./ImportSolver.zig");
-const DocumentStore = @import("./DocumentStore.zig");
 const logger = std.log.scoped(.VarType);
 
 const Self = @This();
@@ -28,7 +28,7 @@ kind: union(enum) {
     unknown,
 } = .unknown,
 
-pub fn init(import_solver: ImportSolver, store: *DocumentStore, node: AstNode) anyerror!Self {
+pub fn init(project: ?Project, node: AstNode) anyerror!Self {
     var buf: [2]u32 = undefined;
     const children = node.getChildren(&buf);
     switch (children) {
@@ -57,11 +57,9 @@ pub fn init(import_solver: ImportSolver, store: *DocumentStore, node: AstNode) a
                     };
                 }
             } else if (std.mem.eql(u8, builtin, "@This")) {
-                // TODO: eval
-                return Self{
-                    .node = node,
-                    .kind = .this,
-                };
+                if (node.getContainerNodeForThis()) |container_node| {
+                    return try init(project, container_node);
+                }
             } else {
                 return Self{
                     .node = node,
@@ -90,9 +88,17 @@ pub fn init(import_solver: ImportSolver, store: *DocumentStore, node: AstNode) a
             };
         },
         .var_decl => |var_decl| {
-            return fromVarDecl(import_solver, store, node.context, var_decl);
+            return fromVarDecl(project, node.context, var_decl);
         },
         .container_decl => |container_decl| {
+            if (node.index == 0) {
+                // root
+                return Self{
+                    .node = node,
+                    .kind = .container,
+                };
+            }
+
             const token = AstToken.init(&node.context.tree, container_decl.ast.main_token);
             if (std.mem.eql(u8, token.getText(), "enum")) {
                 return Self{
@@ -115,15 +121,12 @@ pub fn init(import_solver: ImportSolver, store: *DocumentStore, node: AstNode) a
                             .node = node,
                             .kind = .{ .primitive = primitive },
                         };
+                    } else if (Declaration.findFromBlock(node)) |decl| {
+                        return init(project, AstNode.fromTokenIndex(node.context, decl.token.index));
                     } else if (Declaration.findFromContainer(node)) |decl| {
-                        // deref
-                        // return Self{
-                        //     .node = node,
-                        //     .kind = .{ .ref = decl },
-                        // };
-                        return init(import_solver, store, AstNode.fromTokenIndex(node.context, decl.token.index));
+                        return init(project, AstNode.fromTokenIndex(node.context, decl.token.index));
                     } else {
-                        // try w.print("no ref: {s}", .{node.getMainToken().getText()});
+                        logger.warn("no ref: {s}", .{node.getMainToken().getText()});
                     }
                 },
                 .optional_type => {
@@ -136,12 +139,12 @@ pub fn init(import_solver: ImportSolver, store: *DocumentStore, node: AstNode) a
                     // resolve field_access
                     var data = node.getData();
                     var lhs = AstNode.init(node.context, data.lhs);
-                    var var_type = try init(import_solver, store, lhs);
+                    var var_type = try init(project, lhs);
                     var rhs = AstToken.init(&node.context.tree, data.rhs);
-                    if (try var_type.getMember(import_solver, store, rhs.getText())) |member| {
-                        return init(import_solver, store, member.getNode());
+                    if (try var_type.getMember(project, rhs.getText())) |member| {
+                        return init(project, member.getNode());
                     } else {
-                        logger.err("fail to getMember", .{});
+                        logger.err("fail to field_access.getMember", .{});
                     }
                 },
                 .error_union => {
@@ -163,8 +166,7 @@ pub fn init(import_solver: ImportSolver, store: *DocumentStore, node: AstNode) a
 }
 
 pub fn fromVarDecl(
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     context: *const AstContext,
     var_decl: Ast.full.VarDecl,
 ) !Self {
@@ -172,32 +174,29 @@ pub fn fromVarDecl(
         var_decl.ast.type_node
     else
         var_decl.ast.init_node;
-    return try init(import_solver, store, AstNode.init(context, node_idx));
+    return try init(project, AstNode.init(context, node_idx));
 }
 
 pub fn fromParam(
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     context: *const AstContext,
     param: Ast.full.FnProto.Param,
 ) !Self {
     const node_idx = param.type_expr;
-    return try init(import_solver, store, AstNode.init(context, node_idx));
+    return try init(project, AstNode.init(context, node_idx));
 }
 
 pub fn fromFnProtoReturn(
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     context: *const AstContext,
     fn_proto: Ast.full.FnProto,
 ) !Self {
     const node_idx = fn_proto.ast.return_type;
-    return try init(import_solver, store, AstNode.init(context, node_idx));
+    return try init(project, AstNode.init(context, node_idx));
 }
 
 pub fn fromContainerField(
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     context: *const AstContext,
     field: Ast.full.ContainerField,
 ) !Self {
@@ -210,14 +209,13 @@ pub fn fromContainerField(
             .kind = .enum_literal,
         };
     } else {
-        return try init(import_solver, store, node);
+        return try init(project, node);
     }
 }
 
 pub fn getMember(
     self: Self,
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     name: []const u8,
 ) anyerror!?AstNode.Member {
     switch (self.kind) {
@@ -227,20 +225,28 @@ pub fn getMember(
         },
         .import => |import| {
             // resolve import
-            if (import_solver.solve(self.node.context.path, import)) |path| {
-                if (try store.getOrLoad(path)) |imported| {
-                    const root = AstNode.init(imported.ast_context, 0);
-                    var buf: [2]u32 = undefined;
-                    return root.getMember(name, &buf);
-                } else {
-                    return null;
+            if (project) |p| {
+                if (p.import_solver.solve(self.node.context.path, import)) |path| {
+                    if (try p.store.getOrLoad(path)) |imported| {
+                        const root = AstNode.init(imported.ast_context, 0);
+                        var buf: [2]u32 = undefined;
+                        return root.getMember(name, &buf);
+                    } else {
+                        return null;
+                    }
                 }
-            } else {
-                return null;
             }
+            return null;
         },
         else => {
-            logger.err("getMember: unknown {s}", .{@tagName(self.kind)});
+            logger.err(
+                "getMember: {s} => {s}: {s}",
+                .{
+                    @tagName(self.kind),
+                    @tagName(self.node.getTag()),
+                    self.node.getMainToken().getText(),
+                },
+            );
             return null;
         },
     }
@@ -275,9 +281,38 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             }
         },
         else => {
-            try w.print("else {s}", .{@tagName(self.kind)});
+            try w.print("{s}", .{@tagName(self.kind)});
         },
     }
 
     return buffer.items;
+}
+
+test "@This" {
+    const source =
+        \\const Self = @This();
+        \\
+        \\value: u32 = 0,
+        \\
+        \\fn init() Self
+        \\{
+        \\    return .{};
+        \\}
+        \\
+        \\fn get(self: Self) u32
+        \\{
+        \\    return self.value;
+        \\}
+    ;
+
+    const allocator = std.testing.allocator;
+    const text: [:0]const u8 = try allocator.dupeZ(u8, source);
+    defer allocator.free(text);
+
+    const context = try AstContext.new(allocator, .{}, text);
+    defer context.delete();
+
+    const node = AstNode.fromTokenIndex(context, 3);
+    var buf: [2]u32 = undefined;
+    try std.testing.expect(node.getChildren(&buf) == .builtin_call);
 }

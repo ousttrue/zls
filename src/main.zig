@@ -76,10 +76,10 @@ pub fn log(
 }
 
 pub fn main() anyerror!void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer std.debug.assert(!gpa.deinit());
-    // const allocator = std.heap.page_allocator;
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    // defer std.debug.assert(!gpa.deinit());
+    const allocator = std.heap.page_allocator;
 
     transport = Stdio.init(allocator);
     logger.info("######## [ZLS MODIFIED] ########", .{});

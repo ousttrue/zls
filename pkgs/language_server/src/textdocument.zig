@@ -5,8 +5,7 @@ const ws = @import("workspace");
 const astutil = @import("astutil");
 const Config = ws.Config;
 const Document = astutil.Document;
-const DocumentStore = astutil.DocumentStore;
-const ImportSolver = astutil.ImportSolver;
+const Project = astutil.Project;
 const Line = ws.Line;
 const TypeWithHandle = ws.TypeWithHandle;
 const AstNode = astutil.AstNode;
@@ -167,13 +166,12 @@ const SymbolTree = struct {
     fn process(
         self: *Self,
         arena: *std.heap.ArenaAllocator,
-        import_solver: ImportSolver,
-        store: *DocumentStore,
+        project: ?Project,
         doc: *Document,
         encoding: Line.Encoding,
     ) !void {
         for (doc.ast_context.tree.rootDecls()) |decl| {
-            if (try self.traverse(arena, import_solver, store, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+            if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
                 try self.root.append(child);
             }
         }
@@ -182,8 +180,7 @@ const SymbolTree = struct {
     fn traverse(
         self: *Self,
         arena: *std.heap.ArenaAllocator,
-        import_solver: ImportSolver,
-        store: *DocumentStore,
+        project: ?Project,
         doc: *Document,
         node: AstNode,
         encoding: Line.Encoding,
@@ -193,7 +190,7 @@ const SymbolTree = struct {
         var buf: [2]u32 = undefined;
         switch (node.getChildren(&buf)) {
             .var_decl => |var_decl| {
-                const type_var = try VarType.fromVarDecl(import_solver, store, node.context, var_decl);
+                const type_var = try VarType.fromVarDecl(project, node.context, var_decl);
                 const text = try type_var.allocPrint(arena.allocator());
                 const token = node.getMainToken().getNext();
                 const range = try getRange(doc, token, encoding);
@@ -227,7 +224,7 @@ const SymbolTree = struct {
                                 if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
                                     var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
                                     for (container_decl.ast.members) |decl| {
-                                        if (try self.traverse(arena, import_solver, store, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+                                        if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
                                             try children.append(child);
                                         }
                                     }
@@ -240,7 +237,7 @@ const SymbolTree = struct {
                                 if (type_var.node.getContainerDecl(&buf2)) |container_decl| {
                                     var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
                                     for (container_decl.ast.members) |decl| {
-                                        if (try self.traverse(arena, import_solver, store, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
+                                        if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
                                             try children.append(child);
                                         }
                                     }
@@ -256,7 +253,7 @@ const SymbolTree = struct {
             },
             .container_field => |container_field| {
                 // EnumMember
-                const var_type = try VarType.fromContainerField(import_solver, store, node.context, container_field);
+                const var_type = try VarType.fromContainerField(project, node.context, container_field);
                 const text = try var_type.allocPrint(arena.allocator());
                 const token = AstToken.init(&node.context.tree, container_field.ast.name_token);
                 const range = try getRange(doc, token, encoding);
@@ -275,7 +272,7 @@ const SymbolTree = struct {
                         var buf2: [2]u32 = undefined;
                         if (fn_proto_node.getFnProto(&buf2)) |fn_proto| {
                             if (fn_proto.name_token) |name_token| {
-                                const type_var = try VarType.fromFnProtoReturn(import_solver, store, node.context, fn_proto);
+                                const type_var = try VarType.fromFnProtoReturn(project, node.context, fn_proto);
                                 const text = try type_var.allocPrint(arena.allocator());
                                 const token = AstToken.init(&node.context.tree, name_token);
                                 const range = try getRange(doc, token, encoding);
@@ -299,12 +296,11 @@ const SymbolTree = struct {
 
 pub fn to_symbols(
     arena: *std.heap.ArenaAllocator,
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     doc: *Document,
     encoding: Line.Encoding,
 ) anyerror![]lsp.DocumentSymbol {
     var symbol_tree = SymbolTree.init(arena.allocator());
-    try symbol_tree.process(arena, import_solver, store, doc, encoding);
+    try symbol_tree.process(arena, project, doc, encoding);
     return symbol_tree.toOwnedSlice();
 }

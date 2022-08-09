@@ -12,8 +12,7 @@ const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
 const VarType = astutil.VarType;
-const ImportSolver = astutil.ImportSolver;
-const DocumentStore = astutil.DocumentStore;
+const Project = astutil.Project;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
@@ -25,8 +24,7 @@ pub const Hover = struct {
 
 pub fn getHover(
     arena: *std.heap.ArenaAllocator,
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     doc: *Document,
     token: AstToken,
 ) !?Hover {
@@ -55,7 +53,7 @@ pub fn getHover(
             switch (node.getTag()) {
                 .identifier => {
                     if (Declaration.findFromBlock(node)) |decl| {
-                        const text = try decl.allocPrint(allocator);
+                        const text = try decl.allocPrint(allocator, project);
                         try w.print("local => {s}", .{text});
                         return Hover{
                             .text = text_buffer.items,
@@ -66,7 +64,7 @@ pub fn getHover(
                     }
                 },
                 else => {
-                    const var_type = try VarType.init(import_solver, store, node);
+                    const var_type = try VarType.init(project, node);
                     const text = try var_type.allocPrint(allocator);
                     try w.print("var_type: {s}", .{text});
                     return Hover{
@@ -104,8 +102,7 @@ pub fn getRename(
 
 pub fn getGoto(
     arena: *std.heap.ArenaAllocator,
-    import_solver: ImportSolver,
-    store: *DocumentStore,
+    project: ?Project,
     doc: *Document,
     token: AstToken,
 ) !?PathPosition {
@@ -115,17 +112,19 @@ pub fn getGoto(
     switch (token.getTag()) {
         .string_literal => {
             // goto import file
-            var text = token.getText();
-            if (text.len > 2) {
-                // unquote
-                text = text[1 .. text.len - 1];
-                if (std.mem.endsWith(u8, text, ".zig")) {
-                    if (import_solver.solve(doc.path, .{ .file = text })) |path| {
-                        return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
-                    }
-                } else {
-                    if (import_solver.solve(doc.path, .{ .pkg = text })) |path| {
-                        return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+            if (project) |p| {
+                var text = token.getText();
+                if (text.len > 2) {
+                    // unquote
+                    text = text[1 .. text.len - 1];
+                    if (std.mem.endsWith(u8, text, ".zig")) {
+                        if (p.import_solver.solve(doc.path, .{ .file = text })) |path| {
+                            return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                        }
+                    } else {
+                        if (p.import_solver.solve(doc.path, .{ .pkg = text })) |path| {
+                            return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                        }
                     }
                 }
             }
@@ -147,6 +146,8 @@ pub fn getGoto(
                     switch (node.getTag()) {
                         .identifier => {
                             if (Declaration.findFromBlock(node)) |decl| {
+                                const text = try decl.allocPrint(arena.allocator(), project);
+                                logger.debug("local => {s}", .{text});
                                 // local variable
                                 return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
                             } else if (Declaration.findFromContainer(node)) |decl| {
@@ -159,13 +160,9 @@ pub fn getGoto(
                         .field_access => {
                             var data = node.getData();
                             var lhs = AstNode.init(node.context, data.lhs);
-                            var var_type = try VarType.init(
-                                import_solver,
-                                store,
-                                lhs,
-                            );
+                            var var_type = try VarType.init(project, lhs);
                             var rhs = AstToken.init(&node.context.tree, data.rhs);
-                            if (try var_type.getMember(import_solver, store, rhs.getText())) |member| {
+                            if (try var_type.getMember(project, rhs.getText())) |member| {
                                 switch (member.data) {
                                     .field => |field| {
                                         const dst_token = AstToken.init(&node.context.tree, field.ast.name_token);

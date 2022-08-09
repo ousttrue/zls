@@ -128,6 +128,8 @@ pub fn getMember(self: Self, name: []const u8, buffer: []u32) ?Member {
             logger.err("not container", .{});
         },
     }
+
+    logger.err("not found: {s} from {s}", .{name, self.getMainToken().getText()});
     return null;
 }
 
@@ -171,15 +173,69 @@ test {
     const text: [:0]const u8 = try allocator.dupeZ(u8, source);
     defer allocator.free(text);
 
-    const context = try AstContext.new(allocator, text);
+    const context = try AstContext.new(allocator, .{}, text);
     defer context.delete();
 
     const node = fromTokenIndex(context, 0);
     try std.testing.expectEqual(node.getTag(), .fn_proto_simple);
 
-    const parent_node = node.parent().?;
+    const parent_node = node.getParent().?;
     try std.testing.expectEqual(parent_node.getTag(), .fn_decl);
 
-    const root_node = parent_node.parent().?;
+    const root_node = parent_node.getParent().?;
     try std.testing.expectEqual(root_node.getTag(), .root);
+}
+
+/// container/decl/this => this is container
+pub fn getContainerNodeForThis(self: Self) ?Self {
+    var buf3: [2]u32 = undefined;
+    std.debug.assert(self.getChildren(&buf3) == .builtin_call);
+    if (self.getParent()) |parent| {
+        var buf2: [2]u32 = undefined;
+        std.debug.assert(parent.getChildren(&buf2) == .var_decl);
+        if (parent.getParent()) |pp| {
+            var buf: [2]u32 = undefined;
+            if (pp.getChildren(&buf) == .container_decl) {
+                return pp;
+            }
+        }
+    }
+    return null;
+}
+
+test "@This" {
+
+    const source =
+        \\const Self = @This();
+        \\
+        \\value: u32 = 0,
+        \\
+        \\fn init() Self
+        \\{
+        \\    return .{};
+        \\}
+        \\
+        \\fn get(self: Self) u32
+        \\{
+        \\    return self.value;
+        \\}
+    ;
+    const allocator = std.testing.allocator;
+    const text: [:0]const u8 = try allocator.dupeZ(u8, source);
+    defer allocator.free(text);
+
+    const context = try AstContext.new(allocator, .{}, text);
+    defer context.delete();
+
+    const node = Self.fromTokenIndex(context, 3);
+    var buf:[2]u32 = undefined;
+    try std.testing.expect(node.getChildren(&buf) == .builtin_call);
+
+    const parent = node.getParent().?;
+    try std.testing.expect(parent.getChildren(&buf) == .var_decl);
+
+    const pp = parent.getParent().?;
+    try std.testing.expect(pp.getChildren(&buf) == .container_decl);
+
+    try std.testing.expectEqual(pp, node.getContainerNodeForThis().?);
 }

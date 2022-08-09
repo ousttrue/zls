@@ -64,6 +64,7 @@ pub fn openDocument(self: *Self, path: FixedPath, text: []const u8) !*Document {
         return doc;
     } else {
         // new document
+        logger.debug("new {s}", .{path.slice()});
         const doc = try Document.new(self.allocator, path, text);
         errdefer doc.delete();
         try self.store.put(doc);
@@ -81,19 +82,17 @@ pub fn getDocument(self: *Self, path: FixedPath) ?*Document {
     return null;
 }
 
-pub fn getOrLoadDocument(self: *Self, path: FixedPath) ?*Document {
+pub fn getOrLoadDocument(self: *Self, path: FixedPath) !?*Document {
     if (self.store.get(path)) |found| {
         return found;
     }
 
-    const contents = path.readContents(self.allocator) catch return null;
-    defer self.allocator.free(contents);
-    return self.openDocument(path, contents) catch unreachable;
+    return try self.store.getOrLoad(path);
 }
 
-pub fn resolveImport(self: *Self, doc: *Document, text: []const u8) ?*Document {
+pub fn resolveImport(self: *Self, doc: *Document, text: []const u8) !?*Document {
     return if (self.build_file.import_solver.solve(doc.path, ImportSolver.ImportType.fromText(text))) |path|
-        self.getOrLoadDocument(path)
+        try self.getOrLoadDocument(path)
     else
         null;
 }

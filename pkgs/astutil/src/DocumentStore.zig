@@ -2,6 +2,7 @@ const std = @import("std");
 const FixedPath = @import("./FixedPath.zig");
 const Document = @import("./Document.zig");
 const Utf8Buffer = @import("./Utf8Buffer.zig");
+const logger = std.log.scoped(.DocumentStore);
 const Self = @This();
 
 allocator: std.mem.Allocator,
@@ -20,6 +21,7 @@ pub fn deinit(self: *Self) void {
 
 pub fn put(self: *Self, doc: *Document) !void
 {
+    logger.debug("new {s}", .{doc.path.slice()});
     try self.path_document_map.put(doc.path.slice(), doc);
 }
 
@@ -33,10 +35,10 @@ pub fn getOrLoad(self: *Self, path: FixedPath) !?*Document {
     }
 
     // load
-    const text = path.readContents(self.allocator) catch return null;
+    const text = try path.readContents(self.allocator);
     defer self.allocator.free(text);
 
     const new_document = try Document.new(self.allocator, path, text);
-    try self.path_document_map.put(new_document.path.slice(), new_document);
+    try self.put(new_document);
     return new_document;
 }

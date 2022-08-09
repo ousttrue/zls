@@ -2,12 +2,19 @@ const std = @import("std");
 const FixedPath = @import("./FixedPath.zig");
 const logger = std.log.scoped(.ImportSolver);
 
+pub fn unquote(text: []const u8) []const u8 {
+    return if (text.len > 2 and text[0] == '"' and text[text.len - 1] == '"')
+        text[1 .. text.len - 1]
+    else
+        text;
+}
+
 pub const ImportType = union(enum) {
     pkg: []const u8,
     file: []const u8,
 
     pub fn fromText(text: []const u8) @This() {
-        return if (std.mem.endsWith(u8, text, ".zig")) .{ .file = text } else .{ .pkg = text };
+        return if (std.mem.endsWith(u8, text, ".zig")) .{ .file = unquote(text) } else .{ .pkg = unquote(text) };
     }
 };
 
@@ -39,15 +46,17 @@ pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
 pub fn solve(self: Self, base_path: FixedPath, import: ImportType) ?FixedPath {
     switch (import) {
         .pkg => |pkg_name| {
-            if (self.pkg_path_map.get(pkg_name)) |found| {
+            const text = unquote(pkg_name);
+            if (self.pkg_path_map.get(text)) |found| {
                 return found;
             } else {
-                logger.warn("pkg {s} not found", .{pkg_name});
+                logger.warn("pkg {s} not found", .{text});
                 return null;
             }
         },
         .file => |relative_path| {
-            return base_path.child(relative_path);
+            const text = unquote(relative_path);
+            return base_path.child(text);
         },
     }
 }

@@ -13,6 +13,7 @@ const semantic_tokens = ws.semantic_tokens;
 const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
+const Project = astutil.Project;
 const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const URI = @import("./uri.zig");
@@ -296,7 +297,7 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const doc = workspace.getDocument(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
-    const symbols = try textdocument.to_symbols(arena, workspace.build_file.import_solver, &workspace.store, doc, self.encoding);
+    const symbols = try textdocument.to_symbols(arena, Project.init(workspace.build_file.import_solver, &workspace.store), doc, self.encoding);
     return lsp.Response{
         .id = id,
         .result = .{
@@ -441,8 +442,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
 
     const hover_or_null: ?textdocument_position.Hover = try textdocument_position.getHover(
         arena,
-        workspace.build_file.import_solver,
-        &workspace.store,
+        Project.init(workspace.build_file.import_solver, &workspace.store),
         doc,
         token,
     );
@@ -492,8 +492,8 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, workspace.build_file.import_solver, &workspace.store, doc, token)) |location| {
-        const goto_doc = workspace.getOrLoadDocument(location.path) orelse return error.DocumentNotFound;
+    if (try textdocument_position.getGoto(arena, Project.init(workspace.build_file.import_solver, &workspace.store), doc, token)) |location| {
+        const goto_doc = (try workspace.getOrLoadDocument(location.path)) orelse return error.DocumentNotFound;
         const goto = try goto_doc.utf8_buffer.getPositionFromBytePosition(location.loc.start, self.encoding);
         const goto_pos = lsp.Position{ .line = goto.line, .character = goto.x };
 
