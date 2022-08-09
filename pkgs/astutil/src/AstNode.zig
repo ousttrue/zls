@@ -47,7 +47,26 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
 
     var buffer = std.ArrayList(u8).init(allocator);
     const w = buffer.writer();
+
+    // AST path
     try self.printRec(w);
+
+    // var NAME
+    // const NAME
+    // fn NAME(ARG0: type) RESULT;
+    // NAME: type,
+
+    var buf: [2]u32 = undefined;
+    switch (self.getChildren(&buf)) {
+        .var_decl => {
+            try w.print("[var_decl]", .{});
+        },
+        .switch_case => {
+            try w.print("[switch_payload]", .{});
+        },
+        else => {},
+    }
+
     return buffer.items;
 }
 
@@ -258,4 +277,33 @@ test "@This" {
     try std.testing.expect(pp.getChildren(&buf) == .container_decl);
 
     try std.testing.expectEqual(pp, node.getContainerNodeForThis().?);
+}
+
+pub fn isType(self: Self) bool {
+    switch(self.getTag())
+    {
+        
+    }
+    // init
+    // call param
+    // var/param : type
+    // fn_return
+
+    return false;
+}
+
+test "isType" {
+    const source =
+        \\const value: u32 = 0;
+    ;
+    const allocator = std.testing.allocator;
+    const text: [:0]const u8 = try allocator.dupeZ(u8, source);
+    defer allocator.free(text);
+
+    const context = try AstContext.new(allocator, .{}, text);
+    defer context.delete();
+
+    const node = Self.fromTokenIndex(context, 3);
+    std.debug.print("\nnode tag: {}\n", .{node.getTag()});
+    try std.testing.expect(node.isType());
 }
