@@ -708,7 +708,7 @@ pub fn resolveTypeOfNodeInternal(
             if (node_tags[import_param] != .string_literal) return null;
 
             const import_str = tree.tokenSlice(main_tokens[import_param]);
-            const new_handle = (workspace.resolveImport(doc, import_str[1 .. import_str.len - 1]) catch unreachable) orelse return null;
+            const new_handle = (workspace.project().resolveImport(doc, import_str[1 .. import_str.len - 1]) catch unreachable) orelse return null;
 
             // reference to node '0' which is root
             return Self.typeVal(new_handle, 0);

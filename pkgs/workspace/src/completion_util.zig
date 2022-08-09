@@ -907,7 +907,7 @@ pub fn process(
                 const prev = token.getPrev(); // lparen
                 const prev_prev = prev.getPrev(); //
                 if (std.mem.eql(u8, prev_prev.getText(), "@import")) {
-                    return try completeImport(arena, workspace.build_file.import_solver, doc, token, encoding);
+                    return try completeImport(arena, workspace.import_solver, doc, token, encoding);
                 }
                 return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
             },

@@ -8,21 +8,21 @@ const Ast = std.zig.Ast;
 const ast = astutil.ast;
 const FixedPath = astutil.FixedPath;
 const Document = astutil.Document;
-const BuildFile = @import("./BuildFile.zig");
 const ZigEnv = @import("./ZigEnv.zig");
 const DocumentScope = @import("./DocumentScope.zig");
 const PathPosition = astutil.PathPosition;
 const ImportSolver = astutil.ImportSolver;
 const DocumentStore = astutil.DocumentStore;
+const Project = astutil.Project;
 const logger = std.log.scoped(.Workspace);
 const Self = @This();
 
 allocator: std.mem.Allocator,
 zigenv: ZigEnv,
 root: FixedPath,
+import_solver : ImportSolver,
 store: DocumentStore,
 handles: std.AutoHashMap(*Document, *DocumentScope),
-build_file: *BuildFile,
 
 pub fn new(
     allocator: std.mem.Allocator,
@@ -31,35 +31,33 @@ pub fn new(
 ) !*Self {
     var self = try allocator.create(Self);
 
-    // build file is project_root/build.zig
-    var build_file = try BuildFile.new(allocator, root.child("build.zig"), zigenv);
-
     self.* = Self{
         .allocator = allocator,
         .zigenv = zigenv,
         .root = root,
+        .import_solver = ImportSolver.init(allocator),
         .store = DocumentStore.init(allocator),
         .handles = std.AutoHashMap(*Document, *DocumentScope).init(allocator),
-        .build_file = build_file,
     };
+
+    // initialize import_solver
+    try self.import_solver.push("std", zigenv.std_path);
+    try zigenv.loadPackages(allocator, &self.import_solver, root);
+
     return self;
 }
 
 pub fn delete(self: *Self) void {
     self.store.deinit();
-    // var entry_iterator = self.handles.iterator();
-    // while (entry_iterator.next()) |entry| {
-    //     self.allocator.free(entry.key_ptr.*);
-    //     entry.value_ptr.*.delete();
-    // }
+    self.import_solver.deinit();
     self.handles.deinit();
-    self.build_file.delete();
     self.allocator.destroy(self);
 }
 
-pub fn resolveImport(self: *Self, doc: *Document, text: []const u8) !?*Document {
-    return if (self.build_file.import_solver.solve(doc.path, ImportSolver.ImportType.fromText(text))) |path|
-        try self.store.getOrLoad(path)
-    else
-        null;
+pub fn project(self: *Self) Project
+{
+    return .{
+        .import_solver = self.import_solver,
+        .store = &self.store,
+    };
 }

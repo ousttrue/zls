@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const astutil = @import("astutil");
 const known_folders = @import("known-folders");
 const FixedPath = astutil.FixedPath;
+const ImportSolver = astutil.ImportSolver;
 const logger = std.log.scoped(.ZigEnv);
 
 pub fn findZig(allocator: std.mem.Allocator) !?[]const u8 {
@@ -242,4 +243,32 @@ pub fn runBuildRunner(self: Self, allocator: std.mem.Allocator, build_file_path:
             return error.RunFailed,
         else => return error.RunFailed,
     };
+}
+
+// json types
+const NamePath = struct {
+    name: []const u8,
+    path: []const u8,
+};
+
+const Project = struct {
+    // LibExeObjStep
+    objects: []const NamePath,
+    // Pkg
+    packages: []const NamePath,
+};
+
+// build file is project_root/build.zig
+pub fn loadPackages(self: Self, allocator: std.mem.Allocator, import_solver: *ImportSolver, root: FixedPath) !void {  
+    const zig_run_result = try self.runBuildRunner(allocator, root.child("build.zig"));
+    defer allocator.free(zig_run_result);
+
+    var stream = std.json.TokenStream.init(zig_run_result);
+    const options = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
+    const project = try std.json.parse(Project, &stream, options);
+    defer std.json.parseFree(Project, project, options);
+
+    for (project.packages) |pkg| {
+        try import_solver.push(pkg.name, root.child(pkg.path));
+    }
 }
