@@ -39,6 +39,11 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
+    if(self.pkg_path_map.get(pkg))|_|
+    {
+        return;
+    }
+
     const copy = try self.allocator.dupe(u8, pkg);
     try self.pkg_path_map.put(copy, path);
 }

@@ -140,7 +140,7 @@ pub fn exec(self: Self, allocator: std.mem.Allocator, args: []const []const u8) 
     });
 }
 
-pub fn readContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+pub fn allocReadContents(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     var file = try std.fs.cwd().openFile(self.slice(), .{});
     defer file.close();
 

@@ -54,7 +54,7 @@ pub fn getOrLoad(self: *Self, path: FixedPath) !?*Document {
     }
 
     // load
-    const text = try path.readContents(self.allocator);
+    const text = try path.allocReadContents(self.allocator);
     defer self.allocator.free(text);
 
     const new_document = try Document.new(self.allocator, path, text);
