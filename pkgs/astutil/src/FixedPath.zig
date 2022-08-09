@@ -62,7 +62,7 @@ pub fn parseUri(self: *Self, str: []const u8) !void {
             self.buffer._buffer[i] = (upper << 4) + lower;
             j += 3;
         } else {
-            self.buffer._buffer[i] = if (path[j] == '/') std.fs.path.sep else path[j];
+            self.buffer._buffer[i] = path[j];
             j += 1;
         }
     }

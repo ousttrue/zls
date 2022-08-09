@@ -57,42 +57,9 @@ pub fn delete(self: *Self) void {
     self.allocator.destroy(self);
 }
 
-pub fn openDocument(self: *Self, path: FixedPath, text: []const u8) !*Document {
-    if (self.store.get(path)) |doc| {
-        // update document
-        try doc.update(text);
-        return doc;
-    } else {
-        // new document
-        logger.debug("new {s}", .{path.slice()});
-        const doc = try Document.new(self.allocator, path, text);
-        errdefer doc.delete();
-        try self.store.put(doc);
-        try self.handles.putNoClobber(doc, try DocumentScope.new(self.allocator, &doc.ast_context.tree));
-        return doc;
-    }
-}
-
-pub fn getDocument(self: *Self, path: FixedPath) ?*Document {
-    if (self.store.get(path)) |found| {
-        return found;
-    }
-
-    logger.warn("not found: {s}", .{path.slice()});
-    return null;
-}
-
-pub fn getOrLoadDocument(self: *Self, path: FixedPath) !?*Document {
-    if (self.store.get(path)) |found| {
-        return found;
-    }
-
-    return try self.store.getOrLoad(path);
-}
-
 pub fn resolveImport(self: *Self, doc: *Document, text: []const u8) !?*Document {
     return if (self.build_file.import_solver.solve(doc.path, ImportSolver.ImportType.fromText(text))) |path|
-        try self.getOrLoadDocument(path)
+        try self.store.getOrLoad(path)
     else
         null;
 }

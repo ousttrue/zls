@@ -25,13 +25,32 @@ pub fn put(self: *Self, doc: *Document) !void
     try self.path_document_map.put(doc.path.slice(), doc);
 }
 
+pub fn update(self: *Self, path: FixedPath, text: []const u8) !void
+{
+    if (self.path_document_map.get(path.slice())) |doc| {
+        // already opened. udpate content
+        try doc.update(text);
+    } else {
+        // new document
+        const doc = try Document.new(self.allocator, path, text);
+        try self.put(doc);
+    }   
+}
+
 pub fn get(self: Self, path: FixedPath) ?*Document {
-    return self.path_document_map.get(path.slice());
+    if(self.path_document_map.get(path.slice())) |doc|
+    {
+        return doc;
+    }
+
+    logger.warn("not found: {s}", .{path.slice()});
+    return null;
 }
 
 pub fn getOrLoad(self: *Self, path: FixedPath) !?*Document {
-    if (self.get(path)) |document| {
-        return document;
+    if(self.path_document_map.get(path.slice())) |doc|
+    {
+        return doc;
     }
 
     // load
