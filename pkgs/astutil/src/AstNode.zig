@@ -3,6 +3,7 @@ const Ast = std.zig.Ast;
 const AstContext = @import("./AstContext.zig");
 const AstToken = @import("./AstToken.zig");
 const AstNodeIterator = @import("./AstNodeIterator.zig");
+const PathPosition = @import("./PathPosition.zig");
 const logger = std.log.scoped(.AstNode);
 const Self = @This();
 
@@ -19,6 +20,14 @@ pub fn init(context: *const AstContext, index: u32) Self {
 pub fn fromTokenIndex(context: *const AstContext, token_idx: u32) Self {
     const idx = context.tokens_node[token_idx];
     return init(context, idx);
+}
+
+pub fn getPosition(self: Self) PathPosition
+{
+    return .{
+        .path = self.context.path,
+        .loc = self.getMainToken().getLoc(),
+    };
 }
 
 fn printRec(self: Self, w: anytype) std.mem.Allocator.Error!void {
@@ -134,7 +143,6 @@ pub fn getMember(self: Self, name: []const u8) ?Self {
                 switch (child_node.getChildren(&buf2)) {
                     .container_field => |container_field| {
                         const token = AstToken.init(&self.context.tree, container_field.ast.name_token);
-                        logger.debug("{s} <=> {s}", .{ token.getText(), name });
                         if (std.mem.eql(u8, token.getText(), name)) {
                             return child_node;
                         }

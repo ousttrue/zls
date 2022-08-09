@@ -170,7 +170,7 @@ pub fn getGoto(
                             // rhs
                             var rhs = AstToken.init(&node.context.tree, data.rhs);
                             if (try var_type.getMember(project, rhs.getText())) |member| {
-                                return PathPosition{ .path = doc.path, .loc = member.getMainToken().getLoc() };
+                                return member.getPosition();
                             } else {
                                 logger.debug("not member", .{});
                                 return null;
