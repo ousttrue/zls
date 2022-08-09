@@ -101,14 +101,8 @@ pub fn getHover(
 fn gotoImport(project: ?Project, import_from: FixedPath, text: []const u8) ?PathPosition {
     if (project) |p| {
         if (text.len > 2) {
-            if (std.mem.endsWith(u8, text, ".zig")) {
-                if (p.import_solver.solve(import_from, .{ .file = text })) |path| {
-                    return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
-                }
-            } else {
-                if (p.import_solver.solve(import_from, .{ .pkg = text })) |path| {
-                    return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
-                }
+            if (p.import_solver.solve(import_from, text)) |path| {
+                return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
             }
         }
     }

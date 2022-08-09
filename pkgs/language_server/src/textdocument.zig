@@ -12,6 +12,7 @@ const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const VarType = astutil.VarType;
+const ImportSolver = astutil.ImportSolver;
 const ast = astutil.ast;
 const logger = std.log.scoped(.textdocument);
 
@@ -199,10 +200,7 @@ const SymbolTree = struct {
                         // .Package or .File
                         try self.imports.append(lsp.DocumentSymbol{
                             .name = token.getText(),
-                            .kind = switch (import) {
-                                .pkg => .Package,
-                                .file => .File,
-                            },
+                            .kind = if (std.mem.endsWith(u8, ImportSolver.unquote(import), ".zig")) .File else .Package,
                             .range = range,
                             .selectionRange = range,
                             .detail = text,

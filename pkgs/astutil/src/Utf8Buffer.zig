@@ -100,7 +100,7 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line
 }
 
 pub fn getLineIndexFromBytePosition(self: Self, byte_position: usize) !usize {
-    if(byte_position>=self.text.len)
+    if(byte_position>self.text.len)
     {
         return error.OutOfRange;
     }

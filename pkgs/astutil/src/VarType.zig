@@ -13,7 +13,7 @@ const Self = @This();
 
 node: AstNode,
 kind: union(enum) {
-    import: ImportSolver.ImportType,
+    import: []const u8,
     this,
     builtin,
     call,
@@ -37,25 +37,12 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
             if (std.mem.eql(u8, builtin, "@import")) {
                 const param = AstNode.init(node.context, builtin_call.ast.params[0]);
                 const text = param.getMainToken().getText();
-                if (std.mem.endsWith(u8, text, ".zig\"")) {
-                    return Self{
-                        .node = node,
-                        .kind = .{
-                            .import = .{
-                                .file = text,
-                            },
-                        },
-                    };
-                } else {
-                    return Self{
-                        .node = node,
-                        .kind = .{
-                            .import = .{
-                                .pkg = text,
-                            },
-                        },
-                    };
-                }
+                return Self{
+                    .node = node,
+                    .kind = .{
+                        .import = text,                            
+                    },
+                };
             } else if (std.mem.eql(u8, builtin, "@This")) {
                 if (node.getContainerNodeForThis()) |container_node| {
                     return try init(project, container_node);
@@ -270,14 +257,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             try w.print("unknown: node tag = {s}", .{@tagName(self.node.getTag())});
         },
         .import => |import| {
-            switch (import) {
-                .pkg => |pkg| {
-                    try w.print("@import pkg {s}", .{pkg});
-                },
-                .file => |file| {
-                    try w.print("@import file {s}", .{file});
-                },
-            }
+            try w.print("@import {s}", .{import});            
         },
         else => {
             try w.print("{s}", .{@tagName(self.kind)});
