@@ -1,19 +1,12 @@
-///
-/// * Workspace
-///    * uri: Document
-///
 const std = @import("std");
 const astutil = @import("astutil");
 const Ast = std.zig.Ast;
-const ast = astutil.ast;
 const FixedPath = astutil.FixedPath;
 const Document = astutil.Document;
-const ZigEnv = @import("./ZigEnv.zig");
-const DocumentScope = @import("./DocumentScope.zig");
-const PathPosition = astutil.PathPosition;
 const ImportSolver = astutil.ImportSolver;
 const DocumentStore = astutil.DocumentStore;
 const Project = astutil.Project;
+const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.Workspace);
 const Self = @This();
 
@@ -22,7 +15,6 @@ zigenv: ZigEnv,
 root: FixedPath,
 import_solver : ImportSolver,
 store: DocumentStore,
-handles: std.AutoHashMap(*Document, *DocumentScope),
 
 pub fn new(
     allocator: std.mem.Allocator,
@@ -37,7 +29,6 @@ pub fn new(
         .root = root,
         .import_solver = ImportSolver.init(allocator),
         .store = DocumentStore.init(allocator),
-        .handles = std.AutoHashMap(*Document, *DocumentScope).init(allocator),
     };
 
     // initialize import_solver
@@ -50,7 +41,6 @@ pub fn new(
 pub fn delete(self: *Self) void {
     self.store.deinit();
     self.import_solver.deinit();
-    self.handles.deinit();
     self.allocator.destroy(self);
 }
 

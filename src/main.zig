@@ -189,17 +189,17 @@ pub fn main() anyerror!void {
     // document request
     dispatcher.registerRequest(&language_server, "textDocument/semanticTokens/full");
     dispatcher.registerRequest(&language_server, "textDocument/documentSymbol");
-    dispatcher.registerRequest(&language_server, "textDocument/codeLens");
-    dispatcher.registerRequest(&language_server, "codeLens/resolve");
+    // dispatcher.registerRequest(&language_server, "textDocument/codeLens");
+    // dispatcher.registerRequest(&language_server, "codeLens/resolve");
     // document position request
     dispatcher.registerRequest(&language_server, "textDocument/hover");
     dispatcher.registerRequest(&language_server, "textDocument/formatting");
     dispatcher.registerRequest(&language_server, "textDocument/definition");
     dispatcher.registerNotify(&language_server, "$/cancelRequest");
     dispatcher.registerRequest(&language_server, "textDocument/completion");
-    dispatcher.registerRequest(&language_server, "textDocument/rename");
-    dispatcher.registerRequest(&language_server, "textDocument/references");
-    dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
+    // dispatcher.registerRequest(&language_server, "textDocument/rename");
+    // dispatcher.registerRequest(&language_server, "textDocument/references");
+    // dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
 
     // start
     jsonrpc.readloop(allocator, &transport, &dispatcher, &language_server.notification_queue);
