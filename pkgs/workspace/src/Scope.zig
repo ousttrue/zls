@@ -1,7 +1,7 @@
 const std = @import("std");
 const astutil = @import("astutil");
 const Ast = std.zig.Ast;
-const Document = @import("./Document.zig");
+const Document = astutil.Document;
 const ast = astutil.ast;
 
 pub const Declaration = union(enum) {

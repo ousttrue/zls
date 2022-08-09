@@ -2,7 +2,7 @@ const std = @import("std");
 const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
-const Document = @import("./Document.zig");
+const Document = astutil.Document;
 const PathPosition = astutil.PathPosition;
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const Scope = @import("./Scope.zig");
@@ -26,7 +26,7 @@ fn isContainerDecl(self: Self) bool {
 }
 
 pub fn nameToken(self: Self) Ast.TokenIndex {
-    const tree = self.handle.ast_context.tree;
+    const tree = &self.handle.ast_context.tree;
     return switch (self.decl.*) {
         .ast_node => |n| ast.getDeclNameToken(tree, n).?,
         .param_decl => |p| p.name_token.?,
@@ -43,7 +43,7 @@ pub fn bytePosition(self: Self) usize {
     return tree.tokens.items(.start)[self.nameToken()];
 }
 
-pub fn isNodePublic(tree: Ast, node: Ast.Node.Index) bool {
+pub fn isNodePublic(tree: *const Ast, node: Ast.Node.Index) bool {
     var buf: [1]Ast.Node.Index = undefined;
     return switch (tree.nodes.items(.tag)[node]) {
         .global_var_decl,
@@ -63,7 +63,7 @@ pub fn isNodePublic(tree: Ast, node: Ast.Node.Index) bool {
 
 pub fn isPublic(self: Self) bool {
     return switch (self.decl.*) {
-        .ast_node => |node| isNodePublic(self.handle.ast_context.tree, node),
+        .ast_node => |node| isNodePublic(&self.handle.ast_context.tree, node),
         else => true,
     };
 }
@@ -81,7 +81,7 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
             bound_type_params,
         ),
         .param_decl => |param_decl| {
-            if (TypeWithHandle.isMetaType(self.handle.ast_context.tree, param_decl.type_expr)) {
+            if (TypeWithHandle.isMetaType(&self.handle.ast_context.tree, param_decl.type_expr)) {
                 var bound_param_it = bound_type_params.iterator();
                 while (bound_param_it.next()) |entry| {
                     if (std.meta.eql(entry.key_ptr.*, param_decl)) return entry.value_ptr.*;
@@ -139,11 +139,11 @@ pub fn resolveType(self: Self, arena: *std.heap.ArenaAllocator, workspace: *Work
                 return null;
 
             if (node_tags[pay.items[0]] == .enum_literal) {
-                const scope = switch_expr_type.handle.document_scope.findContainerScope(switch_expr_type.type.data.other) orelse return null;
+                const scope = workspace.handles.get(switch_expr_type.handle).?.findContainerScope(switch_expr_type.type.data.other) orelse return null;
                 if (scope.decls.getEntry(tree.tokenSlice(main_tokens[pay.items[0]]))) |candidate| {
                     switch (candidate.value_ptr.*) {
                         .ast_node => |node| {
-                            if (ast.containerField(switch_expr_type.handle.ast_context.tree, node)) |container_field| {
+                            if (ast.containerField(&switch_expr_type.handle.ast_context.tree, node)) |container_field| {
                                 if (container_field.ast.type_expr != 0) {
                                     return (TypeWithHandle.resolveTypeOfNodeInternal(
                                         arena,
@@ -204,7 +204,7 @@ pub fn renameSymbol(
 ) ![]PathPosition {
     std.debug.assert(self.decl.* != .label_decl);
     var locations = std.ArrayList(PathPosition).init(arena.allocator());
-    try self.symbolReferences(arena, workspace, true, &locations, true);
+    try self.symbolReferences(arena, workspace, true, &locations);
     return locations.items;
 }
 
@@ -255,7 +255,7 @@ fn symbolReferencesInternal(
     node: Ast.Node.Index,
     locations: *std.ArrayList(PathPosition),
 ) error{OutOfMemory}!void {
-    const tree = doc.ast_context.tree;
+    const tree = &doc.ast_context.tree;
     if (node > tree.nodes.len) return;
     const node_tags = tree.nodes.items(.tag);
     const datas = tree.nodes.items(.data);
@@ -391,7 +391,7 @@ fn symbolReferencesInternal(
         => {
             var buf: [1]Ast.Node.Index = undefined;
             const fn_proto = ast.fnProto(tree, node, &buf).?;
-            var it = fn_proto.iterate(&tree);
+            var it = fn_proto.iterate(tree);
             while (it.next()) |param| {
                 if (param.type_expr != 0)
                     try self.symbolReferencesInternal(arena, workspace, doc, param.type_expr, locations);
@@ -737,7 +737,6 @@ pub fn symbolReferences(
     workspace: *Workspace,
     include_decl: bool,
     locations: *std.ArrayList(PathPosition),
-    skip_std_references: bool,
 ) !void {
     std.debug.assert(self.decl.* != .label_decl);
     const curr_handle = self.handle;
@@ -755,56 +754,56 @@ pub fn symbolReferences(
                 locations,
             );
 
-            var imports = std.ArrayList(*Document).init(arena.allocator());
+            // var imports = std.ArrayList(*Document).init(arena.allocator());
 
-            var handle_it = workspace.handles.iterator();
-            while (handle_it.next()) |entry| {
-                if (skip_std_references and std.mem.indexOf(u8, entry.key_ptr.*, "std") != null) {
-                    if (!include_decl or entry.value_ptr.* != curr_handle)
-                        continue;
-                }
+            // var handle_it = workspace.handles.iterator();
+            // while (handle_it.next()) |entry| {
+            //     if (skip_std_references and std.mem.indexOf(u8, entry.key_ptr.*, "std") != null) {
+            //         if (!include_decl or entry.value_ptr.* != curr_handle)
+            //             continue;
+            //     }
 
-                // Check entry's transitive imports
-                try imports.append(entry.value_ptr.*);
-                // var i: usize = 0;
-                // blk: while (i < imports.items.len) : (i += 1) {
-                //     const import = imports.items[i];
-                //     for (import.imports_used.items) |uri| {
-                //         const h = workspace.getDocument(uri) orelse break;
+            //     // Check entry's transitive imports
+            //     try imports.append(entry.value_ptr.*);
+            //     // var i: usize = 0;
+            //     // blk: while (i < imports.items.len) : (i += 1) {
+            //     //     const import = imports.items[i];
+            //     //     for (import.imports_used.items) |uri| {
+            //     //         const h = workspace.getDocument(uri) orelse break;
 
-                //         if (h == curr_handle) {
-                //             // entry does import curr_handle
-                //             try self.symbolReferencesInternal(
-                //                 arena,
-                //                 workspace,
-                //                 entry.value_ptr.*,
-                //                 0,
-                //                 locations,
-                //             );
-                //             break :blk;
-                //         }
+            //     //         if (h == curr_handle) {
+            //     //             // entry does import curr_handle
+            //     //             try self.symbolReferencesInternal(
+            //     //                 arena,
+            //     //                 workspace,
+            //     //                 entry.value_ptr.*,
+            //     //                 0,
+            //     //                 locations,
+            //     //             );
+            //     //             break :blk;
+            //     //         }
 
-                //         select: {
-                //             for (imports.items) |item| {
-                //                 if (item == h) {
-                //                     // already checked this import
-                //                     break :select;
-                //                 }
-                //             }
-                //             try imports.append(h);
-                //         }
-                //     }
-                // }
-                try imports.resize(0);
-            }
+            //     //         select: {
+            //     //             for (imports.items) |item| {
+            //     //                 if (item == h) {
+            //     //                     // already checked this import
+            //     //                     break :select;
+            //     //                 }
+            //     //             }
+            //     //             try imports.append(h);
+            //     //         }
+            //     //     }
+            //     // }
+            //     try imports.resize(0);
+            // }
         },
         .param_decl => |param| {
             // Rename the param tok.
-            const fn_node: Ast.full.FnProto = loop: for (curr_handle.document_scope.scopes.items) |scope| {
+            const fn_node: Ast.full.FnProto = loop: for (workspace.handles.get(curr_handle).?.scopes.items) |scope| {
                 switch (scope.data) {
                     .function => |proto| {
                         var buf: [1]Ast.Node.Index = undefined;
-                        const fn_proto = ast.fnProto(curr_handle.ast_context.tree, proto, &buf).?;
+                        const fn_proto = ast.fnProto(&curr_handle.ast_context.tree, proto, &buf).?;
                         var it = fn_proto.iterate(&curr_handle.ast_context.tree);
                         while (it.next()) |candidate| {
                             if (std.meta.eql(candidate, param)) {
@@ -907,10 +906,10 @@ pub fn hoverSymbol(
     return hover_text;
 }
 
-pub fn lookupLabel(handle: *Document, source_index: usize) error{OutOfMemory}!?Self {
+pub fn lookupLabel(workspace: *Workspace, handle: *Document, source_index: usize) error{OutOfMemory}!?Self {
     const token_with_index = handle.ast_context.tokenFromBytePos(source_index) orelse return null;
     const symbol = handle.ast_context.getTokenText(token_with_index.token);
-    for (handle.document_scope.scopes) |scope| {
+    for (workspace.handles.get(handle).?.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             if (scope.decls.getEntry(symbol)) |candidate| {
                 switch (candidate.value_ptr.*) {

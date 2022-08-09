@@ -4,6 +4,7 @@ const FixedPath = astutil.FixedPath;
 const ImportSolver = astutil.ImportSolver;
 const ZigEnv = @import("./ZigEnv.zig");
 const logger = std.log.scoped(.BuildFile);
+var STD = "std";
 const Self = @This();
 
 allocator: std.mem.Allocator,
@@ -18,7 +19,7 @@ pub fn new(allocator: std.mem.Allocator, path: FixedPath, zigenv: ZigEnv) !*Self
         .import_solver = ImportSolver.init(allocator),
     };
 
-    try self.import_solver.push("std", zigenv.std_path);
+    try self.import_solver.push(STD, zigenv.std_path);
 
     // } else if (std.mem.eql(u8, import_str, "builtin")) {
     //     // special path

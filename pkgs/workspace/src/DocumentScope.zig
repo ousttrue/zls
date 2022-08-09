@@ -8,7 +8,7 @@ const Declaration = Scope.Declaration;
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const logger = std.log.scoped(.DocumentScope);
 
-fn nodeSourceRange(tree: Ast, node: Ast.Node.Index) std.zig.Token.Loc {
+fn nodeSourceRange(tree: *const Ast, node: Ast.Node.Index) std.zig.Token.Loc {
     const loc_start = ast.tokenLocation(tree, tree.firstToken(node));
     const loc_end = ast.tokenLocation(tree, ast.lastToken(tree, node));
 
@@ -50,8 +50,9 @@ scopes: std.ArrayList(Scope),
 errors: CompletionSet = .{},
 enums: CompletionSet = .{},
 
-pub fn init(allocator: std.mem.Allocator, tree: Ast) !Self {
-    var self = Self{
+pub fn new(allocator: std.mem.Allocator, tree: *const Ast) !*Self {
+    var self = try allocator.create(Self);
+    self.* = Self{
         .allocator = allocator,
         .scopes = std.ArrayList(Scope).init(allocator),
     };
@@ -59,7 +60,7 @@ pub fn init(allocator: std.mem.Allocator, tree: Ast) !Self {
     return self;
 }
 
-pub fn deinit(self: *Self) void {
+pub fn delete(self: *Self) void {
     for (self.scopes.items) |*scope| {
         scope.decls.deinit();
         self.allocator.free(scope.uses);
@@ -76,11 +77,13 @@ pub fn deinit(self: *Self) void {
         if (item.documentation) |doc| self.allocator.free(doc.value);
     }
     self.enums.deinit(self.allocator);
+
+    self.allocator.destroy(self);
 }
 
 fn makeScopeInternal(
     self: *Self,
-    tree: Ast,
+    tree: *const Ast,
     /// decl
     node_idx: Ast.Node.Index,
 ) error{OutOfMemory}!void {
@@ -240,7 +243,7 @@ fn makeScopeInternal(
             var scope_idx = self.scopes.items.len - 1;
             errdefer self.scopes.items[scope_idx].decls.deinit();
 
-            var it = func.iterate(&tree);
+            var it = func.iterate(tree);
             while (it.next()) |param| {
                 // Add parameter decls
                 if (param.name_token) |name_token| {

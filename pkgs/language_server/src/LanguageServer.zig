@@ -381,7 +381,7 @@ pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id
             .fn_proto => |fn_proto| {
                 const token_idx = fn_proto.ast.fn_token;
                 const token = AstToken.init(&doc.ast_context.tree, token_idx);
-                const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token, true, self.config)) |refs| refs.len else 0;
+                const n = if (try textdocument_position.getRenferences(arena, workspace, doc, token, true)) |refs| refs.len else 0;
                 const loc = token.getLoc();
                 const start = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, self.encoding);
                 const end = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, self.encoding);
@@ -624,7 +624,6 @@ pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, 
         doc,
         token,
         params.context.includeDeclaration,
-        self.config,
     )) |src| {
         var locations = std.ArrayList(lsp.Location).init(arena.allocator());
         for (src) |location| {

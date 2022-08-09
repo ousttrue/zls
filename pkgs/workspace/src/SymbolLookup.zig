@@ -2,7 +2,7 @@ const std = @import("std");
 const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
-const Document = @import("./Document.zig");
+const Document = astutil.Document;
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const FieldAccessReturn = @import("./FieldAccessReturn.zig");
@@ -93,7 +93,7 @@ pub fn lookupSymbolContainer(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    if (doc.document_scope.findContainerScope(container)) |container_scope| {
+    if (workspace.handles.get(doc).?.findContainerScope(container)) |container_scope| {
         if (container_scope.decls.getEntry(symbol)) |candidate| {
             switch (candidate.value_ptr.*) {
                 .ast_node => |node| {
@@ -125,11 +125,11 @@ pub fn lookupSymbolGlobalTokenIndex(
     token: AstToken,
 ) ?DeclWithHandle {
     const loc = token.getLoc();
-    const innermost_scope_idx = handle.document_scope.innermostBlockScopeIndex(loc.start);
+    const innermost_scope_idx = workspace.handles.get(handle).?.innermostBlockScopeIndex(loc.start);
 
     var curr = innermost_scope_idx;
     while (curr >= 0) : (curr -= 1) {
-        const scope = &handle.document_scope.scopes.items[curr];
+        const scope = &workspace.handles.get(handle).?.scopes.items[curr];
         if (loc.start >= scope.range.start and loc.end <= scope.range.end) blk: {
             if (scope.decls.getEntry(token.getText())) |candidate| {
                 switch (candidate.value_ptr.*) {
@@ -163,7 +163,7 @@ fn resolveVarDeclAliasInternal(
     root: bool,
 ) ?DeclWithHandle {
     _ = root;
-    const tree = handle.ast_context.tree;
+    const tree = &handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const main_tokens = tree.nodes.items(.main_token);
     const datas = tree.nodes.items(.data);
@@ -204,7 +204,7 @@ fn resolveVarDeclAliasInternal(
                 .other => |n| n,
                 else => return null,
             };
-            if (!ast.isContainer(resolved.handle.ast_context.tree, resolved_node)) return null;
+            if (!ast.isContainer(&resolved.handle.ast_context.tree, resolved_node)) return null;
             container_handle = resolved.handle;
             container_node = resolved_node;
         } else {
@@ -240,7 +240,7 @@ pub fn resolveVarDeclAlias(
     const token_tags = tree.tokens.items(.tag);
     const node_tags = tree.nodes.items(.tag);
 
-    if (ast.varDecl(handle.ast_context.tree, decl)) |var_decl| {
+    if (ast.varDecl(&handle.ast_context.tree, decl)) |var_decl| {
         if (var_decl.ast.init_node == 0) return null;
         const base_exp = var_decl.ast.init_node;
         if (token_tags[var_decl.ast.mut_token] != .keyword_const) return null;

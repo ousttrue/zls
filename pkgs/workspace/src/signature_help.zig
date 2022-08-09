@@ -4,7 +4,7 @@ const FieldAccessReturn = @import("./FieldAccessReturn.zig");
 const TypeWithHandle = @import("./TypeWithHandle.zig");
 const DeclWithHandle = @import("./DeclWithHandle.zig");
 const Workspace = @import("./Workspace.zig");
-const Document = @import("./Document.zig");
+const Document = astutil.Document;
 const lsp = @import("lsp");
 const Ast = std.zig.Ast;
 const Token = std.zig.Token;
@@ -24,7 +24,7 @@ fn fnProtoToSignatureInfo(
 ) !lsp.SignatureInformation {
     const ParameterInformation = lsp.SignatureInformation.ParameterInformation;
 
-    const tree = handle.ast_context.tree;
+    const tree = &handle.ast_context.tree;
     const token_starts = tree.tokens.items(.start);
     const alloc = arena.allocator();
     const label = ast.getFunctionSignature(tree, proto);
@@ -36,7 +36,7 @@ fn fnProtoToSignatureInfo(
     } else commas;
 
     var params = std.ArrayListUnmanaged(ParameterInformation){};
-    var param_it = proto.iterate(&tree);
+    var param_it = proto.iterate(tree);
     while (param_it.next()) |param| {
         const param_comments = if (param.first_doc_comment) |dc|
             try ast.collectDocComments(alloc, tree, dc, .Markdown, false)
@@ -89,8 +89,8 @@ pub fn getSignatureInfo(
 ) !?lsp.SignatureInformation {
     const token = doc.ast_context.tokens[token_index];
     const byte_position = token.loc.start;
-    const innermost_block = doc.document_scope.innermostBlockScope(byte_position);
-    const tree = doc.ast_context.tree;
+    const innermost_block = workspace.handles.get(doc).?.innermostBlockScope(byte_position);
+    const tree = &doc.ast_context.tree;
     const token_tags = tree.tokens.items(.tag);
     const token_starts = tree.tokens.items(.start);
 
@@ -294,7 +294,7 @@ pub fn getSignatureInfo(
                     };
 
                     var buf: [1]Ast.Node.Index = undefined;
-                    if (ast.fnProto(type_handle.handle.ast_context.tree, node, &buf)) |proto| {
+                    if (ast.fnProto(&type_handle.handle.ast_context.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
                             arena,
                             paren_commas,
@@ -349,7 +349,7 @@ pub fn getSignatureInfo(
                         }
                     }
 
-                    if (ast.fnProto(res_handle.ast_context.tree, node, &buf)) |proto| {
+                    if (ast.fnProto(&res_handle.ast_context.tree, node, &buf)) |proto| {
                         return try fnProtoToSignatureInfo(
                             arena,
                             paren_commas,

@@ -1,7 +1,6 @@
 const std = @import("std");
 const astutil = @import("astutil");
 pub const Workspace = @import("./Workspace.zig");
-pub const Document = @import("./Document.zig");
 pub const Line = astutil.Line;
 pub const Config = @import("./Config.zig");
 pub const ZigEnv = @import("./ZigEnv.zig");

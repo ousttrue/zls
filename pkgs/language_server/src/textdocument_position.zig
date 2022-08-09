@@ -3,7 +3,7 @@ const astutil = @import("astutil");
 const ws = @import("workspace");
 const Config = ws.Config;
 const Workspace = ws.Workspace;
-const Document = ws.Document;
+const Document = astutil.Document;
 const PathPosition = astutil.PathPosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const SymbolLookup = ws.SymbolLookup;
@@ -219,7 +219,6 @@ pub fn getRenferences(
     doc: *Document,
     token: AstToken,
     include_decl: bool,
-    config: *Config,
 ) !?[]PathPosition {
     if (token.getTag() != .identifier) {
         return null;
@@ -232,6 +231,6 @@ pub fn getRenferences(
     };
 
     var locs = std.ArrayList(PathPosition).init(arena.allocator());
-    try decl.symbolReferences(arena, workspace, include_decl, &locs, config.skip_std_references);
+    try decl.symbolReferences(arena, workspace, include_decl, &locs);
     return locs.items;
 }

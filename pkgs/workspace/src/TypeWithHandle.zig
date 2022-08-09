@@ -2,7 +2,7 @@ const std = @import("std");
 const astutil = @import("astutil");
 const Ast = std.zig.Ast;
 const Workspace = @import("./Workspace.zig");
-const Document = @import("./Document.zig");
+const Document = astutil.Document;
 const ast = astutil.ast;
 const AstToken = astutil.AstToken;
 pub const BoundTypeParams = std.AutoHashMap(Ast.full.FnProto.Param, Self);
@@ -10,7 +10,7 @@ const DeclWithHandle = @import("./DeclWithHandle.zig");
 const SymbolLookup = @import("./SymbolLookup.zig");
 const logger = std.log.scoped(.TypeWithHandle);
 
-pub fn getDeclName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+pub fn getDeclName(tree: *const Ast, node: Ast.Node.Index) ?[]const u8 {
     const name = tree.tokenSlice(ast.getDeclNameToken(tree, node) orelse return null);
     return switch (tree.nodes.items(.tag)[node]) {
         .test_decl => name[1 .. name.len - 1],
@@ -18,7 +18,7 @@ pub fn getDeclName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     };
 }
 
-fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
+fn isBlock(tree: *const Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodes.items(.tag)[node]) {
         .block,
         .block_semicolon,
@@ -29,7 +29,7 @@ fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
     };
 }
 
-fn findReturnStatementInternal(tree: Ast, fn_decl: Ast.full.FnProto, body: Ast.Node.Index, already_found: *bool) ?Ast.Node.Index {
+fn findReturnStatementInternal(tree: *const Ast, fn_decl: Ast.full.FnProto, body: Ast.Node.Index, already_found: *bool) ?Ast.Node.Index {
     var result: ?Ast.Node.Index = null;
 
     const node_tags = tree.nodes.items(.tag);
@@ -78,24 +78,24 @@ fn findReturnStatementInternal(tree: Ast, fn_decl: Ast.full.FnProto, body: Ast.N
     return result;
 }
 
-pub fn findReturnStatement(tree: Ast, fn_decl: Ast.full.FnProto, body: Ast.Node.Index) ?Ast.Node.Index {
+pub fn findReturnStatement(tree: *const Ast, fn_decl: Ast.full.FnProto, body: Ast.Node.Index) ?Ast.Node.Index {
     var already_found = false;
     return findReturnStatementInternal(tree, fn_decl, body, &already_found);
 }
 
 /// The node is the meta-type `type`
-pub fn isMetaType(tree: Ast, node: Ast.Node.Index) bool {
+pub fn isMetaType(tree: *const Ast, node: Ast.Node.Index) bool {
     if (tree.nodes.items(.tag)[node] == .identifier) {
         return std.mem.eql(u8, tree.tokenSlice(tree.nodes.items(.main_token)[node]), "type");
     }
     return false;
 }
 
-pub fn isTypeFunction(tree: Ast, func: Ast.full.FnProto) bool {
+pub fn isTypeFunction(tree: *const Ast, func: Ast.full.FnProto) bool {
     return isMetaType(tree, func.ast.return_type);
 }
 
-pub fn isGenericFunction(tree: Ast, func: Ast.full.FnProto) bool {
+pub fn isGenericFunction(tree: *const Ast, func: Ast.full.FnProto) bool {
     var it = func.iterate(&tree);
     while (it.next()) |param| {
         if (param.anytype_ellipsis3 != null or param.comptime_noalias != null) {
@@ -138,7 +138,7 @@ pub fn isTypeIdent(tree: Ast, token_idx: Ast.TokenIndex) bool {
     return true;
 }
 
-pub fn isPtrType(tree: Ast, node: Ast.Node.Index) bool {
+pub fn isPtrType(tree: *const Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodes.items(.tag)[node]) {
         .ptr_type,
         .ptr_type_aligned,
@@ -208,11 +208,11 @@ pub fn deinit() void {
     resolve_trail.deinit();
 }
 
-pub fn innermostContainer(handle: *Document, source_index: usize) Self {
-    var current = handle.document_scope.scopes.items[0].data.container;
-    if (handle.document_scope.scopes.items.len == 1) return Self.typeVal(handle, current);
+pub fn innermostContainer(workspace: *Workspace, handle: *Document, source_index: usize) Self {
+    var current = workspace.handles.get(handle).?.scopes.items[0].data.container;
+    if (workspace.handles.get(handle).?.scopes.items.len == 1) return Self.typeVal(handle, current);
 
-    for (handle.document_scope.scopes.items[1..]) |scope| {
+    for (workspace.handles.get(handle).?.scopes.items[1..]) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             switch (scope.data) {
                 .container => |node| current = node,
@@ -239,14 +239,14 @@ pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, hand
     if (func.name_token == null) return false;
     if (func.ast.params.len == 0) return false;
 
-    const tree = handle.ast_context.tree;
-    var it = func.iterate(&tree);
+    const tree = &handle.ast_context.tree;
+    var it = func.iterate(tree);
     const param = it.next().?;
     if (param.type_expr == 0) return false;
 
     const token_starts = tree.tokens.items(.start);
     const token_data = tree.nodes.items(.data);
-    const in_container = innermostContainer(handle, token_starts[func.ast.fn_token]);
+    const in_container = innermostContainer(workspace, handle, token_starts[func.ast.fn_token]);
 
     if (resolveTypeOfNode(arena, workspace, handle, param.type_expr)) |resolved_type| {
         if (std.meta.eql(in_container, resolved_type))
@@ -268,7 +268,7 @@ pub fn hasSelfParam(arena: *std.heap.ArenaAllocator, workspace: *Workspace, hand
 }
 
 pub fn resolveReturnType(arena: *std.heap.ArenaAllocator, workspace: *Workspace, fn_decl: Ast.full.FnProto, handle: *Document, bound_type_params: *BoundTypeParams, fn_body: ?Ast.Node.Index) !?Self {
-    const tree = handle.ast_context.tree;
+    const tree = &handle.ast_context.tree;
     if (Self.isTypeFunction(tree, fn_decl) and fn_body != null) {
         // If this is a type function and it only contains a single return statement that returns
         // a container declaration, we will return that declaration.
@@ -306,7 +306,7 @@ pub fn resolveBracketAccessType(arena: *std.heap.ArenaAllocator, workspace: *Wor
         else => return null,
     };
 
-    const tree = lhs.handle.ast_context.tree;
+    const tree = &lhs.handle.ast_context.tree;
     const tags = tree.nodes.items(.tag);
     const tag = tags[lhs_node];
     const data = tree.nodes.items(.data)[lhs_node];
@@ -412,7 +412,7 @@ pub fn resolveTypeOfNodeInternal(
     resolve_trail.append(.{ doc, node }) catch unreachable;
     defer _ = resolve_trail.pop();
 
-    const tree = doc.ast_context.tree;
+    const tree = &doc.ast_context.tree;
 
     const main_tokens = tree.nodes.items(.main_token);
     const node_tags = tree.nodes.items(.tag);
@@ -467,7 +467,7 @@ pub fn resolveTypeOfNodeInternal(
                 switch (child.decl.*) {
                     .ast_node => |n| {
                         if (n == node) return null;
-                        if (ast.varDecl(child.handle.ast_context.tree, n)) |var_decl| {
+                        if (ast.varDecl(&child.handle.ast_context.tree, n)) |var_decl| {
                             if (var_decl.ast.init_node == node)
                                 return null;
                         }
@@ -499,7 +499,7 @@ pub fn resolveTypeOfNodeInternal(
                 else => return null,
             };
             var buf: [1]Ast.Node.Index = undefined;
-            const func_maybe = ast.fnProto(decl.handle.ast_context.tree, decl_node, &buf);
+            const func_maybe = ast.fnProto(&decl.handle.ast_context.tree, decl_node, &buf);
 
             if (func_maybe) |fn_decl| {
                 var expected_params = fn_decl.ast.params.len;
@@ -518,7 +518,7 @@ pub fn resolveTypeOfNodeInternal(
                 var i: usize = 0;
                 while (it.next()) |decl_param| : (i += 1) {
                     if (i >= param_len) break;
-                    if (!Self.isMetaType(decl.handle.ast_context.tree, decl_param.type_expr))
+                    if (!Self.isMetaType(&decl.handle.ast_context.tree, decl_param.type_expr))
                         continue;
 
                     const argument_type = resolveTypeOfNodeInternal(
@@ -669,7 +669,7 @@ pub fn resolveTypeOfNodeInternal(
             const call_name = tree.tokenSlice(main_tokens[node]);
             if (std.mem.eql(u8, call_name, "@This")) {
                 if (params.len != 0) return null;
-                return innermostContainer(doc, starts[tree.firstToken(node)]);
+                return innermostContainer(workspace, doc, starts[tree.firstToken(node)]);
             }
 
             const cast_map = std.ComptimeStringMap(void, .{
@@ -747,7 +747,7 @@ pub fn resolveDerefType(
         .pointer => |n| return notTypeVal(deref.handle, n),
         else => return null,
     };
-    const tree = deref.handle.ast_context.tree;
+    const tree = &deref.handle.ast_context.tree;
     const main_token = tree.nodes.items(.main_token)[deref_node];
     const token_tag = tree.tokens.items(.tag)[main_token];
 

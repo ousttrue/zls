@@ -2,7 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const astutil = @import("astutil");
 const Workspace = @import("./Workspace.zig");
-const Document = @import("./Document.zig");
+const Document = astutil.Document;
 const DocumentScope = @import("./DocumentScope.zig");
 const Scope = @import("./Scope.zig");
 const Config = @import("./Config.zig");
@@ -177,7 +177,7 @@ pub fn iterateSymbolsContainerInternal(
 
     const is_enum = token_tags[main_token] == .keyword_enum;
 
-    const container_scope = handle.document_scope.findContainerScope(container) orelse return;
+    const container_scope = workspace.handles.get(handle).?.findContainerScope(container) orelse return;
 
     var decl_it = container_scope.decls.iterator();
     while (decl_it.next()) |entry| {
@@ -274,13 +274,13 @@ fn nodeToCompletion(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
-    const tree = handle.ast_context.tree;
+    const tree = &handle.ast_context.tree;
     const node_tags = tree.nodes.items(.tag);
     const token_tags = tree.tokens.items(.tag);
 
     const doc = if (try ast.getDocComments(
         list.allocator,
-        handle.ast_context.tree,
+        &handle.ast_context.tree,
         node,
         doc_kind,
     )) |doc_comments|
@@ -288,7 +288,7 @@ fn nodeToCompletion(
     else
         null;
 
-    if (ast.isContainer(handle.ast_context.tree, node)) {
+    if (ast.isContainer(&handle.ast_context.tree, node)) {
         const context = DeclToCompletionContext{
             .completions = list,
             .config = config,
@@ -329,13 +329,13 @@ fn nodeToCompletion(
                     break :blk try getFunctionSnippet(arena.allocator(), tree, func, skip_self_param);
                 } else tree.tokenSlice(func.name_token.?);
 
-                const is_type_function = TypeWithHandle.isTypeFunction(handle.ast_context.tree, func);
+                const is_type_function = TypeWithHandle.isTypeFunction(&handle.ast_context.tree, func);
 
                 try list.append(.{
                     .label = handle.ast_context.tree.tokenSlice(name_token),
                     .kind = if (is_type_function) .Struct else .Function,
                     .documentation = doc,
-                    .detail = ast.getFunctionSignature(handle.ast_context.tree, func),
+                    .detail = ast.getFunctionSignature(&handle.ast_context.tree, func),
                     .insertText = insert_text,
                     .insertTextFormat = if (use_snippets) .Snippet else .PlainText,
                 });
@@ -379,7 +379,7 @@ fn nodeToCompletion(
                 .label = handle.ast_context.tree.tokenSlice(field.ast.name_token),
                 .kind = .Field,
                 .documentation = doc,
-                .detail = ast.getContainerFieldSignature(handle.ast_context.tree, field),
+                .detail = ast.getContainerFieldSignature(&handle.ast_context.tree, field),
                 .insertText = tree.tokenSlice(field.ast.name_token),
                 .insertTextFormat = .PlainText,
             });
@@ -480,7 +480,7 @@ fn declToCompletion(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) !void {
-    const tree = decl_handle.handle.ast_context.tree;
+    const tree = &decl_handle.handle.ast_context.tree;
     switch (decl_handle.decl.*) {
         .ast_node => |node| try nodeToCompletion(
             arena,
@@ -571,7 +571,7 @@ pub fn iterateLabels(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
-    for (handle.document_scope.scopes) |scope| {
+    for (workspace.handles.get(handle).?.scopes) |scope| {
         if (source_index >= scope.range.start and source_index < scope.range.end) {
             var decl_it = scope.decls.iterator();
             while (decl_it.next()) |entry| {
@@ -618,7 +618,7 @@ fn iterateSymbolsGlobalInternal(
     config: *Config,
     doc_kind: ast.MarkupFormat,
 ) error{OutOfMemory}!void {
-    for (handle.document_scope.scopes.items) |scope| {
+    for (workspace.handles.get(handle).?.scopes.items) |scope| {
         if (source_index >= scope.range.start and source_index <= scope.range.end) {
             var decl_it = scope.decls.iterator();
             while (decl_it.next()) |entry| {
@@ -815,7 +815,7 @@ fn completeImport(
             // logger.debug("pkg: {s} => {s}", .{ token.getText(), copy });
             try items.append(.{
                 .label = copy,
-                .kind = .Text,
+                .kind = .Module,
                 // .textEdit = .{
                 //     .range = range,
                 //     .newText = copy,
@@ -843,7 +843,7 @@ fn completeImport(
                         // logger.debug("path: {s} => {s}", .{ token.getText(), copy });
                         try items.append(.{
                             .label = copy,
-                            .kind = .Text,
+                            .kind = .File,
                             // .textEdit = .{
                             //     .range = range,
                             //     .newText = copy,

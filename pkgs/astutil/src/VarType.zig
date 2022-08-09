@@ -229,7 +229,7 @@ pub fn getMember(
             // resolve import
             if (import_solver.solve(self.node.context.path, import)) |path| {
                 if (try store.getOrLoad(path)) |imported| {
-                    const root = AstNode.init(imported, 0);
+                    const root = AstNode.init(imported.ast_context, 0);
                     var buf: [2]u32 = undefined;
                     return root.getMember(name, &buf);
                 } else {
