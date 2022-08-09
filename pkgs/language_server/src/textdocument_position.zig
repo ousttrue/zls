@@ -7,7 +7,7 @@ const Document = astutil.Document;
 const PathPosition = astutil.PathPosition;
 const DeclWithHandle = ws.DeclWithHandle;
 const SymbolLookup = ws.SymbolLookup;
-const FixedPath = ws.FixedPath;
+const FixedPath = astutil.FixedPath;
 const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
@@ -100,6 +100,23 @@ pub fn getRename(
     return try decl.renameSymbol(arena, workspace);
 }
 
+fn gotoImport(project: ?Project, import_from: FixedPath, text: []const u8) ?PathPosition {
+    if (project) |p| {
+        if (text.len > 2) {
+            if (std.mem.endsWith(u8, text, ".zig")) {
+                if (p.import_solver.solve(import_from, .{ .file = text })) |path| {
+                    return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                }
+            } else {
+                if (p.import_solver.solve(import_from, .{ .pkg = text })) |path| {
+                    return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
+                }
+            }
+        }
+    }
+    return null;
+}
+
 pub fn getGoto(
     arena: *std.heap.ArenaAllocator,
     project: ?Project,
@@ -112,20 +129,17 @@ pub fn getGoto(
     switch (token.getTag()) {
         .string_literal => {
             // goto import file
-            if (project) |p| {
-                var text = token.getText();
-                if (text.len > 2) {
-                    // unquote
-                    text = text[1 .. text.len - 1];
-                    if (std.mem.endsWith(u8, text, ".zig")) {
-                        if (p.import_solver.solve(doc.path, .{ .file = text })) |path| {
-                            return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
-                        }
-                    } else {
-                        if (p.import_solver.solve(doc.path, .{ .pkg = text })) |path| {
-                            return PathPosition{ .path = path, .loc = .{ .start = 0, .end = 0 } };
-                        }
-                    }
+            return gotoImport(project, doc.path, token.getText());
+        },
+        .builtin => {
+            if (std.mem.eql(u8, token.getText(), "@import")) {
+                var buf: [2]u32 = undefined;
+                switch (node.getChildren(&buf)) {
+                    .builtin_call => |full| {
+                        const param_node = AstNode.init(node.context, full.ast.params[0]);
+                        return gotoImport(project, doc.path, param_node.getMainToken().getText());
+                    },
+                    else => {},
                 }
             }
             return null;
