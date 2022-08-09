@@ -25,7 +25,7 @@ pub fn init(allocator: std.mem.Allocator, text: []const u8) !Self {
 
 pub fn deinit(self: Self) void {
     self.line_heads.deinit();
-    self.allocator.free(self.text);
+    self.allocator.free(self.mem);
 }
 
 fn resetLines(self: *Self) !void {
