@@ -298,7 +298,11 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const path = try FixedPath.fromUri(params.textDocument.uri);
+    const doc = workspace.store.get(path) orelse {
+        logger.err("not found: {s}", .{path.slice()});
+        return error.DocumentNotFound;
+    };
     const symbols = try textdocument.to_symbols(arena, Project.init(workspace.build_file.import_solver, &workspace.store), doc, self.encoding);
     return lsp.Response{
         .id = id,

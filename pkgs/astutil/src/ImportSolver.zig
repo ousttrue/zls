@@ -43,7 +43,7 @@ pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
     try self.pkg_path_map.put(copy, path);
 }
 
-pub fn solve(self: Self, base_path: FixedPath, import: ImportType) ?FixedPath {
+pub fn solve(self: Self, import_from: FixedPath, import: ImportType) ?FixedPath {
     switch (import) {
         .pkg => |pkg_name| {
             const text = unquote(pkg_name);
@@ -56,7 +56,11 @@ pub fn solve(self: Self, base_path: FixedPath, import: ImportType) ?FixedPath {
         },
         .file => |relative_path| {
             const text = unquote(relative_path);
-            return base_path.child(text);
+            if (import_from.parent()) |parent| {
+                return parent.child(text);
+            } else {
+                return null;
+            }
         },
     }
 }
