@@ -7,7 +7,6 @@ pub const ZigEnv = @import("./ZigEnv.zig");
 pub const Builtin = @import("./Builtin.zig");
 pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
-pub const completion_util = @import("./completion_util.zig");
 pub const ast = astutil.ast;
 pub const builtin_completions = @import("./builtin_completions.zig");
 

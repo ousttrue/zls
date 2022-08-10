@@ -14,7 +14,6 @@ const SemanticTokensBuilder = ws.SemanticTokensBuilder;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const Project = astutil.Project;
-const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const URI = @import("./uri.zig");
 const builtin_completions = ws.builtin_completions;
@@ -554,7 +553,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    const completions = try completion_util.process(
+    const completions = try textdocument_position.getCompletion(
         arena,
         workspace,
         doc,
