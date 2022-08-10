@@ -30,15 +30,17 @@ pub fn put(self: *Self, doc: *Document) !void
     try self.path_document_map.put(doc.path.slice(), doc);
 }
 
-pub fn update(self: *Self, path: FixedPath, text: []const u8) !void
+pub fn update(self: *Self, path: FixedPath, text: []const u8) !*Document
 {
     if (self.path_document_map.get(path.slice())) |doc| {
         // already opened. udpate content
         try doc.update(text);
+        return doc;
     } else {
         // new document
         const doc = try Document.new(self.allocator, path, text);
         try self.put(doc);
+        return doc;
     }   
 }
 

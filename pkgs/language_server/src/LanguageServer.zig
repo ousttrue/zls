@@ -134,8 +134,7 @@ pub fn deinit(self: *Self) void {
     self.notification_queue.deinit();
 }
 
-pub fn project(self: *Self) Project
-{
+pub fn project(self: *Self) Project {
     return .{
         .import_solver = self.import_solver,
         .store = &self.store,
@@ -224,19 +223,31 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
     return lsp.Response.createNull(id);
 }
 
+fn publishDiagnostics(self: *Self, uri: []const u8, diagnostics: [] lsp.diagnostic.Diagnostic) !void {
+    // logger.debug("diagnostics: {}", .{diagnostics.len});
+    const notification = lsp.Notification{
+        .method = "textDocument/publishDiagnostics",
+        .params = .{
+            .PublishDiagnostics = .{
+                .uri = uri,
+                .diagnostics = diagnostics,
+            },
+        },
+    };
+    try self.notification_queue.append(notification);
+}
+
 /// # document sync
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didOpen
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     const path = try FixedPath.fromUri(params.textDocument.uri);
     const text = params.textDocument.text;
-    try self.store.update(path, text);
+    const doc = try self.store.update(path, text);
+    _ = doc;
 
-    // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
-    //     try self.notification_queue.append(notification);
-    // } else |err| {
-    //     logger.err("createNotifyDiagnostics: {}", .{err});
-    // }
+    const diagnostics = try textdocument.getDiagnostics(arena, doc, self.encoding);
+    try self.publishDiagnostics(params.textDocument.uri, diagnostics);
 }
 
 /// # document sync
@@ -245,11 +256,9 @@ pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, j
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
     const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     try doc.applyChanges(params.contentChanges.Array, self.encoding);
-    // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
-    //     try self.notification_queue.append(notification);
-    // } else |err| {
-    //     logger.err("createNotifyDiagnostics: {}", .{err});
-    // }
+
+    const diagnostics = try textdocument.getDiagnostics(arena, doc, self.encoding);
+    try self.publishDiagnostics(params.textDocument.uri, diagnostics);
 }
 
 /// # document sync
@@ -300,6 +309,12 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
         .range = range,
         .newText = stdout_bytes,
     };
+
+    {
+        const diagnostics = try textdocument.getDiagnostics(arena, doc, self.encoding);
+        try self.publishDiagnostics(params.textDocument.uri, diagnostics);
+    }
+
     return lsp.Response{
         .id = id,
         .result = .{

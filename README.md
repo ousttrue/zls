@@ -8,7 +8,6 @@ This is an experimental modified version
 * [x] @import completion (zig_files, std, user_pkg...etc)
 * [ ] @cImport completion (use zig translate-c ?)
 * [ ] goto: .enum_literal
-* [ ] diagnostics: when format error
 * [ ] add keywords to global completion(undefined, unreachable... etc)
 * [ ] container field completion (trigger .)
 * [ ] hover: show reference count

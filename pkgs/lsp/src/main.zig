@@ -6,6 +6,7 @@ pub const requests = @import("./requests.zig");
 pub const initialize = @import("./initialize.zig");
 pub const completion = @import("./completion.zig");
 pub const signature_help = @import("./signature_help.zig");
+pub const diagnostic = @import("./diagnostic.zig");
 pub const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
 
 pub const TextEdit = types.TextEdit;
@@ -17,10 +18,8 @@ pub const WorkspaceFolder = types.WorkspaceFolder;
 pub const WorkspaceEdit = types.WorkspaceEdit;
 pub const Location = types.Location;
 
-
 pub const Notification = notification.Notification;
 pub const NotificationParams = notification.NotificationParams;
-pub const Diagnostic = notification.Diagnostic;
 
 pub const Response = response.Response;
 pub const ResponseParams = response.ResponseParams;

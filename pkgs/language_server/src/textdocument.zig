@@ -11,107 +11,11 @@ const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const VarType = astutil.VarType;
 const ImportSolver = astutil.ImportSolver;
-const TypeWithHandle = struct{};
-const ast = struct{};
+const TypeWithHandle = struct {};
+const ast = struct {};
 const logger = std.log.scoped(.textdocument);
 
-// TODO: Is this correct or can we get a better end?
-fn astLocationToRange(loc: Ast.Location) lsp.Range {
-    return .{
-        .start = .{
-            .line = @intCast(i64, loc.line),
-            .character = @intCast(i64, loc.column),
-        },
-        .end = .{
-            .line = @intCast(i64, loc.line),
-            .character = @intCast(i64, loc.column),
-        },
-    };
-}
-
-pub fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Document, config: *Config) !lsp.Notification {
-    const tree = doc.tree;
-
-    var diagnostics = std.ArrayList(lsp.Diagnostic).init(arena.allocator());
-
-    for (tree.errors) |err| {
-        const loc = tree.tokenLocation(0, err.token);
-
-        var mem_buffer: [256]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&mem_buffer);
-        try tree.renderError(err, fbs.writer());
-
-        try diagnostics.append(.{
-            .range = astLocationToRange(loc),
-            .severity = .Error,
-            .code = @tagName(err.tag),
-            .source = "zls",
-            .message = try arena.allocator().dupe(u8, fbs.getWritten()),
-            // .relatedInformation = undefined
-        });
-    }
-
-    // TODO: style warnings for types, values and declarations below root scope
-    if (tree.errors.len == 0) {
-        for (tree.rootDecls()) |decl_idx| {
-            const decl = tree.nodes.items(.tag)[decl_idx];
-            switch (decl) {
-                .fn_proto,
-                .fn_proto_multi,
-                .fn_proto_one,
-                .fn_proto_simple,
-                .fn_decl,
-                => blk: {
-                    var buf: [2]Ast.Node.Index = undefined;
-                    const func = AstNode.init(doc.ast_context, decl_idx).getFnProto(&buf).?;
-                    if (func.extern_export_inline_token != null) break :blk;
-
-                    if (config.warn_style) {
-                        if (func.name_token) |name_token| {
-                            const loc = tree.tokenLocation(0, name_token);
-
-                            const is_type_function = TypeWithHandle.isTypeFunction(tree, func);
-
-                            const func_name = tree.tokenSlice(name_token);
-                            if (!is_type_function and !ast.isCamelCase(func_name)) {
-                                try diagnostics.append(.{
-                                    .range = astLocationToRange(loc),
-                                    .severity = .Information,
-                                    .code = "BadStyle",
-                                    .source = "zls",
-                                    .message = "Functions should be camelCase",
-                                });
-                            } else if (is_type_function and !ast.isPascalCase(func_name)) {
-                                try diagnostics.append(.{
-                                    .range = astLocationToRange(loc),
-                                    .severity = .Information,
-                                    .code = "BadStyle",
-                                    .source = "zls",
-                                    .message = "Type functions should be PascalCase",
-                                });
-                            }
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-    }
-
-    // logger.debug("[Diagnostics] {s}: {}", .{ doc.utf8_buffer.uri, diagnostics.items.len });
-    return lsp.Notification{
-        .method = "textDocument/publishDiagnostics",
-        .params = .{
-            .PublishDiagnostics = .{
-                .uri = doc.uri,
-                .diagnostics = diagnostics.items,
-            },
-        },
-    };
-}
-
-fn getRange(doc: *Document, token: AstToken, encoding: Line.Encoding) !lsp.Range {
-    const loc = token.getLoc();
+fn getRange(doc: *Document, loc: std.zig.Token.Loc, encoding: Line.Encoding) !lsp.Range {
     var start_loc = try doc.utf8_buffer.getPositionFromBytePosition(loc.start, encoding);
     var end_loc = try doc.utf8_buffer.getPositionFromBytePosition(loc.end, encoding);
     var range = lsp.Range{
@@ -125,6 +29,24 @@ fn getRange(doc: *Document, token: AstToken, encoding: Line.Encoding) !lsp.Range
         },
     };
     return range;
+}
+
+pub fn getDiagnostics(arena: *std.heap.ArenaAllocator, doc: *Document, encoding: Line.Encoding) ![]lsp.diagnostic.Diagnostic {
+    const tree = &doc.ast_context.tree;
+    var diagnostics = std.ArrayList(lsp.diagnostic.Diagnostic).init(arena.allocator());
+    for (tree.errors) |err| {
+        var message = std.ArrayList(u8).init(arena.allocator());
+        try tree.renderError(err, message.writer());
+        try diagnostics.append(.{
+            .range = try getRange(doc, AstToken.init(tree, err.token).getLoc(), encoding),
+            .severity = .Error,
+            .code = @tagName(err.tag),
+            .source = "zls",
+            .message = message.items,
+            // .relatedInformation = undefined
+        });
+    }
+    return diagnostics.toOwnedSlice();
 }
 
 const SymbolTree = struct {
@@ -193,7 +115,7 @@ const SymbolTree = struct {
                 const type_var = try VarType.fromVarDecl(project, node.context, var_decl);
                 const text = try type_var.allocPrint(arena.allocator());
                 const token = node.getMainToken().getNext();
-                const range = try getRange(doc, token, encoding);
+                const range = try getRange(doc, token.getLoc(), encoding);
                 switch (type_var.kind) {
                     .import => |import| {
                         // .Package or .File
@@ -253,7 +175,7 @@ const SymbolTree = struct {
                 const var_type = try VarType.fromContainerField(project, node.context, container_field);
                 const text = try var_type.allocPrint(arena.allocator());
                 const token = AstToken.init(&node.context.tree, container_field.ast.name_token);
-                const range = try getRange(doc, token, encoding);
+                const range = try getRange(doc, token.getLoc(), encoding);
                 return lsp.DocumentSymbol{
                     .name = token.getText(),
                     .kind = if (var_type.kind == .enum_literal) .EnumMember else .Property,
@@ -272,7 +194,7 @@ const SymbolTree = struct {
                                 const type_var = try VarType.fromFnProtoReturn(project, node.context, fn_proto);
                                 const text = try type_var.allocPrint(arena.allocator());
                                 const token = AstToken.init(&node.context.tree, name_token);
-                                const range = try getRange(doc, token, encoding);
+                                const range = try getRange(doc, token.getLoc(), encoding);
                                 return lsp.DocumentSymbol{
                                     .name = token.getText(),
                                     .kind = .Function,
