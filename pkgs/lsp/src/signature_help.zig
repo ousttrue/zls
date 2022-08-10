@@ -30,7 +30,7 @@ pub const SignatureHelpContext = struct {
 // response
 pub const SignatureHelp = struct {
     signatures: ?[]const SignatureInformation,
-    activeSignature: ?u32 = null,
+    activeSignature: ?u32 = 0,
     activeParameter: ?u32 = null,
 };
 

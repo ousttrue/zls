@@ -373,7 +373,6 @@ pub fn getSignature(
     doc: *Document,
     token: AstToken,
 ) !?FunctionSignature {
-    _ = arena;
     _ = project;
 
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
@@ -382,11 +381,16 @@ pub fn getSignature(
         .call => {
             logger.debug("call", .{});
         },
-        .builtin_call => {
+        .builtin_call => |full| {
             const name = node.getMainToken().getText();
             for (builtin_completions.data()) |b| {
                 if (std.mem.eql(u8, b.name, name)) {
-                    var fs = FunctionSignature.init(arena.allocator(), name, b.documentation);
+                    var fs = FunctionSignature.init(
+                        arena.allocator(),
+                        b.signature,
+                        b.documentation,
+                        @intCast(u32, full.ast.params.len),
+                    );
                     for (b.arguments) |arg| {
                         if (std.mem.indexOf(u8, arg, ":")) |found| {
                             try fs.args.append(.{

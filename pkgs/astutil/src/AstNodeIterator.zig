@@ -62,9 +62,12 @@ pub const BuiltinCall = struct {
         const node_tag = tag[idx];
         return switch (node_tag) {
             .builtin_call_two, .builtin_call_two_comma => BuiltinCall{
-                .ast = .{
-                    .params = @ptrCast([*]const Ast.Node.Index, &data[idx].lhs)[0..2],
-                },
+                .ast = .{ .params = if (node_data.lhs == 0)
+                    &.{}
+                else if (node_data.rhs == 0)
+                    @ptrCast([*]const Ast.Node.Index, &data[idx].lhs)[0..1]
+                else
+                    @ptrCast([*]const Ast.Node.Index, &data[idx].lhs)[0..2] },
             },
             .builtin_call, .builtin_call_comma => BuiltinCall{
                 .ast = .{
