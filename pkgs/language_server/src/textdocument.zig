@@ -9,7 +9,6 @@ const Line = astutil.Line;
 const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
-const VarType = astutil.VarType;
 const ImportSolver = astutil.ImportSolver;
 const TypeWithHandle = struct {};
 const ast = struct {};
@@ -109,102 +108,10 @@ const SymbolTree = struct {
     ) anyerror!?lsp.DocumentSymbol {
         _ = self;
         _ = arena;
-        var buf: [2]u32 = undefined;
-        switch (node.getChildren(&buf)) {
-            .var_decl => |var_decl| {
-                const type_var = try VarType.fromVarDecl(project, node.context, var_decl);
-                const text = try type_var.allocPrint(arena.allocator());
-                const token = node.getMainToken().getNext();
-                const range = try getRange(doc, token.getLoc(), encoding);
-                switch (type_var.kind) {
-                    .import => |import| {
-                        // .Package or .File
-                        try self.imports.append(lsp.DocumentSymbol{
-                            .name = token.getText(),
-                            .kind = if (std.mem.endsWith(u8, ImportSolver.unquote(import), ".zig")) .File else .Package,
-                            .range = range,
-                            .selectionRange = range,
-                            .detail = text,
-                        });
-                    },
-                    else => {
-                        var symbol = lsp.DocumentSymbol{
-                            .name = token.getText(),
-                            .kind = .Variable,
-                            .range = range,
-                            .selectionRange = range,
-                            .detail = text,
-                        };
-                        switch (type_var.kind) {
-                            .enum_type => {
-                                symbol.kind = .Enum;
-                            },
-                            .container => {
-                                symbol.kind = .Struct;
-                            },
-                            else => {},
-                        }
-
-                        // rhs
-                        const rhs = AstNode.init(node.context, var_decl.ast.init_node);
-                        var buf2: [2]u32 = undefined;
-                        switch (rhs.getChildren(&buf2)) {
-                            .container_decl => |container_decl| {
-                                // traverse children
-                                var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
-                                for (container_decl.ast.members) |decl| {
-                                    if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
-                                        try children.append(child);
-                                    }
-                                }
-                                symbol.children = children.toOwnedSlice();
-                            },
-                            else => {},
-                        }
-
-                        return symbol;
-                    },
-                }
-            },
-            .container_field => |container_field| {
-                // EnumMember
-                const var_type = try VarType.fromContainerField(project, node.context, container_field);
-                const text = try var_type.allocPrint(arena.allocator());
-                const token = AstToken.init(&node.context.tree, container_field.ast.name_token);
-                const range = try getRange(doc, token.getLoc(), encoding);
-                return lsp.DocumentSymbol{
-                    .name = token.getText(),
-                    .kind = if (var_type.kind == .enum_literal) .EnumMember else .Property,
-                    .range = range,
-                    .selectionRange = range,
-                    .detail = text,
-                };
-            },
-            else => {
-                switch (node.getTag()) {
-                    .fn_decl => {
-                        const fn_proto_node = AstNode.init(node.context, node.getData().lhs);
-                        var buf2: [2]u32 = undefined;
-                        if (fn_proto_node.getFnProto(&buf2)) |fn_proto| {
-                            if (fn_proto.name_token) |name_token| {
-                                const type_var = try VarType.fromFnProtoReturn(project, node.context, fn_proto);
-                                const text = try type_var.allocPrint(arena.allocator());
-                                const token = AstToken.init(&node.context.tree, name_token);
-                                const range = try getRange(doc, token.getLoc(), encoding);
-                                return lsp.DocumentSymbol{
-                                    .name = token.getText(),
-                                    .kind = .Function,
-                                    .range = range,
-                                    .selectionRange = range,
-                                    .detail = text,
-                                };
-                            }
-                        }
-                    },
-                    else => {},
-                }
-            },
-        }
+        _ = project;
+        _ = doc;
+        _ = node;
+        _ = encoding;
         return null;
     }
 };

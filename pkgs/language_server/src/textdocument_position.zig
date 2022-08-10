@@ -8,7 +8,6 @@ const FixedPath = astutil.FixedPath;
 const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
-const VarType = astutil.VarType;
 const Line = astutil.Line;
 const FunctionSignature = astutil.FunctionSignature;
 const ImportSolver = astutil.ImportSolver;
@@ -26,6 +25,7 @@ pub fn getHover(
     doc: *Document,
     token: AstToken,
 ) !?Hover {
+    _ = project;    
     const allocator = arena.allocator();
     const token_info = try token.allocPrint(allocator);
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
@@ -51,7 +51,7 @@ pub fn getHover(
             switch (node.getTag()) {
                 .identifier => {
                     if (Declaration.find(node)) |decl| {
-                        const text = try decl.allocPrint(allocator, project);
+                        const text = try decl.allocPrint(allocator);
                         try w.print("{s}", .{text});
                         return Hover{
                             .text = text_buffer.items,
@@ -62,12 +62,12 @@ pub fn getHover(
                     }
                 },
                 else => {
-                    const var_type = try VarType.init(project, node);
-                    const text = try var_type.allocPrint(allocator);
-                    try w.print("var_type: {s}", .{text});
-                    return Hover{
-                        .text = text_buffer.items,
-                    };
+                    // const var_type = try VarType.init(project, node);
+                    // const text = try var_type.allocPrint(allocator);
+                    // try w.print("var_type: {s}", .{text});
+                    // return Hover{
+                    //     .text = text_buffer.items,
+                    // };
                 },
             }
         },
@@ -152,7 +152,7 @@ pub fn getGoto(
                     switch (node.getTag()) {
                         .identifier => {
                             if (Declaration.find(node)) |decl| {
-                                const text = try decl.allocPrint(arena.allocator(), project);
+                                const text = try decl.allocPrint(arena.allocator());
                                 logger.debug("{s}", .{text});
                                 return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
                             } else {
@@ -160,17 +160,21 @@ pub fn getGoto(
                             }
                         },
                         .field_access => {
-                            var data = node.getData();
-                            var lhs = AstNode.init(node.context, data.lhs);
-                            var var_type = try VarType.init(project, lhs);
-                            // rhs
-                            var rhs = AstToken.init(&node.context.tree, data.rhs);
-                            if (try var_type.getMember(project, rhs.getText())) |member| {
-                                return member.getPosition();
-                            } else {
-                                logger.debug("not member", .{});
-                                return null;
-                            }
+                            // var data = node.getData();
+                            // var lhs = AstNode.init(node.context, data.lhs);
+                            // var var_type = try VarType.init(project, lhs);
+                            // // rhs
+                            // var rhs = AstToken.init(&node.context.tree, data.rhs);
+                            // if (try var_type.getMember(project, rhs.getText())) |member| {
+                            //     return member.getPosition();
+                            // } else {
+                            //     logger.debug("not member", .{});
+                            //     return null;
+                            // }
+
+                            // TODO: var or field or fn 
+
+                            return null;
                         },
                         .fn_decl => {
                             return null;
@@ -310,32 +314,35 @@ pub fn completeContainerMember(
     doc: *Document,
     token: AstToken,
 ) ![]const lsp.completion.CompletionItem {
+    _ = project;
+    _ = doc;
+    _ = token;
     var items = std.ArrayList(lsp.completion.CompletionItem).init(arena.allocator());
 
-    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
-    const var_type = try VarType.init(project, node);
+    // const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+    // const var_type = try VarType.init(project, node);
 
-    if (try var_type.getContainerNode(project)) |container_node| {
-        var buf: [2]u32 = undefined;
-        if (container_node.containerIterator(&buf)) |*it| {
-            while (it.next()) |member| {
-                if (member.getMemberNameToken()) |name_token| {
-                    var buf2: [2]u32 = undefined;
+    // if (try var_type.getContainerNode(project)) |container_node| {
+    //     var buf: [2]u32 = undefined;
+    //     if (container_node.containerIterator(&buf)) |*it| {
+    //         while (it.next()) |member| {
+    //             if (member.getMemberNameToken()) |name_token| {
+    //                 var buf2: [2]u32 = undefined;
 
-                    try items.append(.{
-                        .label = name_token.getText(),
-                        .kind = switch (member.getChildren(&buf2)) {
-                            .var_decl => .Value,
-                            .container_field => .Property,
-                            else => .Method,
-                        },
-                    });
-                } else {}
-            }
-        }
-    } else {
-        logger.err("no container: {s}", .{try token.allocPrint(arena.allocator())});
-    }
+    //                 try items.append(.{
+    //                     .label = name_token.getText(),
+    //                     .kind = switch (member.getChildren(&buf2)) {
+    //                         .var_decl => .Value,
+    //                         .container_field => .Property,
+    //                         else => .Method,
+    //                     },
+    //                 });
+    //             } else {}
+    //         }
+    //     }
+    // } else {
+    //     logger.err("no container: {s}", .{try token.allocPrint(arena.allocator())});
+    // }
 
     return items.toOwnedSlice();
 }

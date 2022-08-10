@@ -1,10 +1,10 @@
+//! search symbol in the source file.
 const std = @import("std");
 const Ast = std.zig.Ast;
 const AstToken = @import("./AstToken.zig");
 const AstNode = @import("./AstNode.zig");
 const AstContext = @import("./AstContext.zig");
 const Project = @import("./Project.zig");
-const VarType = @import("./VarType.zig");
 const logger = std.log.scoped(.Declaration);
 const Self = @This();
 
@@ -213,7 +213,6 @@ pub fn find(node: AstNode) ?Self {
 pub fn allocPrint(
     self: Self,
     allocator: std.mem.Allocator,
-    project: ?Project,
 ) anyerror![]const u8 {
     var buffer = std.ArrayList(u8).init(allocator);
     const w = buffer.writer();
@@ -243,11 +242,13 @@ pub fn allocPrint(
             try w.print("[swtich_case_payload]", .{});
         },
         .param => |full| {
+            _ = full;
             // getType: param decl
-            const var_type = try VarType.fromParam(project, self.context, full);
-            const info = try var_type.allocPrint(allocator);
-            defer allocator.free(info);
-            try w.print("[param] {s}", .{info});
+            // const var_type = try VarType.fromParam(project, self.context, full);
+            // const info = try var_type.allocPrint(allocator);
+            // defer allocator.free(info);
+            // try w.print("[param] {s}", .{info});
+            try w.print("[param]", .{});
         },
         .fn_decl => {
             try w.print("[global] fn", .{});
