@@ -40,7 +40,7 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
                 return Self{
                     .node = node,
                     .kind = .{
-                        .import = text,                            
+                        .import = text,
                     },
                 };
             } else if (std.mem.eql(u8, builtin, "@This")) {
@@ -201,40 +201,46 @@ pub fn fromContainerField(
     }
 }
 
-pub fn getMember(
-    self: Self,
-    project: ?Project,
-    name: []const u8,
-) anyerror!?AstNode {
+pub fn getContainer(self: Self, project: ?Project) !?AstNode {
     switch (self.kind) {
         .container => {
-            return self.node.getMember(name);
+            return self.node;
         },
         .import => |import| {
-            // resolve import
             if (project) |p| {
                 if (p.import_solver.solve(self.node.context.path, import)) |path| {
                     if (try p.store.getOrLoad(path)) |imported| {
-                        const root = AstNode.init(imported.ast_context, 0);
-                        return root.getMember(name);
+                        return AstNode.init(imported.ast_context, 0);
                     } else {
-                        return null;
+                        return error.FailToImport;
                     }
                 }
             }
             return null;
         },
         else => {
-            logger.err(
-                "getMember: {s} => {s}: {s}",
-                .{
-                    @tagName(self.kind),
-                    @tagName(self.node.getTag()),
-                    self.node.getMainToken().getText(),
-                },
-            );
             return null;
         },
+    }
+}
+
+pub fn getMember(
+    self: Self,
+    project: ?Project,
+    name: []const u8,
+) anyerror!?AstNode {
+    if (try self.getContainer(project)) |container_node| {
+        return container_node.getMember(name);
+    } else {
+        logger.err(
+            "getMember: {s} => {s}: {s}",
+            .{
+                @tagName(self.kind),
+                @tagName(self.node.getTag()),
+                self.node.getMainToken().getText(),
+            },
+        );
+        return null;
     }
 }
 
@@ -257,7 +263,7 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             try w.print("unknown: node tag = {s}", .{@tagName(self.node.getTag())});
         },
         .import => |import| {
-            try w.print("@import {s}", .{import});            
+            try w.print("@import {s}", .{import});
         },
         else => {
             try w.print("{s}", .{@tagName(self.kind)});

@@ -308,6 +308,28 @@ fn completeImport(
     return items.toOwnedSlice();
 }
 
+pub fn completeFieldAccess(
+    arena: *std.heap.ArenaAllocator,
+    project: Project,
+    doc: *Document,
+    token: AstToken,
+) ![]const lsp.completion.CompletionItem {
+    _ = arena;
+
+    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+    const var_type = try VarType.init(project, node);
+
+    switch (var_type.kind) {
+        .container => {},
+        .import => {},
+        else => {},
+    }
+
+    logger.debug("completion: {s}", .{@tagName(var_type.kind)});
+
+    return &.{};
+}
+
 pub fn getCompletion(
     arena: *std.heap.ArenaAllocator,
     project: Project,
@@ -317,11 +339,12 @@ pub fn getCompletion(
     encoding: Line.Encoding,
 ) ![]const lsp.completion.CompletionItem {
     if (trigger_character) |trigger| {
-        // if (std.mem.eql(u8, trigger, ".")) {
-        //     logger.debug("trigger '.' => field_access", .{});
-        //     return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
-        // } else
-        if (std.mem.eql(u8, trigger, "@")) {
+        if (std.mem.eql(u8, trigger, ".")) {
+            logger.debug("trigger '.' => field_access", .{});
+            if (token.getPrev()) |prev| {
+                return try completeFieldAccess(arena, project, doc, prev);
+            }
+        } else if (std.mem.eql(u8, trigger, "@")) {
             // logger.debug("trigger '@' => builtin", .{});
             return builtin_completions.completeBuiltin();
         } else {
@@ -347,8 +370,8 @@ pub fn getCompletion(
             //     return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
             // },
             .string_literal => {
-                const prev = token.getPrev(); // lparen
-                const prev_prev = prev.getPrev(); //
+                const prev = token.getPrev().?; // lparen
+                const prev_prev = prev.getPrev().?; //
                 if (std.mem.eql(u8, prev_prev.getText(), "@import")) {
                     return try completeImport(arena, project.import_solver, doc, token, encoding);
                 }

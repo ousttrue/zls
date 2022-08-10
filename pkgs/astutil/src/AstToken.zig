@@ -46,7 +46,8 @@ pub fn getNext(self: Self) Self {
     return init(self.tree, self.index + 1);
 }
 
-pub fn getPrev(self: Self) Self {
+pub fn getPrev(self: Self) ?Self {
+    if (self.index == 0) return null;
     return init(self.tree, self.index - 1);
 }
 
