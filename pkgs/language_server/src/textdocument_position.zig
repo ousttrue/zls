@@ -11,6 +11,7 @@ const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
 const VarType = astutil.VarType;
 const Project = astutil.Project;
+const FunctionSignature = astutil.FunctionSignature;
 const ast = ws.ast;
 const builtin_completions = ws.builtin_completions;
 const logger = std.log.scoped(.textdocument_position);
@@ -214,3 +215,20 @@ pub fn getGoto(
 //     try decl.symbolReferences(arena, workspace, include_decl, &locs);
 //     return locs.items;
 // }
+
+/// triggerd
+///
+/// @import()
+///         ^ r_paren
+pub fn getSignature(
+    arena: *std.heap.ArenaAllocator,
+    workspace: *Workspace,
+    doc: *Document,
+    token: AstToken,
+) !?FunctionSignature {
+    _ = arena;
+    _ = workspace;
+    _ = doc;
+    _ = token;
+    return null;
+}

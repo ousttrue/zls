@@ -128,25 +128,6 @@ pub const CompletionItem = struct {
     documentation: ?MarkupContent = null,
 };
 
-pub const SignatureInformation = struct {
-    pub const ParameterInformation = struct {
-        // TODO Can also send a pair of encoded offsets
-        label: string,
-        documentation: ?MarkupContent,
-    };
-
-    label: string,
-    documentation: ?MarkupContent,
-    parameters: ?[]const ParameterInformation,
-    activeParameter: ?u32,
-};
-
-pub const SignatureHelp = struct {
-    signatures: ?[]const SignatureInformation,
-    activeSignature: ?u32,
-    activeParameter: ?u32,
-};
-
 /// Only check for the field's existence.
 pub const Exists = struct {
     exists: bool,

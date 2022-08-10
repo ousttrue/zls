@@ -1,6 +1,7 @@
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize
 const std = @import("std");
 const types = @import("./types.zig");
+const SignatureHelpOptions = @import("./signature_help.zig").SignatureHelpOptions;
 const Default = types.Default;
 const Exists = types.Exists;
 const string = types.string;
@@ -55,10 +56,7 @@ pub const SemanticTokensProvider = struct {
 
 // Only includes options we set in our initialize result.
 pub const ServerCapabilities = struct {
-    signatureHelpProvider: ?struct {
-        triggerCharacters: []const string,
-        retriggerCharacters: []const string,
-    } = null,
+    signatureHelpProvider: ? SignatureHelpOptions  = null,
     textDocumentSync: enum(u32) {
         None = 0,
         Full = 1,

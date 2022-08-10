@@ -208,7 +208,7 @@ pub fn main() anyerror!void {
         dispatcher.registerRequest(&language_server, "textDocument/completion");
         // dispatcher.registerRequest(&language_server, "textDocument/rename");
         // dispatcher.registerRequest(&language_server, "textDocument/references");
-        // dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
+        dispatcher.registerRequest(&language_server, "textDocument/signatureHelp");
 
         // start
         jsonrpc.readloop(allocator, &transport, &dispatcher, &language_server.notification_queue);

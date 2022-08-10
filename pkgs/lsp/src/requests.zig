@@ -61,21 +61,6 @@ const TextDocumentIdentifierPositionRequest = struct {
     position: types.Position,
 };
 
-pub const SignatureHelp = struct {
-    textDocument: TextDocumentIdentifier,
-    position: types.Position,
-    context: ?struct {
-        triggerKind: enum(u32) {
-            invoked = 1,
-            trigger_character = 2,
-            content_change = 3,
-        },
-        triggerCharacter: ?[]const u8,
-        isRetrigger: bool,
-        activeSignatureHelp: ?types.SignatureHelp,
-    },
-};
-
 pub const GotoDefinition = TextDocumentIdentifierPositionRequest;
 pub const GotoDeclaration = TextDocumentIdentifierPositionRequest;
 pub const Hover = TextDocumentIdentifierPositionRequest;

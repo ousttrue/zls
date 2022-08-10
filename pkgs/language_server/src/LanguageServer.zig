@@ -18,6 +18,7 @@ const completion_util = ws.completion_util;
 const ClientCapabilities = @import("./ClientCapabilities.zig");
 pub const URI = @import("./uri.zig");
 const builtin_completions = ws.builtin_completions;
+const FunctionSignature = astutil.FunctionSignature;
 const textdocument = @import("./textdocument.zig");
 const textdocument_position = @import("./textdocument_position.zig");
 const logger = std.log.scoped(.LanguageServer);
@@ -45,10 +46,10 @@ workspace: ?*Workspace = null,
 client_capabilities: ClientCapabilities = .{},
 encoding: Line.Encoding = .utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
-    // .signatureHelpProvider = .{
-    //     .triggerCharacters = &.{"("},
-    //     .retriggerCharacters = &.{","},
-    // },
+    .signatureHelpProvider = .{
+        .triggerCharacters = &.{"("},
+        .retriggerCharacters = &.{","},
+    },
     .textDocumentSync = .Full,
     // .renameProvider = true,
     .completionProvider = .{
@@ -658,52 +659,44 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
 //     }
 // }
 
-// /// # language feature
-// /// ## document position request
-// /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp
-// pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-//     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
-//     const params = try lsp.fromDynamicTree(arena, lsp.requests.SignatureHelp, jsonParams.?);
-//     const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
-//     const position = params.position;
-//     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
-//     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
-//     const token_with_index = doc.ast_context.tokenFromBytePos(byte_position) orelse {
-//         // token not found. return no hover.
-//         return lsp.Response.createNull(id);
-//     };
+/// # language feature
+/// ## document position request
+/// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp
+pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
+    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
+    const params = try lsp.fromDynamicTree(arena, lsp.signature_help.SignatureHelpParams, jsonParams.?);
+    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const position = params.position;
+    const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
+    const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
+    const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
+        return lsp.Response.createNull(id);
+    };
+    logger.debug("{s}", .{try token.allocPrint(arena.allocator())});
 
-//     const sig_info = (try getSignatureInfo(
-//         arena,
-//         workspace,
-//         doc,
-//         token_with_index.index,
-//         builtin_completions.data(),
-//     )) orelse {
-//         logger.warn("no signature info", .{});
-//         return lsp.Response{
-//             .id = id,
-//             .result = .{
-//                 .SignatureHelp = .{
-//                     .signatures = &.{},
-//                     .activeSignature = null,
-//                     .activeParameter = null,
-//                 },
-//             },
-//         };
-//     };
+    const signature = (try textdocument_position.getSignature(
+        arena,
+        workspace,
+        doc,
+        token,
+    )) orelse {
+        logger.warn("no signature", .{});
+        return lsp.Response.createNull(id);
+    };
 
-//     var signatures = std.ArrayList(lsp.SignatureInformation).init(arena.allocator());
-//     try signatures.append(sig_info);
+    _ = signature;
+    return lsp.Response.createNull(id);
 
-//     return lsp.Response{
-//         .id = id,
-//         .result = .{
-//             .SignatureHelp = .{
-//                 .signatures = signatures.items,
-//                 .activeSignature = 0,
-//                 .activeParameter = sig_info.activeParameter,
-//             },
-//         },
-//     };
-// }
+    // var signatures = std.ArrayList(lsp.SignatureInformation).init(arena.allocator());
+    // try signatures.append(sig_info);
+    // return lsp.Response{
+    //     .id = id,
+    //     .result = .{
+    //         .SignatureHelp = .{
+    //             .signatures = signatures.items,
+    //             .activeSignature = 0,
+    //             .activeParameter = sig_info.activeParameter,
+    //         },
+    //     },
+    // };
+}

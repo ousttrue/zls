@@ -5,6 +5,7 @@ pub const requests = @import("./requests.zig");
 
 pub const initialize = @import("./initialize.zig");
 pub const completion = @import("./completion.zig");
+pub const signature_help = @import("./signature_help.zig");
 pub const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
 
 pub const TextEdit = types.TextEdit;
@@ -16,8 +17,7 @@ pub const DocumentSymbol = textdocument_documentSymbol.DocumentSymbol;
 pub const WorkspaceFolder = types.WorkspaceFolder;
 pub const WorkspaceEdit = types.WorkspaceEdit;
 pub const Location = types.Location;
-pub const SignatureHelp = types.SignatureHelp;
-pub const SignatureInformation = types.SignatureInformation;
+
 
 pub const Notification = notification.Notification;
 pub const NotificationParams = notification.NotificationParams;

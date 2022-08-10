@@ -1,10 +1,11 @@
 const types = @import("./types.zig");
 const initialize = @import("./initialize.zig");
+const signature_help = @import("./signature_help.zig");
 const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
 
 /// Params of a response (result)
 pub const ResponseParams = union(enum) {
-    SignatureHelp: types.SignatureHelp,
+    SignatureHelp: signature_help.SignatureHelp,
     CompletionList: types.CompletionList,
     CompletionItems: []const types.CompletionItem,
     Location: types.Location,
