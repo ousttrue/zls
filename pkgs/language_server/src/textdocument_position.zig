@@ -50,9 +50,9 @@ pub fn getHover(
         .identifier => {
             switch (node.getTag()) {
                 .identifier => {
-                    if (Declaration.findFromBlock(node)) |decl| {
+                    if (Declaration.find(node)) |decl| {
                         const text = try decl.allocPrint(allocator, project);
-                        try w.print("local => {s}", .{text});
+                        try w.print("{s}", .{text});
                         return Hover{
                             .text = text_buffer.items,
                             .loc = decl.token.getLoc(),
@@ -151,13 +151,9 @@ pub fn getGoto(
                 else => {
                     switch (node.getTag()) {
                         .identifier => {
-                            if (Declaration.findFromBlock(node)) |decl| {
+                            if (Declaration.find(node)) |decl| {
                                 const text = try decl.allocPrint(arena.allocator(), project);
-                                logger.debug("local => {s}", .{text});
-                                // local variable
-                                return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
-                            } else if (Declaration.findFromContainer(node)) |decl| {
-                                // container variable
+                                logger.debug("{s}", .{text});
                                 return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
                             } else {
                                 return error.DeclNotFound;

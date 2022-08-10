@@ -108,12 +108,10 @@ pub fn init(project: ?Project, node: AstNode) anyerror!Self {
                             .node = node,
                             .kind = .{ .primitive = primitive },
                         };
-                    } else if (Declaration.findFromBlock(node)) |decl| {
-                        return init(project, AstNode.fromTokenIndex(node.context, decl.token.index));
-                    } else if (Declaration.findFromContainer(node)) |decl| {
+                    } else if (Declaration.find(node)) |decl| {
                         return init(project, AstNode.fromTokenIndex(node.context, decl.token.index));
                     } else {
-                        logger.warn("no ref: {s}", .{node.getMainToken().getText()});
+                        logger.err("no ref: {s}", .{node.getMainToken().getText()});
                     }
                 },
                 .optional_type => {

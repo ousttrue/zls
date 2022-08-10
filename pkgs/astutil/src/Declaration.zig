@@ -174,38 +174,39 @@ pub fn findFromContainerNode(scope: AstNode, symbol: []const u8) ?Self {
     return null;
 }
 
-pub fn findFromContainer(node: AstNode) ?Self {
+pub fn find(node: AstNode) ?Self {
     if (node.getTag() != .identifier) {
         return null;
     }
     const symbol = node.getMainToken().getText();
-    var it = node.parentIterator();
-    while (it.current) |current| : (it.next()) {
-        if (findFromContainerNode(current, symbol)) |decl| {
-            return decl;
-        }
-    }
-    return null;
-}
 
-pub fn findFromBlock(node: AstNode) ?Self {
-    if (node.getTag() != .identifier) {
-        return null;
-    }
-    const symbol = node.getMainToken().getText();
-    var it = node.parentIterator();
-    while (it.current) |current| : (it.next()) {
-        if (findFromBlockNode(current, symbol)) |local| {
-            return local;
-        }
-        if (current.getTag() == .fn_decl) {
-            break;
-        }
-        var buf: [2]u32 = undefined;
-        if (current.getChildren(&buf) == .container_decl) {
-            break;
+    // from block
+    {
+        var it = node.parentIterator();
+        while (it.current) |current| : (it.next()) {
+            if (findFromBlockNode(current, symbol)) |local| {
+                return local;
+            }
+            if (current.getTag() == .fn_decl) {
+                break;
+            }
+            var buf: [2]u32 = undefined;
+            if (current.getChildren(&buf) == .container_decl) {
+                break;
+            }
         }
     }
+
+    // from container
+    {
+        var it = node.parentIterator();
+        while (it.current) |current| : (it.next()) {
+            if (findFromContainerNode(current, symbol)) |decl| {
+                return decl;
+            }
+        }
+    }
+
     return null;
 }
 
