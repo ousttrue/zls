@@ -218,6 +218,26 @@ pub fn getContainerDecl(self: Self, buffer: []u32) ?Ast.full.ContainerDecl {
     };
 }
 
+/// from var or field
+pub fn getTypeNode(self: Self) ?Self {
+    var buf: [2]u32 = undefined;
+    switch (self.getChildren(&buf)) {
+        .var_decl => |var_decl| {
+            if (var_decl.ast.type_node != 0) {
+                return Self.init(self.context, var_decl.ast.type_node);
+            } else {
+                return Self.init(self.context, var_decl.ast.init_node);
+            }
+        },
+        .container_field => |container_field| {
+            return Self.init(self.context, container_field.ast.type_expr);
+        },
+        else => {
+            return null;
+        },
+    }
+}
+
 pub fn getParent(self: Self) ?Self {
     if (self.index == 0) {
         return null;

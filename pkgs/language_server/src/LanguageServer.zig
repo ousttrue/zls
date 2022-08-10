@@ -333,14 +333,14 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
         logger.err("not found: {s}", .{path.slice()});
         return error.DocumentNotFound;
     };
-    const symbols = try textdocument.to_symbols(arena, Project.init(self.import_solver, &self.store), doc, self.encoding);
+    const symbols = try textdocument.to_symbols(arena, doc, self.encoding);
     const res = lsp.Response{
         .id = id,
         .result = .{
             .DocumentSymbols = symbols,
         },
     };
-    logT(arena, res);
+    // logT(arena, res);
     return res;
 }
 

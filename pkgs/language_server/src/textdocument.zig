@@ -86,38 +86,58 @@ const SymbolTree = struct {
     fn process(
         self: *Self,
         arena: *std.heap.ArenaAllocator,
-        project: ?Project,
         doc: *Document,
         encoding: Line.Encoding,
     ) !void {
-        try self.traverse(&self.root, arena, project, doc, AstNode.init(doc.ast_context, 0), encoding);
+        try self.traverse(&self.root, arena, doc, AstNode.init(doc.ast_context, 0), encoding);
     }
 
     fn traverse(
         self: *Self,
         current: *std.ArrayList(lsp.document_symbol.DocumentSymbol),
         arena: *std.heap.ArenaAllocator,
-        project: ?Project,
         doc: *Document,
         container_node: AstNode,
         encoding: Line.Encoding,
     ) anyerror!void {
-        _ = self;
-        _ = arena;
-        _ = project;
-
         var buf2: [2]u32 = undefined;
         if (container_node.containerIterator(&buf2)) |*it| {
             while (it.next()) |member_node| {
-                // member_node: var_decl / container_field / fn_decl
-                const range = try getRange(doc, member_node.getMainToken().getLoc(), encoding);
-                var item = lsp.document_symbol.DocumentSymbol{
-                    .name = member_node.getMemberNameToken().?.getText(),
-                    .kind = getItemTag(member_node),
-                    .range = range,
-                    .selectionRange = range,
-                };
-                try current.append(item);
+                // member_node: var_decl / container_field / fn_decl / test_decl
+                if (member_node.getMemberNameToken()) |name_token| {
+                    // member_node: var_decl / container_field / fn_decl
+                    const range = try getRange(doc, member_node.getMainToken().getLoc(), encoding);
+                    var item = lsp.document_symbol.DocumentSymbol{
+                        .name = name_token.getText(),
+                        .kind = getItemTag(member_node),
+                        .range = range,
+                        .selectionRange = range,
+                    };
+                    var is_import = false;
+                    if (member_node.getTypeNode()) |type_node| {
+                        var buf: [2]u32 = undefined;
+                        switch (type_node.getChildren(&buf)) {
+                            .builtin_call => {
+                                if (std.mem.eql(u8, type_node.getMainToken().getText(), "@import")) {
+                                    is_import = true;
+                                    item.kind = .File;
+                                }
+                            },
+                            .container_decl => {
+                                var children = std.ArrayList(lsp.document_symbol.DocumentSymbol).init(arena.allocator());
+                                try self.traverse(&children, arena, doc, type_node, encoding);
+                                item.children = children.toOwnedSlice();
+                            },
+                            else => {},
+                        }
+                    }
+
+                    if (is_import) {
+                        try self.imports.append(item);
+                    } else {
+                        try current.append(item);
+                    }
+                }
             }
         } else {
             logger.err("not container", .{});
@@ -136,11 +156,10 @@ fn getItemTag(node: AstNode) lsp.document_symbol.SymbolKind {
 
 pub fn to_symbols(
     arena: *std.heap.ArenaAllocator,
-    project: ?Project,
     doc: *Document,
     encoding: Line.Encoding,
 ) anyerror![]lsp.document_symbol.DocumentSymbol {
     var symbol_tree = SymbolTree.init(arena.allocator());
-    try symbol_tree.process(arena, project, doc, encoding);
+    try symbol_tree.process(arena, doc, encoding);
     return symbol_tree.toOwnedSlice();
 }
