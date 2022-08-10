@@ -565,21 +565,12 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    // get token for completion context
-    //
-    // std.
-    //     ^ cursor is here. no token. get previous token
-    const token_with_index = doc.ast_context.prevTokenFromBytePos(byte_position) orelse {
-        // token not found. return no hover.
-        return lsp.Response.createNull(id);
-    };
-
     const completions = try textdocument_position.getCompletion(
         arena,
         self.project(),
         doc,
         params.context.triggerCharacter,
-        AstToken.init(&doc.ast_context.tree, token_with_index.index),
+        byte_position,
         self.encoding,
     );
 

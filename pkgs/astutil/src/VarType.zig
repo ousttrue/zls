@@ -201,7 +201,7 @@ pub fn fromContainerField(
     }
 }
 
-pub fn getContainer(self: Self, project: ?Project) !?AstNode {
+pub fn getContainerNode(self: Self, project: ?Project) !?AstNode {
     switch (self.kind) {
         .container => {
             return self.node;
@@ -229,7 +229,7 @@ pub fn getMember(
     project: ?Project,
     name: []const u8,
 ) anyerror!?AstNode {
-    if (try self.getContainer(project)) |container_node| {
+    if (try self.getContainerNode(project)) |container_node| {
         return container_node.getMember(name);
     } else {
         logger.err(

@@ -308,26 +308,40 @@ fn completeImport(
     return items.toOwnedSlice();
 }
 
-pub fn completeFieldAccess(
+pub fn completeContainerMember(
     arena: *std.heap.ArenaAllocator,
     project: Project,
     doc: *Document,
     token: AstToken,
 ) ![]const lsp.completion.CompletionItem {
-    _ = arena;
+    var items = std.ArrayList(lsp.completion.CompletionItem).init(arena.allocator());
 
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
     const var_type = try VarType.init(project, node);
 
-    switch (var_type.kind) {
-        .container => {},
-        .import => {},
-        else => {},
+    if (try var_type.getContainerNode(project)) |container_node| {
+        var buf: [2]u32 = undefined;
+        if (container_node.containerIterator(&buf)) |*it| {
+            while (it.next()) |member| {
+                if (member.getMemberNameToken()) |name_token| {
+                    var buf2: [2]u32 = undefined;
+
+                    try items.append(.{
+                        .label = name_token.getText(),
+                        .kind = switch (member.getChildren(&buf2)) {
+                            .var_decl => .Value,
+                            .container_field => .Property,
+                            else => .Method,
+                        },
+                    });
+                } else {}
+            }
+        }
+    } else {
+        logger.err("no container: {s}", .{try token.allocPrint(arena.allocator())});
     }
 
-    logger.debug("completion: {s}", .{@tagName(var_type.kind)});
-
-    return &.{};
+    return items.toOwnedSlice();
 }
 
 pub fn getCompletion(
@@ -335,14 +349,30 @@ pub fn getCompletion(
     project: Project,
     doc: *Document,
     trigger_character: ?[]const u8,
-    token: AstToken,
+    byte_position: u32,
     encoding: Line.Encoding,
 ) ![]const lsp.completion.CompletionItem {
+    // TODO:
+    // 補完のコンテキスト整理
+    // * trigger 起動
+    // * 非trigger 入力先頭(カーソル位置に token 無し)
+    // * 非trigger 入力非先頭(カーソル位置に token 有り)
+
+    // get token for completion context
+    //
+    // std.
+    //     ^ cursor is here. no token. get previous token
+    const token_with_index = doc.ast_context.prevTokenFromBytePos(byte_position) orelse {
+        // token not found. return no hover.
+        return error.NoTokenUnderCursor;
+    };
+    const token = AstToken.init(&doc.ast_context.tree, token_with_index.index);
+
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
             if (token.getPrev()) |prev| {
-                return try completeFieldAccess(arena, project, doc, prev);
+                return try completeContainerMember(arena, project, doc, prev);
             }
         } else if (std.mem.eql(u8, trigger, "@")) {
             // logger.debug("trigger '@' => builtin", .{});
@@ -353,22 +383,11 @@ pub fn getCompletion(
         }
     } else {
         switch (token.getTag()) {
-            // .period => {
-            //     // completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
-            //     // const idx = doc.ast_context.tokens_node[token_with_index.index];
-            //     // const tag = doc.ast_context.tree.nodes.items(.tag);
-            //     // const node_tag = tag[idx];
-            //     // switch(node_tag)
-            //     // {
-            //     //     .field_access =>{
-            //     //         return try completeFieldAccess(arena, workspace, doc, token_with_index.index, config, doc_kind);
-            //     //     },
-            //     //     else =>{
-            //     //         return try completeGlobal(arena, workspace, byte_position, doc, config, doc_kind);
-            //     //     },
-            //     // }
-            //     return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
-            // },
+            .period => {
+                if (token.getPrev()) |prev| {
+                    return try completeContainerMember(arena, project, doc, prev);
+                }
+            },
             .string_literal => {
                 const prev = token.getPrev().?; // lparen
                 const prev_prev = prev.getPrev().?; //
