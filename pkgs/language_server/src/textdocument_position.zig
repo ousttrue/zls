@@ -228,7 +228,41 @@ pub fn getSignature(
 ) !?FunctionSignature {
     _ = arena;
     _ = workspace;
-    _ = doc;
-    _ = token;
+
+    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+    var buf: [2]u32 = undefined;
+    switch (node.getChildren(&buf)) {
+        .call => {
+            logger.debug("call", .{});
+        },
+        .builtin_call => {
+            const name = node.getMainToken().getText();
+            for (builtin_completions.data()) |b| {
+                if (std.mem.eql(u8, b.name, name)) {
+                    var fs = FunctionSignature.init(arena.allocator(), name, b.documentation);
+                    for (b.arguments) |arg| {
+                        if (std.mem.indexOf(u8, arg, ":")) |found| {
+                            try fs.args.append(.{
+                                .name = arg[0..found],
+                                .document = arg[found + 1 ..],
+                            });
+                        } else {
+                            try fs.args.append(.{
+                                .name = arg,
+                                .document = arg,
+                            });
+                        }
+                    }
+                    return fs;
+                }
+            }
+            logger.err("builtin {s} not found", .{name});
+        },
+        else => {
+            logger.debug("getSignature: not function call: {s}", .{try node.allocPrint(arena.allocator())});
+            return null;
+        },
+    }
+
     return null;
 }

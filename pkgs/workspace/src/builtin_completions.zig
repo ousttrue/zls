@@ -39,10 +39,12 @@ pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Co
         };
 
         var insert_text: []const u8 = undefined;
-        if (config.enable_snippets) {
-            insert_text = builtin.snippet;
-            g_builtin_completions[idx].insertTextFormat = .Snippet;
-        } else {
+        // if (config.enable_snippets) {
+        //     insert_text = builtin.snippet;
+        //     g_builtin_completions[idx].insertTextFormat = .Snippet;
+        // } 
+        // else 
+        {
             insert_text = builtin.name;
         }
         g_builtin_completions[idx].insertText =

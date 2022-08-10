@@ -871,7 +871,7 @@ pub fn process(
         //     return try completeFieldAccess(arena, workspace, doc, token, config, doc_kind);
         // } else
         if (std.mem.eql(u8, trigger, "@")) {
-            logger.debug("trigger '@' => builtin", .{});
+            // logger.debug("trigger '@' => builtin", .{});
             return builtin_completions.completeBuiltin();
         } else {
             logger.debug("trigger '{s}'", .{trigger});

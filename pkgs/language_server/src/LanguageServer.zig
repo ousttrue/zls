@@ -37,6 +37,12 @@ fn logJson(arena: *std.heap.ArenaAllocator, json: ?std.json.Value) void {
     }
 }
 
+fn logT(arena: *std.heap.ArenaAllocator, value: anytype) void {
+    var buf = std.ArrayList(u8).init(arena.allocator());
+    std.json.stringify(value, .{ .emit_null_optional_fields = false }, buf.writer()) catch @panic("stringify");
+    logger.debug("{s}", .{buf.items});
+}
+
 const Self = @This();
 
 allocator: std.mem.Allocator,
@@ -672,7 +678,6 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
     const token = AstToken.fromBytePosition(&doc.ast_context.tree, byte_position) orelse {
         return lsp.Response.createNull(id);
     };
-    logger.debug("{s}", .{try token.allocPrint(arena.allocator())});
 
     const signature = (try textdocument_position.getSignature(
         arena,
@@ -684,19 +689,35 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
         return lsp.Response.createNull(id);
     };
 
-    _ = signature;
-    return lsp.Response.createNull(id);
+    var args = std.ArrayList(lsp.signature_help.ParameterInformation).init(arena.allocator());
+    for (signature.args.items) |arg| {
+        try args.append(.{
+            .label = arg.name,
+            .documentation = .{
+                .kind = .Markdown,
+                .value = arg.document,
+            },
+        });
+    }
+    var signatures: [1]lsp.signature_help.SignatureInformation = .{
+        .{
+            .label = signature.name,
+            .documentation = .{
+                .kind = .Markdown,
+                .value = signature.document,
+            },
+            .parameters = args.items,
+        },
+    };
 
-    // var signatures = std.ArrayList(lsp.SignatureInformation).init(arena.allocator());
-    // try signatures.append(sig_info);
-    // return lsp.Response{
-    //     .id = id,
-    //     .result = .{
-    //         .SignatureHelp = .{
-    //             .signatures = signatures.items,
-    //             .activeSignature = 0,
-    //             .activeParameter = sig_info.activeParameter,
-    //         },
-    //     },
-    // };
+    const res = lsp.Response{
+        .id = id,
+        .result = .{
+            .SignatureHelp = .{
+                .signatures = &signatures,
+            },
+        },
+    };
+    logT(arena, res);
+    return res;
 }

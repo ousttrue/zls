@@ -36,12 +36,12 @@ pub const SignatureHelp = struct {
 
 pub const SignatureInformation = struct {
     label: string,
-    documentation: ?types.MarkupContent,
-    parameters: ?[]const ParameterInformation,
-    activeParameter: ?u32,
+    documentation: types.MarkupContent,
+    parameters: ?[]const ParameterInformation = null,
+    activeParameter: ?u32 = null,
 };
 
 pub const ParameterInformation = struct {
     label: string,
-    documentation: ?types.MarkupContent,
+    documentation: types.MarkupContent,
 };
