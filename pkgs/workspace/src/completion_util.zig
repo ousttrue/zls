@@ -785,8 +785,8 @@ fn completeImport(
     doc: *Document,
     token: AstToken,
     encoding: Line.Encoding,
-) ![]lsp.CompletionItem {
-    var items = std.ArrayList(lsp.CompletionItem).init(arena.allocator());
+) ![]lsp.completion.CompletionItem {
+    var items = std.ArrayList(lsp.completion.CompletionItem).init(arena.allocator());
     const loc = token.getLoc();
     const text = token.getText();
     var range = try tokenToRange(doc, .{ .start = loc.start + 1, .end = loc.end - 1 }, encoding);
@@ -864,7 +864,7 @@ pub fn process(
     trigger_character: ?[]const u8,
     token: AstToken,
     encoding: Line.Encoding,
-) ![]const lsp.CompletionItem {
+) ![]const lsp.completion.CompletionItem {
     if (trigger_character) |trigger| {
         // if (std.mem.eql(u8, trigger, ".")) {
         //     logger.debug("trigger '.' => field_access", .{});
@@ -875,7 +875,7 @@ pub fn process(
             return builtin_completions.completeBuiltin();
         } else {
             logger.debug("trigger '{s}'", .{trigger});
-            return &[_]lsp.CompletionItem{};
+            return &[_]lsp.completion.CompletionItem{};
         }
     } else {
         switch (token.getTag()) {
@@ -909,7 +909,7 @@ pub fn process(
             },
         }
     }
-    return &[_]lsp.CompletionItem{};
+    return &[_]lsp.completion.CompletionItem{};
 
     // const pos_context = doc.ast_context.getPositionContext(byte_position);
     // switch (pos_context) {

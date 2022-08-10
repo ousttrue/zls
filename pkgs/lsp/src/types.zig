@@ -71,11 +71,6 @@ pub const MarkupContent = struct {
     value: string,
 };
 
-pub const CompletionList = struct {
-    isIncomplete: bool,
-    items: []const CompletionItem,
-};
-
 pub const InsertTextFormat = enum(i64) {
     PlainText = 1,
     Snippet = 2,
@@ -83,49 +78,6 @@ pub const InsertTextFormat = enum(i64) {
     pub fn jsonStringify(value: InsertTextFormat, options: std.json.StringifyOptions, out_stream: anytype) !void {
         try std.json.stringify(@enumToInt(value), options, out_stream);
     }
-};
-
-pub const CompletionItem = struct {
-    const Kind = enum(i64) {
-        Text = 1,
-        Method = 2,
-        Function = 3,
-        Constructor = 4,
-        Field = 5,
-        Variable = 6,
-        Class = 7,
-        Interface = 8,
-        Module = 9,
-        Property = 10,
-        Unit = 11,
-        Value = 12,
-        Enum = 13,
-        Keyword = 14,
-        Snippet = 15,
-        Color = 16,
-        File = 17,
-        Reference = 18,
-        Folder = 19,
-        EnumMember = 20,
-        Constant = 21,
-        Struct = 22,
-        Event = 23,
-        Operator = 24,
-        TypeParameter = 25,
-
-        pub fn jsonStringify(value: Kind, options: std.json.StringifyOptions, out_stream: anytype) !void {
-            try std.json.stringify(@enumToInt(value), options, out_stream);
-        }
-    };
-
-    label: string,
-    kind: Kind = .Text,
-    textEdit: ?TextEdit = null,
-    filterText: ?string = null,
-    insertText: string = "",
-    insertTextFormat: ?InsertTextFormat = .PlainText,
-    detail: ?string = null,
-    documentation: ?MarkupContent = null,
 };
 
 /// Only check for the field's existence.

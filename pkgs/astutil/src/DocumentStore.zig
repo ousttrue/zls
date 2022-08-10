@@ -26,7 +26,7 @@ pub fn deinit(self: *Self) void {
 
 pub fn put(self: *Self, doc: *Document) !void
 {
-    logger.debug("new {s}", .{doc.path.slice()});
+    // logger.debug("new {s}", .{doc.path.slice()});
     try self.path_document_map.put(doc.path.slice(), doc);
 }
 

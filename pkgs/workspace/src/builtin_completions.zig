@@ -4,7 +4,7 @@ const Config = @import("./Config.zig");
 const shared = @import("./shared.zig");
 const Builtin = @import("./Builtin.zig");
 
-pub fn truncateCompletions(list: []lsp.CompletionItem, max_detail_length: usize) void {
+pub fn truncateCompletions(list: []lsp.completion.CompletionItem, max_detail_length: usize) void {
     for (list) |*item| {
         if (item.detail) |det| {
             if (det.len > max_detail_length) {
@@ -16,7 +16,7 @@ pub fn truncateCompletions(list: []lsp.CompletionItem, max_detail_length: usize)
 
 var g_builtins: []const Builtin = undefined;
 var g_allocator: std.mem.Allocator = undefined;
-var g_builtin_completions: []lsp.CompletionItem = undefined;
+var g_builtin_completions: []lsp.completion.CompletionItem = undefined;
 
 pub fn data() []const Builtin {
     return g_builtins;
@@ -25,9 +25,9 @@ pub fn data() []const Builtin {
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
     g_allocator = allocator;
     g_builtins = builtins;
-    g_builtin_completions = allocator.alloc(lsp.CompletionItem, g_builtins.len) catch unreachable;
+    g_builtin_completions = allocator.alloc(lsp.completion.CompletionItem, g_builtins.len) catch unreachable;
     for (g_builtins) |builtin, idx| {
-        g_builtin_completions[idx] = lsp.CompletionItem{
+        g_builtin_completions[idx] = lsp.completion.CompletionItem{
             .label = builtin.name,
             .kind = .Function,
             .filterText = builtin.name[1..],
@@ -42,8 +42,8 @@ pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Co
         // if (config.enable_snippets) {
         //     insert_text = builtin.snippet;
         //     g_builtin_completions[idx].insertTextFormat = .Snippet;
-        // } 
-        // else 
+        // }
+        // else
         {
             insert_text = builtin.name;
         }
@@ -60,7 +60,7 @@ pub fn deinit() void {
     g_allocator.free(g_builtin_completions);
 }
 
-pub fn completeBuiltin() []lsp.CompletionItem {
+pub fn completeBuiltin() []lsp.completion.CompletionItem {
     return g_builtin_completions;
 }
 

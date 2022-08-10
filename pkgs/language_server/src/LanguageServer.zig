@@ -539,7 +539,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     // try jsonParams.?.jsonStringify(.{}, tmp.writer());
     // logger.debug("{s}", .{tmp.items});
 
-    const params = try lsp.fromDynamicTree(arena, lsp.completion.Completion, jsonParams.?);
+    const params = try lsp.fromDynamicTree(arena, lsp.completion.CompletionParams, jsonParams.?);
     const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));

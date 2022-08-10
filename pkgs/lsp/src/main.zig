@@ -9,7 +9,6 @@ pub const signature_help = @import("./signature_help.zig");
 pub const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
 
 pub const TextEdit = types.TextEdit;
-pub const CompletionItem = types.CompletionItem;
 pub const Range = types.Range;
 pub const Position = types.Position;
 pub const MarkupContent = types.MarkupContent;
