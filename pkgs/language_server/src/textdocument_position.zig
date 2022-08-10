@@ -1,7 +1,7 @@
 const std = @import("std");
 const astutil = @import("astutil");
 const lsp = @import("lsp");
-const Workspace = @import("./Workspace.zig");
+const Project = astutil.Project;
 const Document = astutil.Document;
 const PathPosition = astutil.PathPosition;
 const FixedPath = astutil.FixedPath;
@@ -9,7 +9,6 @@ const AstToken = astutil.AstToken;
 const AstNode = astutil.AstNode;
 const Declaration = astutil.Declaration;
 const VarType = astutil.VarType;
-const Project = astutil.Project;
 const Line = astutil.Line;
 const FunctionSignature = astutil.FunctionSignature;
 const ImportSolver = astutil.ImportSolver;
@@ -311,7 +310,7 @@ fn completeImport(
 
 pub fn getCompletion(
     arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
+    project: Project,
     doc: *Document,
     trigger_character: ?[]const u8,
     token: AstToken,
@@ -351,7 +350,7 @@ pub fn getCompletion(
                 const prev = token.getPrev(); // lparen
                 const prev_prev = prev.getPrev(); //
                 if (std.mem.eql(u8, prev_prev.getText(), "@import")) {
-                    return try completeImport(arena, workspace.import_solver, doc, token, encoding);
+                    return try completeImport(arena, project.import_solver, doc, token, encoding);
                 }
                 // return try completeGlobal(arena, workspace, token.getStart(), doc, config, doc_kind);
             },
@@ -370,12 +369,12 @@ pub fn getCompletion(
 ///         ^ r_paren
 pub fn getSignature(
     arena: *std.heap.ArenaAllocator,
-    workspace: *Workspace,
+    project: Project,
     doc: *Document,
     token: AstToken,
 ) !?FunctionSignature {
     _ = arena;
-    _ = workspace;
+    _ = project;
 
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
     var buf: [2]u32 = undefined;

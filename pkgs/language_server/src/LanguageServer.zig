@@ -4,9 +4,10 @@ const lsp = @import("lsp");
 const astutil = @import("astutil");
 const FixedPath = astutil.FixedPath;
 const ZigEnv = @import("./ZigEnv.zig");
-const Workspace = @import("./Workspace.zig");
 const Document = astutil.Document;
 const Line = astutil.Line;
+const ImportSolver = astutil.ImportSolver;
+const DocumentStore = astutil.DocumentStore;
 const semantic_tokens = @import("./semantic_tokens.zig");
 const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
 const AstNodeIterator = astutil.AstNodeIterator;
@@ -45,7 +46,11 @@ const Self = @This();
 allocator: std.mem.Allocator,
 config: *Config,
 zigenv: ZigEnv,
-workspace: ?*Workspace = null,
+
+// root: FixedPath,
+import_solver: ImportSolver,
+store: DocumentStore,
+
 client_capabilities: ClientCapabilities = .{},
 encoding: Line.Encoding = .utf16,
 server_capabilities: lsp.initialize.ServerCapabilities = .{
@@ -111,19 +116,30 @@ server_capabilities: lsp.initialize.ServerCapabilities = .{
 notification_queue: std.ArrayList(lsp.Notification),
 
 pub fn init(allocator: std.mem.Allocator, config: *Config, zigenv: ZigEnv) Self {
-    return Self{
+    var self = Self{
         .allocator = allocator,
         .config = config,
         .zigenv = zigenv,
         .notification_queue = std.ArrayList(lsp.Notification).init(allocator),
+        .import_solver = ImportSolver.init(allocator),
+        .store = DocumentStore.init(allocator),
     };
+    self.import_solver.push("std", self.zigenv.std_path) catch unreachable;
+    return self;
 }
 
 pub fn deinit(self: *Self) void {
-    if (self.workspace) |workspace| {
-        workspace.delete();
-    }
+    self.store.deinit();
+    self.import_solver.deinit();
     self.notification_queue.deinit();
+}
+
+pub fn project(self: *Self) Project
+{
+    return .{
+        .import_solver = self.import_solver,
+        .store = &self.store,
+    };
 }
 
 /// # base protocol
@@ -167,13 +183,15 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
         }
     }
 
-    if (params.rootUri) |uri| {
-        self.workspace = try Workspace.new(self.allocator, self.zigenv, try FixedPath.fromUri(uri));
-    } else if (params.rootPath) |path| {
-        self.workspace = try Workspace.new(self.allocator, self.zigenv, FixedPath.fromFullpath(path));
-    } else {
+    const root = if (params.rootUri) |uri|
+        try FixedPath.fromUri(uri)
+    else if (params.rootPath) |path|
+        FixedPath.fromFullpath(path)
+    else
         return error.NoWorkspaceRoot;
-    }
+
+    // initialize import_solver
+    try self.zigenv.loadPackages(self.allocator, &self.import_solver, root);
 
     return lsp.Response{
         .id = id,
@@ -209,11 +227,10 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
 /// # document sync
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didOpen
 pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.OpenDocument, jsonParams.?);
     const path = try FixedPath.fromUri(params.textDocument.uri);
     const text = params.textDocument.text;
-    try workspace.store.update(path, text);
+    try self.store.update(path, text);
 
     // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
     //     try self.notification_queue.append(notification);
@@ -225,9 +242,8 @@ pub fn @"textDocument/didOpen"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 /// # document sync
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didChange
 pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.ChangeDocument, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     try doc.applyChanges(params.contentChanges.Array, self.encoding);
     // if (textdocument_diagnostics.createNotifyDiagnostics(arena, doc, self.config)) |notification| {
     //     try self.notification_queue.append(notification);
@@ -239,9 +255,8 @@ pub fn @"textDocument/didChange"(self: *Self, arena: *std.heap.ArenaAllocator, j
 /// # document sync
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave
 pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SaveDocument, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     _ = doc;
     // try doc.applySave(self.zigenv);
 }
@@ -249,9 +264,8 @@ pub fn @"textDocument/didSave"(self: *Self, arena: *std.heap.ArenaAllocator, jso
 /// # document sync
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didClose
 pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, jsonParams: ?std.json.Value) !void {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.CloseDocument, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     _ = doc;
 }
 
@@ -259,9 +273,8 @@ pub fn @"textDocument/didClose"(self: *Self, arena: *std.heap.ArenaAllocator, js
 /// ## document request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_formatting
 pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Formatting, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 
     const stdout_bytes = self.zigenv.spawnZigFmt(arena.allocator(), doc.utf8_buffer.text) catch |err|
         {
@@ -299,14 +312,13 @@ pub fn @"textDocument/formatting"(self: *Self, arena: *std.heap.ArenaAllocator, 
 /// ## document request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol
 pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.DocumentSymbols, jsonParams.?);
     const path = try FixedPath.fromUri(params.textDocument.uri);
-    const doc = workspace.store.get(path) orelse {
+    const doc = self.store.get(path) orelse {
         logger.err("not found: {s}", .{path.slice()});
         return error.DocumentNotFound;
     };
-    const symbols = try textdocument.to_symbols(arena, Project.init(workspace.import_solver, &workspace.store), doc, self.encoding);
+    const symbols = try textdocument.to_symbols(arena, Project.init(self.import_solver, &self.store), doc, self.encoding);
     return lsp.Response{
         .id = id,
         .result = .{
@@ -319,7 +331,6 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
 /// ## document request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens
 pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     if (!self.config.enable_semantic_tokens) {
         return lsp.Response{
             .id = id,
@@ -330,7 +341,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     }
 
     const params = try lsp.fromDynamicTree(arena, lsp.requests.SemanticTokensFull, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 
     var token_array = try SemanticTokensBuilder.writeAllSemanticTokens(arena, doc);
     var array = try std.ArrayList(u32).initCapacity(arena.allocator(), token_array.len * 5);
@@ -376,7 +387,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
 // pub fn @"textDocument/codeLens"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
 //     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
 //     const params = try lsp.fromDynamicTree(arena, lsp.requests.TextDocumentIdentifierRequest, jsonParams.?);
-//     const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+//     const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 
 //     // const tree = doc.ast_context.tree;
 //     var data = std.ArrayList(lsp.types.CodeLens).init(arena.allocator());
@@ -431,7 +442,7 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
 //     _ = workspace;
 //     logJson(arena, jsonParams);
 //     // const params = try lsp.fromDynamicTree(arena, lsp.requests.TextDocumentIdentifierRequest, jsonParams.?);
-//     // const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+//     // const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 //     return lsp.Response.createNull(id);
 // }
 
@@ -439,9 +450,8 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
 /// ## document position request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover
 pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.Hover, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
@@ -451,7 +461,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
 
     const hover_or_null: ?textdocument_position.Hover = try textdocument_position.getHover(
         arena,
-        Project.init(workspace.import_solver, &workspace.store),
+        Project.init(self.import_solver, &self.store),
         doc,
         token,
     );
@@ -491,9 +501,8 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
 /// ## document position request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition
 pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.requests.GotoDefinition, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
@@ -501,8 +510,8 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, Project.init(workspace.import_solver, &workspace.store), doc, token)) |location| {
-        const goto_doc = (try workspace.store.getOrLoad(location.path)) orelse {
+    if (try textdocument_position.getGoto(arena, Project.init(self.import_solver, &self.store), doc, token)) |location| {
+        const goto_doc = (try self.store.getOrLoad(location.path)) orelse {
             logger.warn("fail to load: {s}", .{location.path.slice()});
             return error.DocumentNotFound;
         };
@@ -531,13 +540,12 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
 /// ## document position request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion
 pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     // var tmp = std.ArrayList(u8).init(arena.allocator());
     // try jsonParams.?.jsonStringify(.{}, tmp.writer());
     // logger.debug("{s}", .{tmp.items});
 
     const params = try lsp.fromDynamicTree(arena, lsp.completion.CompletionParams, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
@@ -553,7 +561,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
 
     const completions = try textdocument_position.getCompletion(
         arena,
-        workspace,
+        self.project(),
         doc,
         params.context.triggerCharacter,
         AstToken.init(&doc.ast_context.tree, token_with_index.index),
@@ -574,7 +582,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
 // pub fn @"textDocument/rename"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
 //     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
 //     const params = try lsp.fromDynamicTree(arena, lsp.requests.Rename, jsonParams.?);
-//     const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+//     const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 //     const position = params.position;
 //     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
 //     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
@@ -620,7 +628,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
 // pub fn @"textDocument/references"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
 //     var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
 //     const params = try lsp.fromDynamicTree(arena, lsp.requests.References, jsonParams.?);
-//     const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+//     const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
 //     const position = params.position;
 //     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
 //     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
@@ -666,9 +674,8 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
 /// ## document position request
 /// * https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp
 pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParams: ?std.json.Value) !lsp.Response {
-    var workspace = self.workspace orelse return error.WorkspaceNotInitialized;
     const params = try lsp.fromDynamicTree(arena, lsp.signature_help.SignatureHelpParams, jsonParams.?);
-    const doc = workspace.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
+    const doc = self.store.get(try FixedPath.fromUri(params.textDocument.uri)) orelse return error.DocumentNotFound;
     const position = params.position;
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
@@ -678,7 +685,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
 
     const signature = (try textdocument_position.getSignature(
         arena,
-        workspace,
+        self.project(),
         doc,
         token,
     )) orelse {

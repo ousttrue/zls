@@ -7,7 +7,6 @@ This is an experimental modified version
 * [x] cursor position => token => ast node
 * [x] @import completion (zig_files, std, user_pkg...etc)
 * [ ] @cImport completion (use zig translate-c ?)
-* [ ] remove workspace dependency to lsp
 * [ ] goto: .enum_literal
 * [ ] diagnostics: when format error
 * [ ] add keywords to global completion(undefined, unreachable... etc)
