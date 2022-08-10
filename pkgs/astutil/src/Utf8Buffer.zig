@@ -168,6 +168,7 @@ pub const LineX = struct {
     x: u32,
 };
 
+// TODO: mutibyte
 pub fn getPositionFromBytePosition(self: Self, byte_position: usize, encoding: Line.Encoding) !LineX {
     const line = try self.getLineIndexFromBytePosition(byte_position);
     var i: u32 = self.line_heads.items[line];

@@ -353,10 +353,9 @@ pub fn getCompletion(
     encoding: Line.Encoding,
 ) ![]const lsp.completion.CompletionItem {
     // TODO:
-    // 補完のコンテキスト整理
-    // * trigger 起動
-    // * 非trigger 入力先頭(カーソル位置に token 無し)
-    // * 非trigger 入力非先頭(カーソル位置に token 有り)
+    // * trigger
+    // * not trigger input head(no token under cursor)
+    // * not trigger input not head(token under cursor)
 
     // get token for completion context
     //
