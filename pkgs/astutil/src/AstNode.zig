@@ -315,32 +315,3 @@ test "@This" {
 
     try std.testing.expectEqual(pp, node.getContainerNodeForThis().?);
 }
-
-// pub fn isType(self: Self) bool {
-//     switch(self.getTag())
-//     {
-
-//     }
-//     // init
-//     // call param
-//     // var/param : type
-//     // fn_return
-
-//     return false;
-// }
-
-// test "isType" {
-//     const source =
-//         \\const value: u32 = 0;
-//     ;
-//     const allocator = std.testing.allocator;
-//     const text: [:0]const u8 = try allocator.dupeZ(u8, source);
-//     defer allocator.free(text);
-
-//     const context = try AstContext.new(allocator, .{}, text);
-//     defer context.delete();
-
-//     const node = Self.fromTokenIndex(context, 3);
-//     std.debug.print("\nnode tag: {}\n", .{node.getTag()});
-//     try std.testing.expect(node.isType());
-// }

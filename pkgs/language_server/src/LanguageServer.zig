@@ -223,7 +223,7 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
     return lsp.Response.createNull(id);
 }
 
-fn publishDiagnostics(self: *Self, uri: []const u8, diagnostics: [] lsp.diagnostic.Diagnostic) !void {
+fn publishDiagnostics(self: *Self, uri: []const u8, diagnostics: []lsp.diagnostic.Diagnostic) !void {
     // logger.debug("diagnostics: {}", .{diagnostics.len});
     const notification = lsp.Notification{
         .method = "textDocument/publishDiagnostics",
@@ -334,12 +334,14 @@ pub fn @"textDocument/documentSymbol"(self: *Self, arena: *std.heap.ArenaAllocat
         return error.DocumentNotFound;
     };
     const symbols = try textdocument.to_symbols(arena, Project.init(self.import_solver, &self.store), doc, self.encoding);
-    return lsp.Response{
+    const res = lsp.Response{
         .id = id,
         .result = .{
             .DocumentSymbols = symbols,
         },
     };
+    logT(arena, res);
+    return res;
 }
 
 /// # language feature

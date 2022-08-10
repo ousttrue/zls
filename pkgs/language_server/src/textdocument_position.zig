@@ -58,7 +58,7 @@ pub fn getHover(
                             .loc = decl.token.getLoc(),
                         };
                     } else {
-                        logger.debug("identifer: decl not found", .{});
+                        logger.debug("identifer: {s}: decl not found", .{token.getText()});
                     }
                 },
                 else => {

@@ -2,7 +2,7 @@ const types = @import("./types.zig");
 const initialize = @import("./initialize.zig");
 const signature_help = @import("./signature_help.zig");
 const completion = @import("./completion.zig");
-const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
+const document_symbol = @import("./document_symbol.zig");
 
 /// Params of a response (result)
 pub const ResponseParams = union(enum) {
@@ -11,7 +11,7 @@ pub const ResponseParams = union(enum) {
     CompletionItems: []const completion.CompletionItem,
     Location: types.Location,
     Hover: types.Hover,
-    DocumentSymbols: []textdocument_documentSymbol.DocumentSymbol,
+    DocumentSymbols: []document_symbol.DocumentSymbol,
     SemanticTokensFull: struct { data: []const u32 },
     TextEdits: []types.TextEdit,
     Locations: []types.Location,

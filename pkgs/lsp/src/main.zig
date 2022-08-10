@@ -7,13 +7,12 @@ pub const initialize = @import("./initialize.zig");
 pub const completion = @import("./completion.zig");
 pub const signature_help = @import("./signature_help.zig");
 pub const diagnostic = @import("./diagnostic.zig");
-pub const textdocument_documentSymbol = @import("./textdocument_documentSymbol.zig");
+pub const document_symbol = @import("./document_symbol.zig");
 
 pub const TextEdit = types.TextEdit;
 pub const Range = types.Range;
 pub const Position = types.Position;
 pub const MarkupContent = types.MarkupContent;
-pub const DocumentSymbol = textdocument_documentSymbol.DocumentSymbol;
 pub const WorkspaceFolder = types.WorkspaceFolder;
 pub const WorkspaceEdit = types.WorkspaceEdit;
 pub const Location = types.Location;

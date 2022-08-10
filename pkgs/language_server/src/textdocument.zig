@@ -9,7 +9,6 @@ const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const ImportSolver = astutil.ImportSolver;
-const FieldIterator = @import("./FieldIterator.zig");
 
 const ast = struct {};
 const logger = std.log.scoped(.textdocument);
@@ -51,13 +50,13 @@ pub fn getDiagnostics(arena: *std.heap.ArenaAllocator, doc: *Document, encoding:
 const SymbolTree = struct {
     const Self = @This();
 
-    root: std.ArrayList(lsp.DocumentSymbol),
-    imports: std.ArrayList(lsp.DocumentSymbol),
+    root: std.ArrayList(lsp.document_symbol.DocumentSymbol),
+    imports: std.ArrayList(lsp.document_symbol.DocumentSymbol),
 
     fn init(allocator: std.mem.Allocator) Self {
         var self = Self{
-            .root = std.ArrayList(lsp.DocumentSymbol).init(allocator),
-            .imports = std.ArrayList(lsp.DocumentSymbol).init(allocator),
+            .root = std.ArrayList(lsp.document_symbol.DocumentSymbol).init(allocator),
+            .imports = std.ArrayList(lsp.document_symbol.DocumentSymbol).init(allocator),
         };
         var range = lsp.Range{
             .start = .{
@@ -79,7 +78,7 @@ const SymbolTree = struct {
         return self;
     }
 
-    fn toOwnedSlice(self: *Self) []lsp.DocumentSymbol {
+    fn toOwnedSlice(self: *Self) []lsp.document_symbol.DocumentSymbol {
         self.root.items[0].children = self.imports.items;
         return self.root.toOwnedSlice();
     }
@@ -91,51 +90,56 @@ const SymbolTree = struct {
         doc: *Document,
         encoding: Line.Encoding,
     ) !void {
-        for (doc.ast_context.tree.rootDecls()) |decl| {
-            if (try self.traverse(arena, project, doc, AstNode.init(doc.ast_context, decl), encoding)) |child| {
-                try self.root.append(child);
-            }
-        }
+        try self.traverse(&self.root, arena, project, doc, AstNode.init(doc.ast_context, 0), encoding);
     }
 
     fn traverse(
         self: *Self,
+        current: *std.ArrayList(lsp.document_symbol.DocumentSymbol),
         arena: *std.heap.ArenaAllocator,
         project: ?Project,
         doc: *Document,
-        node: AstNode,
+        container_node: AstNode,
         encoding: Line.Encoding,
-    ) anyerror!?lsp.DocumentSymbol {
-        const range = try getRange(doc, node.getMainToken().getLoc(), encoding);
-        var buf: [2]u32 = undefined;
-        var item = lsp.DocumentSymbol{
-            .name = node.getMemberNameToken().?.getText(),
-            .kind = switch (node.getChildren(&buf)) {
-                .var_decl => .Variable,
-                .container_field => .Property,
-                else => .Method,
-            },
-            .range = range,
-        };
-        if (FieldIterator.init(project, node)) |*it| {
-            var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
-            while (it.next()) |child_node| {
-                if (try self.traverse(arena, project, doc, child_node, encoding)) |child| {
-                    try children.append(child);
-                }
+    ) anyerror!void {
+        _ = self;
+        _ = arena;
+        _ = project;
+
+        var buf2: [2]u32 = undefined;
+        if (container_node.containerIterator(&buf2)) |*it| {
+            while (it.next()) |member_node| {
+                // member_node: var_decl / container_field / fn_decl
+                const range = try getRange(doc, member_node.getMainToken().getLoc(), encoding);
+                var item = lsp.document_symbol.DocumentSymbol{
+                    .name = member_node.getMemberNameToken().?.getText(),
+                    .kind = getItemTag(member_node),
+                    .range = range,
+                    .selectionRange = range,
+                };
+                try current.append(item);
             }
-            item.children = children.items;
+        } else {
+            logger.err("not container", .{});
         }
-        return item;
     }
 };
+
+fn getItemTag(node: AstNode) lsp.document_symbol.SymbolKind {
+    var buf: [2]u32 = undefined;
+    return switch (node.getChildren(&buf)) {
+        .var_decl => .Variable,
+        .container_field => .Property,
+        else => .Method,
+    };
+}
 
 pub fn to_symbols(
     arena: *std.heap.ArenaAllocator,
     project: ?Project,
     doc: *Document,
     encoding: Line.Encoding,
-) anyerror![]lsp.DocumentSymbol {
+) anyerror![]lsp.document_symbol.DocumentSymbol {
     var symbol_tree = SymbolTree.init(arena.allocator());
     try symbol_tree.process(arena, project, doc, encoding);
     return symbol_tree.toOwnedSlice();
