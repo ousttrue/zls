@@ -738,6 +738,6 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
             },
         },
     };
-    logT(arena, res);
+    // logT(arena, res);
     return res;
 }
