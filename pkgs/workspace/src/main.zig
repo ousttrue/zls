@@ -9,7 +9,6 @@ pub const semantic_tokens = @import("./semantic_tokens.zig");
 pub const SemanticTokensBuilder = @import("./SemanticTokensBuilder.zig");
 pub const completion_util = @import("./completion_util.zig");
 pub const ast = astutil.ast;
-pub const signature_help = @import("./signature_help.zig");
 pub const builtin_completions = @import("./builtin_completions.zig");
 
 pub fn init(allocator: std.mem.Allocator, builtins: []const Builtin, config: *Config) void {
