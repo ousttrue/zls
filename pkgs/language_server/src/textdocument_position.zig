@@ -14,8 +14,7 @@ const Project = astutil.Project;
 const Line = astutil.Line;
 const FunctionSignature = astutil.FunctionSignature;
 const ImportSolver = astutil.ImportSolver;
-const ast = ws.ast;
-const builtin_completions = ws.builtin_completions;
+const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.textdocument_position);
 
 pub const Hover = struct {

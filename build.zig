@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const shared = @import("./pkgs/workspace/src/shared.zig");
+const shared = @import("./pkgs/language_server/src/shared.zig");
 
 const known_folders_pkg = std.build.Pkg{
     .name = "known-folders",
@@ -20,7 +20,7 @@ const astutil_pkg = std.build.Pkg{
 const workspace_pkg = std.build.Pkg{
     .name = "workspace",
     .source = .{ .path = "pkgs/workspace/src/main.zig" },
-    .dependencies = &.{ lsp_pkg, known_folders_pkg, astutil_pkg },
+    .dependencies = &.{ known_folders_pkg, astutil_pkg },
 };
 
 const ls_pkg = std.build.Pkg{

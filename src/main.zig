@@ -4,14 +4,15 @@ const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
 const known_folders = @import("known-folders");
 const ws = @import("workspace");
-const LanguageServer = @import("language_server").LanguageServer;
+const ls = @import("language_server");
+const LanguageServer = ls.LanguageServer;
+const Config = ls.Config;
 const lsp = @import("lsp");
+const requests = lsp.requests;
 const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
-const requests = lsp.requests;
 const FixedPath = astutil.FixedPath;
-const Config = ws.Config;
 const Stdio = @import("./Stdio.zig");
 const ZigEnv = ws.ZigEnv;
 
@@ -151,7 +152,7 @@ fn initialize(allocator: std.mem.Allocator, config: *Config) !?FixedPath {
 pub fn main() anyerror!void {
     var config = Config{};
     const config_dir = (try initialize(std.heap.page_allocator, &config)) orelse
-    {
+        {
         return;
     };
 
@@ -177,8 +178,8 @@ pub fn main() anyerror!void {
             "ZLS_DONT_CARE",
         );
 
-        ws.init(allocator, &data.builtins, &config);
-        defer ws.deinit();
+        ls.init(allocator, &data.builtins, &config);
+        defer ls.deinit();
 
         var dispatcher = Dispatcher.init(allocator);
         defer dispatcher.deinit();

@@ -1,4 +1,4 @@
-const Builtin = @import("workspace").Builtin;
+const Builtin = @import("language_server").Builtin;
 
 pub const builtins = [_]Builtin{
     .{
