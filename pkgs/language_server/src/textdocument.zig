@@ -2,7 +2,6 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const lsp = @import("lsp");
 const astutil = @import("astutil");
-const Config = @import("./Config.zig");
 const Document = astutil.Document;
 const Project = astutil.Project;
 const Line = astutil.Line;
@@ -10,7 +9,8 @@ const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const ImportSolver = astutil.ImportSolver;
-const TypeWithHandle = struct {};
+const FieldIterator = @import("./FieldIterator.zig");
+
 const ast = struct {};
 const logger = std.log.scoped(.textdocument);
 
@@ -106,13 +106,27 @@ const SymbolTree = struct {
         node: AstNode,
         encoding: Line.Encoding,
     ) anyerror!?lsp.DocumentSymbol {
-        _ = self;
-        _ = arena;
-        _ = project;
-        _ = doc;
-        _ = node;
-        _ = encoding;
-        return null;
+        const range = try getRange(doc, node.getMainToken().getLoc(), encoding);
+        var buf: [2]u32 = undefined;
+        var item = lsp.DocumentSymbol{
+            .name = node.getMemberNameToken().?.getText(),
+            .kind = switch (node.getChildren(&buf)) {
+                .var_decl => .Variable,
+                .container_field => .Property,
+                else => .Method,
+            },
+            .range = range,
+        };
+        if (FieldIterator.init(project, node)) |*it| {
+            var children = std.ArrayList(lsp.DocumentSymbol).init(arena.allocator());
+            while (it.next()) |child_node| {
+                if (try self.traverse(arena, project, doc, child_node, encoding)) |child| {
+                    try children.append(child);
+                }
+            }
+            item.children = children.items;
+        }
+        return item;
     }
 };
 

@@ -42,6 +42,6 @@ pub const DocumentSymbol = struct {
     kind: Kind,
     deprecated: bool = false,
     range: Range,
-    selectionRange: Range,
+    selectionRange: ?Range = null,
     children: []DocumentSymbol = &[_]DocumentSymbol{},
 };
