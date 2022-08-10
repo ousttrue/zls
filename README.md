@@ -26,3 +26,13 @@ This is an experimental modified version
 * Ast 処理では token / node レベルで操作する。bytePosition による処理を避ける
 * build.zig は root にひとつに決め打ち。簡略化する
 * completion => snippet, signature help
+
+```
++-------+ +---+
+|astutil| |lsp|
++-------+ +---+
+    A       A
++---------------+
+|language_server|
++---------------+
+```

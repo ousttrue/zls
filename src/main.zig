@@ -1,20 +1,19 @@
 const std = @import("std");
-const astutil = @import("astutil");
 const zig_builtin = @import("builtin");
 const build_options = @import("build_options");
 const known_folders = @import("known-folders");
-const ws = @import("workspace");
+const astutil = @import("astutil");
+const FixedPath = astutil.FixedPath;
 const ls = @import("language_server");
 const LanguageServer = ls.LanguageServer;
 const Config = ls.Config;
+const ZigEnv = ls.ZigEnv;
 const lsp = @import("lsp");
 const requests = lsp.requests;
 const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
-const FixedPath = astutil.FixedPath;
 const Stdio = @import("./Stdio.zig");
-const ZigEnv = ws.ZigEnv;
 
 const logger = std.log.scoped(.main);
 

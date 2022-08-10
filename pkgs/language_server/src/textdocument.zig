@@ -1,19 +1,18 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
 const lsp = @import("lsp");
-const ws = @import("workspace");
 const astutil = @import("astutil");
-const Config = ws.Config;
+const Config = @import("./Config.zig");
 const Document = astutil.Document;
 const Project = astutil.Project;
-const Line = ws.Line;
-const TypeWithHandle = ws.TypeWithHandle;
+const Line = astutil.Line;
 const AstNode = astutil.AstNode;
 const AstNodeIterator = astutil.AstNodeIterator;
 const AstToken = astutil.AstToken;
 const VarType = astutil.VarType;
 const ImportSolver = astutil.ImportSolver;
-const ast = astutil.ast;
+const TypeWithHandle = struct{};
+const ast = struct{};
 const logger = std.log.scoped(.textdocument);
 
 // TODO: Is this correct or can we get a better end?
@@ -63,8 +62,8 @@ pub fn createNotifyDiagnostics(arena: *std.heap.ArenaAllocator, doc: *const Docu
                 .fn_proto_simple,
                 .fn_decl,
                 => blk: {
-                    var buf: [1]Ast.Node.Index = undefined;
-                    const func = ast.fnProto(tree, decl_idx, &buf).?;
+                    var buf: [2]Ast.Node.Index = undefined;
+                    const func = AstNode.init(doc.ast_context, decl_idx).getFnProto(&buf).?;
                     if (func.extern_export_inline_token != null) break :blk;
 
                     if (config.warn_style) {

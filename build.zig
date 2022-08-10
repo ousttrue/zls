@@ -17,16 +17,10 @@ const astutil_pkg = std.build.Pkg{
     .source = .{ .path = "pkgs/astutil/src/main.zig" },
 };
 
-const workspace_pkg = std.build.Pkg{
-    .name = "workspace",
-    .source = .{ .path = "pkgs/workspace/src/main.zig" },
-    .dependencies = &.{ known_folders_pkg, astutil_pkg },
-};
-
 const ls_pkg = std.build.Pkg{
     .name = "language_server",
     .source = .{ .path = "pkgs/language_server/src/main.zig" },
-    .dependencies = &.{ lsp_pkg, workspace_pkg, astutil_pkg },
+    .dependencies = &.{ lsp_pkg, astutil_pkg, known_folders_pkg },
 };
 
 pub fn build(b: *std.build.Builder) !void {
@@ -52,9 +46,8 @@ pub fn build(b: *std.build.Builder) !void {
     exe.addPackage(known_folders_pkg);
     exe.addPackage(.{ .name = "zinput", .source = .{ .path = "src/zinput/src/main.zig" } });
     exe.addPackage(lsp_pkg);
-    exe.addPackage(workspace_pkg);
-    exe.addPackage(ls_pkg);
     exe.addPackage(astutil_pkg);
+    exe.addPackage(ls_pkg);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);

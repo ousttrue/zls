@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const zinput = @import("zinput");
 const known_folders = @import("known-folders");
-const workspace = @import("workspace");
+const ZigEnv = @import("language_server").ZigEnv;
 
 fn print(comptime fmt: []const u8, args: anytype) void {
     const stdout = std.io.getStdOut().writer();
@@ -67,7 +67,7 @@ pub fn wizard(allocator: std.mem.Allocator) !void {
     defer file.close();
     const out = file.writer();
 
-    var zig_exe_path = try workspace.ZigEnv.findZig(allocator);
+    var zig_exe_path = try ZigEnv.findZig(allocator);
     defer if (zig_exe_path) |p| allocator.free(p);
 
     if (zig_exe_path) |path| {
