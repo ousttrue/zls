@@ -161,6 +161,31 @@ pub fn containerIterator(self: Self, buf: []u32) ?ContainerIterator {
     }
 }
 
+pub fn getMemberNameToken(self: Self) ?AstToken {
+    var buf2: [2]u32 = undefined;
+    switch (self.getChildren(&buf2)) {
+        .container_field => |container_field| {
+            return AstToken.init(&self.context.tree, container_field.ast.name_token);
+        },
+        .var_decl => |var_decl| {
+            return AstToken.init(&self.context.tree, var_decl.ast.mut_token + 1);
+        },
+        else => {
+            // fn_decl.lhs => fn_proto.name
+            if (self.getTag() == .fn_decl) {
+                const proto = Self.init(self.context, self.getData().lhs);
+                var buf3: [2]u32 = undefined;
+                if (proto.getFnProto(&buf3)) |fn_proto| {
+                    if (fn_proto.name_token) |name_token| {
+                        return AstToken.init(&self.context.tree, name_token);
+                    }
+                }
+            }
+        },
+    }
+    return null;
+}
+
 pub fn getMember(self: Self, name: []const u8) ?Self {
     // var debug_buf: [1024]u8 = undefined;
     // const allocator = std.heap.FixedBufferAllocator.init(&debug_buf).allocator();
@@ -169,38 +194,12 @@ pub fn getMember(self: Self, name: []const u8) ?Self {
     var buf: [2]u32 = undefined;
     if (self.containerIterator(&buf)) |*it| {
         while (it.next()) |child_node| {
-            var buf2: [2]u32 = undefined;
-            switch (child_node.getChildren(&buf2)) {
-                .container_field => |container_field| {
-                    const token = AstToken.init(&self.context.tree, container_field.ast.name_token);
-                    if (std.mem.eql(u8, token.getText(), name)) {
-                        return child_node;
-                    }
-                },
-                .var_decl => |var_decl| {
-                    const token = AstToken.init(&self.context.tree, var_decl.ast.mut_token + 1);
-                    if (std.mem.eql(u8, token.getText(), name)) {
-                        return child_node;
-                    }
-                },
-                else => {
-                    // search method
-                    if (child_node.getTag() == .fn_decl) {
-                        const data = child_node.getData();
-                        const proto = Self.init(self.context, data.lhs);
-                        var buf3: [2]u32 = undefined;
-                        if (proto.getFnProto(&buf3)) |fn_proto| {
-                            if (fn_proto.name_token) |name_token| {
-                                const token = AstToken.init(&self.context.tree, name_token);
-                                if (std.mem.eql(u8, token.getText(), name)) {
-                                    return child_node;
-                                }
-                            }
-                        }
-                    } else {
-                        logger.err("not field and fn: {s}", .{@tagName(child_node.getTag())});
-                    }
-                },
+            if (child_node.getMemberNameToken()) |token| {
+                if (std.mem.eql(u8, token.getText(), name)) {
+                    return child_node;
+                }
+            } else {
+                logger.err("no member name", .{});
             }
         }
     } else {
