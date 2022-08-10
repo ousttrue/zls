@@ -230,12 +230,15 @@ pub fn getTypeNode(self: Self) ?Self {
             }
         },
         .container_field => |container_field| {
-            return Self.init(self.context, container_field.ast.type_expr);
+            if (container_field.ast.type_expr != 0) {
+                return Self.init(self.context, container_field.ast.type_expr);
+            } else {
+                // enum decl
+            }
         },
-        else => {
-            return null;
-        },
+        else => {},
     }
+    return null;
 }
 
 pub fn getParent(self: Self) ?Self {

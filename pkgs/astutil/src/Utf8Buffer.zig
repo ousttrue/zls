@@ -100,8 +100,7 @@ pub fn applyChanges(self: *Self, content_changes: std.json.Array, encoding: Line
 }
 
 pub fn getLineIndexFromBytePosition(self: Self, byte_position: usize) !usize {
-    if(byte_position>self.text.len)
-    {
+    if (byte_position > self.text.len) {
         return error.OutOfRange;
     }
     const line_count = self.line_heads.items.len;
@@ -215,4 +214,21 @@ test "LinePosition" {
 
     try std.testing.expectEqual((try ls.getPositionFromBytePosition(0, .utf8)), .{ .line = 0, .x = 0 });
     try std.testing.expectEqual((try ls.getPositionFromBytePosition(7, .utf8)), .{ .line = 3, .x = 1 });
+}
+
+test "multibyte" {
+    const text =
+        \\あ
+        \\い
+        \\うえお
+        \\漢字
+        \\0123
+    ;
+    const ls = try Self.init(std.testing.allocator, text);
+    defer ls.deinit();
+    std.debug.print("\n", .{});
+    // あ
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(4)) == @as(usize, 1));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(8)) == @as(usize, 2));
+    try std.testing.expect((try ls.getLineIndexFromBytePosition(18)) == @as(usize, 3));
 }

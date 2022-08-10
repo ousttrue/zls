@@ -124,11 +124,18 @@ const SymbolTree = struct {
                                 }
                             },
                             .container_decl => {
+                                if (std.mem.eql(u8, type_node.getMainToken().getText(), "enum")) {
+                                    item.kind = .Enum;
+                                }
                                 var children = std.ArrayList(lsp.document_symbol.DocumentSymbol).init(arena.allocator());
                                 try self.traverse(&children, arena, doc, type_node, encoding);
                                 item.children = children.toOwnedSlice();
                             },
                             else => {},
+                        }
+                    } else {
+                        if (item.kind != .Method) {
+                            item.kind = .EnumMember;
                         }
                     }
 

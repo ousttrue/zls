@@ -14,7 +14,7 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "zig test pkgs/astutil/src/AstType.zig",
+            "command": "zig test pkgs/astutil/src/Utf8Buffer.zig",
             "problemMatcher": [
                 "$gcc"
             ]

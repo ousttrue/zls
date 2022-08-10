@@ -364,12 +364,19 @@ pub fn @"textDocument/semanticTokens/full"(self: *Self, arena: *std.heap.ArenaAl
     var array = try std.ArrayList(u32).initCapacity(arena.allocator(), token_array.len * 5);
     for (token_array) |token| {
         const start = try doc.utf8_buffer.getPositionFromBytePosition(token.start, self.encoding);
-        const end = try doc.utf8_buffer.getPositionFromBytePosition(token.end - 1, self.encoding);
-        std.debug.assert(start.line == end.line);
+
+        var p = token.start;
+        var i: u32 = 0;
+        while (p < token.end) {
+            const len = try std.unicode.utf8ByteSequenceLength(doc.utf8_buffer.text[p]);
+            p += len;
+            i += 1;
+        }
+
         try array.appendSlice(&.{
             start.line,
             start.x,
-            @truncate(u32, end.x - start.x + 1),
+            @intCast(u32, if (self.encoding == .utf8) token.end - token.start else i),
             @enumToInt(token.token_type),
             token.token_modifiers.toInt(),
         });
