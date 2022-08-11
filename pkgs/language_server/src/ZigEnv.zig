@@ -104,21 +104,25 @@ fn getZigBuiltinAlloc(
 /// zig build-lib src/c.zig --z -I.
 /// info(compilation): C import output: src\zig-cache\o\4cf7e05ea3dd9caa12de6a7fa9206deb\cimport.zig
 const prefix = "info(compilation): C import output: ";
-pub fn getZigCImport(
+fn getZigCImport(
     allocator: std.mem.Allocator,
     zig_exe_path: FixedPath,
-    root: FixedPath,
+    compile_options: [][]const u8,
 ) !FixedPath {
-    const source = try std.fmt.allocPrint(allocator, "{s}/c.zig", .{root.slice()});
+    // chroot root
+    const source = try std.fmt.allocPrint(allocator, "c.zig", .{});
     defer allocator.free(source);
-    const include = try std.fmt.allocPrint(allocator, "-I{s}", .{root.slice()});
-    defer allocator.free(include);
-    const result = try zig_exe_path.exec(allocator, &.{
+
+    var args = std.ArrayList([]const u8).init(allocator);
+    defer args.deinit();
+    try args.appendSlice(&.{
         "build-lib",
         source,
         "--verbose-cimport",
-        include,
     });
+    try args.appendSlice(compile_options);
+
+    const result = try zig_exe_path.exec(allocator, args.items);
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
     var it = std.mem.split(u8, result.stderr, "\n");
@@ -277,6 +281,12 @@ pub fn runBuildRunner(self: Self, allocator: std.mem.Allocator, build_file_path:
 }
 
 // json types
+const Object = struct {
+    name: []const u8,
+    entry_point: []const u8,
+    compile_options: [][]const u8,
+};
+
 const NamePath = struct {
     name: []const u8,
     path: []const u8,
@@ -284,13 +294,14 @@ const NamePath = struct {
 
 const Project = struct {
     // LibExeObjStep
-    objects: []const NamePath,
+    objects: []const Object,
     // Pkg
     packages: []const NamePath,
 };
 
 // build file is project_root/build.zig
-pub fn loadPackages(self: Self, allocator: std.mem.Allocator, import_solver: *ImportSolver, root: FixedPath) !void {
+pub fn initPackagesAndCImport(self: Self, allocator: std.mem.Allocator, import_solver: *ImportSolver, root: FixedPath) !void {
+    // build runner
     const zig_run_result = try self.runBuildRunner(allocator, root.child("build.zig"));
     defer allocator.free(zig_run_result);
 
@@ -299,7 +310,18 @@ pub fn loadPackages(self: Self, allocator: std.mem.Allocator, import_solver: *Im
     const project = try std.json.parse(Project, &stream, options);
     defer std.json.parseFree(Project, project, options);
 
+    // packages
     for (project.packages) |pkg| {
         try import_solver.push(pkg.name, root.child(pkg.path));
+    }
+
+    // cimport
+    const object = project.objects[0];
+    if (getZigCImport(allocator, self.exe, object.compile_options)) |path| {
+        // self.import_solver.c_import = path;
+        _ = import_solver.pkg_path_map.remove("c");
+        try import_solver.push("c", path);
+    } else |err| {
+        logger.err("{}", .{err});
     }
 }

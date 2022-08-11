@@ -18,6 +18,28 @@
             "problemMatcher": [
                 "$gcc"
             ]
-        }
+        },
+        {
+            "label": "build runner",
+            "type": "shell",
+            "command": [
+                "zig",
+                "run",
+                "src/special/build_runner.zig",
+                "--pkg-begin",
+                "@build@",
+                "build.zig",
+                "--pkg-end",
+                "--",
+                "zig.exe",
+                ".",
+                "zig-cache",
+                "ZLS_DONT_CARE",
+                "true",
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
     ]
 }

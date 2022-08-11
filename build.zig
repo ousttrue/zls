@@ -58,8 +58,8 @@ pub fn build(b: *std.build.Builder) !void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
-    exe.addIncludeDir(".");
-    exe.addCSourceFile("./hello.cpp", &.{});
+    exe.addIncludeDir("src");
+    exe.addCSourceFile("src/hello.cpp", &.{});
 
     b.installFile("src/special/build_runner.zig", "bin/build_runner.zig");
 
@@ -75,13 +75,4 @@ pub fn build(b: *std.build.Builder) !void {
     // session_tests.addPackage(.{ .name = "header", .source = .{ .path = "src/header.zig" } });
     // session_tests.setBuildMode(.Debug);
     // test_step.dependOn(&session_tests.step);
-
-    const tests = b.addTest("src/main.zig");
-    tests.addPackage(lsp_pkg);
-    tests.setTarget(target);
-    tests.setBuildMode(mode);
-    // tests.install();
-    const test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&tests.step);
-    test_step.dependOn(b.getInstallStep());
 }
