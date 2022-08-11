@@ -29,6 +29,10 @@ pub fn getPosition(self: Self) PathPosition {
     };
 }
 
+pub fn debugPrint(self: Self) void {
+    logger.debug("debugPrint: {}: {s}", .{ self.getTag(), self.getMainToken().getText() });
+}
+
 fn printRec(self: Self, w: anytype) std.mem.Allocator.Error!void {
     var buffer: [2]u32 = undefined;
     const children = self.getChildren(&buffer);
@@ -287,17 +291,18 @@ test {
 }
 
 /// container/decl/this => this is container
+/// fn some(self: @This()) @This(){}
 pub fn getContainerNodeForThis(self: Self) ?Self {
-    var buf3: [2]u32 = undefined;
-    std.debug.assert(self.getChildren(&buf3) == .builtin_call);
-    if (self.getParent()) |parent| {
-        var buf2: [2]u32 = undefined;
-        std.debug.assert(parent.getChildren(&buf2) == .var_decl);
-        if (parent.getParent()) |pp| {
+    var current = self;
+    while (true) {
+        if (current.getParent()) |parent| {
             var buf: [2]u32 = undefined;
-            if (pp.getChildren(&buf) == .container_decl) {
-                return pp;
+            if (parent.getChildren(&buf) == .container_decl) {
+                return parent;
             }
+            current = parent;
+        } else {
+            break;
         }
     }
     return null;

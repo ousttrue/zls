@@ -114,8 +114,39 @@ pub const ContainerDecl = struct {
     name_token: AstToken,
 
     pub fn getTypeNode(self: ContainerDecl) !AstNode {
-        _ = self;
-        return error.NotImplemented;
+        const context = self.container.context;
+        var buf: [2]u32 = undefined;
+        switch (self.member) {
+            .var_decl => |node| {
+                switch (node.getChildren(&buf)) {
+                    .var_decl => |full| {
+                        if (full.ast.type_node != 0) {
+                            return AstNode.init(context, full.ast.type_node);
+                        } else if (full.ast.init_node != 0) {
+                            return AstNode.init(context, full.ast.init_node);
+                        } else {
+                            return error.VarDeclHasNoTypeNode;
+                        }
+                    },
+                    else => {
+                        @panic("not var_decl");
+                    },
+                }
+            },
+            .field => |node| {
+                switch (node.getChildren(&buf)) {
+                    .container_field => |full| {
+                        return AstNode.init(context, full.ast.type_expr);
+                    },
+                    else => {
+                        @panic("not container_field");
+                    },
+                }
+            },
+            .fn_decl => {
+                return error.FnDecl;
+            },
+        }
     }
 };
 

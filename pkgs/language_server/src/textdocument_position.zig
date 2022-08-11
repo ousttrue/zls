@@ -69,7 +69,7 @@ pub fn getHover(
                             .primitive => {},
                         }
                     } else {
-                        logger.debug("identifer: {s}: decl not found", .{token.getText()});
+                        logger.debug("identifier: {s}: decl not found", .{token.getText()});
                     }
                 },
                 else => {
@@ -182,21 +182,7 @@ pub fn getGoto(
                         },
                         .field_access => {
                             const type_node = try project.resolveFieldAccess(node);
-                            const text = try type_node.allocPrint(arena.allocator());
-                            logger.debug("{s}", .{text});
-
-                            // // rhs
-                            // var rhs = AstToken.init(&node.context.tree, data.rhs);
-                            // if (try var_type.getMember(project, rhs.getText())) |member| {
-                            //     return member.getPosition();
-                            // } else {
-                            //     logger.debug("not member", .{});
-                            //     return null;
-                            // }
-
-                            // TODO: var or field or fn
-
-                            return null;
+                            return type_node.getPosition();
                         },
                         .fn_decl => {
                             return null;
