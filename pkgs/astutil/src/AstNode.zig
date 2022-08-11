@@ -109,10 +109,14 @@ pub fn isChildrenType(self: Self, childrenType: AstNodeIterator.NodeChildren) bo
 
 pub fn getFnProto(self: Self, buffer: []u32) ?Ast.full.FnProto {
     const children = self.getChildren(buffer);
-    return switch (children) {
-        .fn_proto => |fn_proto| fn_proto,
-        else => null,
-    };
+    switch (children) {
+        .fn_proto => |fn_proto| {
+            return fn_proto;
+        },
+        else => {
+            return null;
+        },
+    }
 }
 
 pub const Member = struct {

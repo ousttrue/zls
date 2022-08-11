@@ -104,6 +104,15 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
         .ptr_type => |ptr_type| {
             return self.resolveType(AstNode.init(node.context, ptr_type.ast.child_type));
         },
+        .call => |call| {
+            const fn_node = try self.resolveType(AstNode.init(node.context, call.ast.fn_expr));
+            var buf2: [2]u32 = undefined;
+            if (fn_node.getFnProto(&buf2)) |fn_proto| {
+                return self.resolveType(AstNode.init(node.context, fn_proto.ast.return_type));
+            } else {
+                return error.FnProtoNotFound;
+            }
+        },
         else => {
             switch (node.getTag()) {
                 .identifier => {
@@ -122,6 +131,12 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                     } else {
                         return error.NoDecl;
                     }
+                },
+                .field_access => {
+                    return self.resolveFieldAccess(node);
+                },
+                .optional_type => {
+                    return self.resolveType(AstNode.init(node.context, node.getData().lhs));
                 },
                 else => {
                     node.debugPrint();
