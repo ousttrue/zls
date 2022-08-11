@@ -8,10 +8,11 @@ This is an experimental modified version
 * [x] @import completion (zig_files, std, user_pkg...etc)
 * [ ] @cImport completion (use zig translate-c ?)
 * [ ] goto: .enum_literal
-* [ ] add keywords to global completion(undefined, unreachable... etc)
-* [ ] container field completion (trigger .)
+* [ ] completion: add keywords to global completion(undefined, unreachable... etc)
+* [ ] completion: container field completion (trigger .)
 * [ ] hover: show reference count
-* [ ] field_access
+* [ ] snippet:
+* [x] field_access
 
 ## MEMO
 
