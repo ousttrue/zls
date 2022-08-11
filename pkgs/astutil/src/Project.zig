@@ -51,40 +51,26 @@ pub fn resolveImport(self: Self, node: AstNode) !?AstNode {
 pub fn resolveFieldAccess(self: Self, node: AstNode) anyerror!AstNode {
     std.debug.assert(node.getTag() == .field_access);
     const data = node.getData();
+
+    // lhs
     const lhs = AstNode.init(node.context, data.lhs);
-    const rhs = AstToken.init(&node.context.tree, data.rhs);
     var buf: [2]u32 = undefined;
-    switch (lhs.getChildren(&buf)) {
-        .call, .builtin_call => {
-            // get container,
-            const type_node = try self.resolveType(lhs);
-            if (type_node.getMember(rhs.getText())) |field| {
-                return field;
-            } else {
-                return error.FieldNotFound;
-            }
+    const type_node = switch (lhs.getChildren(&buf)) {
+        .call, .builtin_call => try self.resolveType(lhs),
+        else => switch (lhs.getTag()) {
+            .field_access => try self.resolveFieldAccess(lhs),
+            .identifier => try self.resolveType(lhs),
+            else => return error.UnknownLhs,
         },
-        else => {
-            switch (lhs.getTag()) {
-                .field_access => {
-                    // recursive
-                    return try self.resolveFieldAccess(lhs);
-                },
-                .identifier => {
-                    // get container,
-                    const type_node = try self.resolveType(lhs);
-                    if (type_node.getMember(rhs.getText())) |field| {
-                        return field;
-                    } else {
-                        return error.FieldNotFound;
-                    }
-                },
-                else => {
-                    logger.err("unknown lhs: {}", .{lhs.getTag()});
-                    return error.UnknownLhs;
-                },
-            }
-        },
+    };
+
+    // rhs
+    const rhs = AstToken.init(&node.context.tree, data.rhs);
+    if (type_node.getMember(rhs.getText())) |field| {
+        return try self.resolveType(field);
+    } else {
+        logger.warn("field: {}.{s}", .{lhs.getTag(), rhs.getText()});
+        return error.FieldNotFound;
     }
 }
 
@@ -137,17 +123,8 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
             switch (node.getTag()) {
                 .identifier => {
                     if (Declaration.find(node)) |decl| {
-                        switch (decl) {
-                            .local => |local| {
-                                return self.resolveType(try local.getTypeNode());
-                            },
-                            .container => |container| {
-                                return self.resolveType(try container.getTypeNode());
-                            },
-                            .primitive => {
-                                return error.PrimitiveFieldAccess;
-                            },
-                        }
+                        const type_node = try decl.getTypeNode();
+                        return self.resolveType(type_node);
                     } else {
                         return error.NoDecl;
                     }
