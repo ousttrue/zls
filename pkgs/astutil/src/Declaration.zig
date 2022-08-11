@@ -301,6 +301,7 @@ pub const Declaration = union(enum) {
                                         }
                                     }
                                 },
+                                .test_decl => {},
                                 else => {
                                     logger.debug("unknown: {}", .{member_node.getTag()});
                                 },

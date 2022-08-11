@@ -69,7 +69,7 @@ pub fn resolveFieldAccess(self: Self, node: AstNode) anyerror!AstNode {
     if (type_node.getMember(rhs.getText())) |field| {
         return try self.resolveType(field);
     } else {
-        logger.warn("field: {}.{s}", .{lhs.getTag(), rhs.getText()});
+        logger.warn("field: {}.{s}", .{ lhs.getTag(), rhs.getText() });
         return error.FieldNotFound;
     }
 }
@@ -111,7 +111,8 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
             return self.resolveType(AstNode.init(node.context, ptr_type.ast.child_type));
         },
         .call => |call| {
-            const fn_node = try self.resolveType(AstNode.init(node.context, call.ast.fn_expr));
+            const fn_decl = try self.resolveType(AstNode.init(node.context, call.ast.fn_expr));
+            const fn_node = AstNode.init(fn_decl.context, fn_decl.getData().lhs);
             var buf2: [2]u32 = undefined;
             if (fn_node.getFnProto(&buf2)) |fn_proto| {
                 return self.resolveType(AstNode.init(node.context, fn_proto.ast.return_type));
@@ -133,12 +134,12 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                     const field = try self.resolveFieldAccess(node);
                     return self.resolveType(field);
                 },
-                .optional_type => {
+                .optional_type, .@"try" => {
                     return self.resolveType(AstNode.init(node.context, node.getData().lhs));
                 },
                 else => {
                     node.debugPrint();
-                    return error.ResovleType;
+                    return node;
                 },
             }
         },

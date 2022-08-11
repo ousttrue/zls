@@ -31,10 +31,10 @@ pub fn getPosition(self: Self) PathPosition {
 
 pub fn debugPrint(self: Self) void {
     logger.debug(
-        "debugPrint: {s} {} {}: {s}",
+        "debugPrint: {s}:{} [{}]{s}",
         .{
             self.context.path.slice(),
-            self.context.tree.tokenLocation(0, self.getMainToken().index),
+            self.context.tree.tokenLocation(0, self.getMainToken().index).line+1,
             self.getTag(),
             self.getMainToken().getText(),
         },
