@@ -30,7 +30,15 @@ pub fn getPosition(self: Self) PathPosition {
 }
 
 pub fn debugPrint(self: Self) void {
-    logger.debug("debugPrint: {}: {s}", .{ self.getTag(), self.getMainToken().getText() });
+    logger.debug(
+        "debugPrint: {s} {} {}: {s}",
+        .{
+            self.context.path.slice(),
+            self.context.tree.tokenLocation(0, self.getMainToken().index),
+            self.getTag(),
+            self.getMainToken().getText(),
+        },
+    );
 }
 
 fn printRec(self: Self, w: anytype) std.mem.Allocator.Error!void {
@@ -164,6 +172,7 @@ pub fn containerIterator(self: Self, buf: []u32) ?ContainerIterator {
             return ContainerIterator.init(self.context, container_decl);
         },
         else => {
+            logger.err("not container: {}: {s}", .{ self.getTag(), self.getMainToken().getText() });
             return null;
         },
     }
@@ -210,8 +219,6 @@ pub fn getMember(self: Self, name: []const u8) ?Self {
                 logger.err("no member name", .{});
             }
         }
-    } else {
-        logger.err("not container", .{});
     }
 
     logger.err("not found: {s} from {s}", .{ name, self.getMainToken().getText() });

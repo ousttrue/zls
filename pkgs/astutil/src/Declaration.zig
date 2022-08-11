@@ -350,6 +350,14 @@ pub const Declaration = union(enum) {
         return null;
     }
 
+    pub fn getTypeNode(self: Self) !AstNode {
+        return switch (self) {
+            .local => |local| try local.getTypeNode(),
+            .container => |container| try container.getTypeNode(),
+            .primitive => error.Primitive,
+        };
+    }
+
     pub fn allocPrint(
         self: Self,
         allocator: std.mem.Allocator,

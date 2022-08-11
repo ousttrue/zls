@@ -53,12 +53,9 @@ pub fn resolveFieldAccess(self: Self, node: AstNode) anyerror!AstNode {
     const data = node.getData();
     const lhs = AstNode.init(node.context, data.lhs);
     const rhs = AstToken.init(&node.context.tree, data.rhs);
-    switch (lhs.getTag()) {
-        .field_access => {
-            // recursive
-            return try self.resolveFieldAccess(lhs);
-        },
-        .identifier => {
+    var buf: [2]u32 = undefined;
+    switch (lhs.getChildren(&buf)) {
+        .call, .builtin_call => {
             // get container,
             const type_node = try self.resolveType(lhs);
             if (type_node.getMember(rhs.getText())) |field| {
@@ -68,18 +65,41 @@ pub fn resolveFieldAccess(self: Self, node: AstNode) anyerror!AstNode {
             }
         },
         else => {
-            logger.err("unknown lhs: {}", .{lhs.getTag()});
-            return error.UnknownLhs;
+            switch (lhs.getTag()) {
+                .field_access => {
+                    // recursive
+                    return try self.resolveFieldAccess(lhs);
+                },
+                .identifier => {
+                    // get container,
+                    const type_node = try self.resolveType(lhs);
+                    if (type_node.getMember(rhs.getText())) |field| {
+                        return field;
+                    } else {
+                        return error.FieldNotFound;
+                    }
+                },
+                else => {
+                    logger.err("unknown lhs: {}", .{lhs.getTag()});
+                    return error.UnknownLhs;
+                },
+            }
         },
     }
 }
 
 pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
-    _ = self;
     var buf: [2]u32 = undefined;
     switch (node.getChildren(&buf)) {
         .container_decl => {
             return node;
+        },
+        .var_decl => |var_decl| {
+            if (var_decl.ast.init_node != 0) {
+                return self.resolveType(AstNode.init(node.context, var_decl.ast.init_node));
+            } else {
+                return error.NoInit;
+            }
         },
         .builtin_call => {
             const builtin_name = node.getMainToken().getText();
@@ -133,7 +153,8 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                     }
                 },
                 .field_access => {
-                    return self.resolveFieldAccess(node);
+                    const field = try self.resolveFieldAccess(node);
+                    return self.resolveType(field);
                 },
                 .optional_type => {
                     return self.resolveType(AstNode.init(node.context, node.getData().lhs));
