@@ -115,7 +115,7 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
             const fn_node = AstNode.init(fn_decl.context, fn_decl.getData().lhs);
             var buf2: [2]u32 = undefined;
             if (fn_node.getFnProto(&buf2)) |fn_proto| {
-                return self.resolveType(AstNode.init(node.context, fn_proto.ast.return_type));
+                return self.resolveType(AstNode.init(fn_node.context, fn_proto.ast.return_type));
             } else {
                 return error.FnProtoNotFound;
             }

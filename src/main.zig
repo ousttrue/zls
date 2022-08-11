@@ -15,6 +15,10 @@ const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const Stdio = @import("./Stdio.zig");
 
+// const c = @cImport({
+//     @cInclude("hello.h");
+// });
+
 const logger = std.log.scoped(.main);
 
 pub const data = switch (build_options.data_version) {
