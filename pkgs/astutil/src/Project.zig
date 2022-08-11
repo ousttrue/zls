@@ -101,6 +101,9 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                 return error.UnknownBuiltin;
             }
         },
+        .ptr_type => |ptr_type| {
+            return self.resolveType(AstNode.init(node.context, ptr_type.ast.child_type));
+        },
         else => {
             switch (node.getTag()) {
                 .identifier => {
