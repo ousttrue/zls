@@ -14,11 +14,7 @@ const setup = @import("./setup.zig");
 const jsonrpc = @import("./jsonrpc.zig");
 const Dispatcher = @import("./Dispatcher.zig");
 const Stdio = @import("./Stdio.zig");
-
-// const c = @cImport({
-//     @cInclude("hello.h");
-// });
-
+const c = @import("c");
 const logger = std.log.scoped(.main);
 
 pub const data = switch (build_options.data_version) {
@@ -94,9 +90,9 @@ fn initialize(allocator: std.mem.Allocator, config: *Config) !?FixedPath {
     var next_arg_config_path = false;
     while (args_it.next()) |arg| {
         if (next_arg_config_path) {
-            if (Config.load(allocator, arg)) |c| {
+            if (Config.load(allocator, arg)) |config_loaded| {
                 logger.info("arg: {s}", .{arg});
-                config.* = c;
+                config.* = config_loaded;
                 if (std.fs.path.dirname(arg)) |dir| {
                     config_dir = FixedPath.fromFullpath(dir);
                 } else {
@@ -130,9 +126,9 @@ fn initialize(allocator: std.mem.Allocator, config: *Config) !?FixedPath {
     if (config_dir == null) {
         if (known_folders.getPath(allocator, .local_configuration) catch unreachable) |dir| {
             defer allocator.free(dir);
-            if (Config.loadInFolder(allocator, dir)) |c| {
+            if (Config.loadInFolder(allocator, dir)) |config_loaded| {
                 logger.info("local_configuration: {s}", .{dir});
-                config.* = c;
+                config.* = config_loaded;
                 config_dir = FixedPath.fromFullpath(dir);
             }
         }
@@ -141,9 +137,9 @@ fn initialize(allocator: std.mem.Allocator, config: *Config) !?FixedPath {
     if (config_dir == null) {
         if (known_folders.getPath(allocator, .global_configuration) catch unreachable) |dir| {
             defer allocator.free(dir);
-            if (Config.loadInFolder(allocator, dir)) |c| {
+            if (Config.loadInFolder(allocator, dir)) |config_loaded| {
                 logger.info("global_configuration: {s}", .{dir});
-                config.* = c;
+                config.* = config_loaded;
                 config_dir = FixedPath.fromFullpath(dir);
             }
         }
@@ -158,6 +154,8 @@ pub fn main() anyerror!void {
         {
         return;
     };
+
+    logger.debug("hello: {}", .{c.hello(1, 2)});
 
     {
         var gpa = std.heap.GeneralPurposeAllocator(.{}){};

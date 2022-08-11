@@ -18,6 +18,18 @@ pub fn init(import_solver: ImportSolver, store: *DocumentStore) Self {
     };
 }
 
+pub fn resolveCImport(self: Self) !AstNode {
+    const path = self.import_solver.c_import orelse {
+        return error.NoCImportPath;
+    };
+    if (try self.store.getOrLoad(path)) |doc| {
+        // root node
+        return AstNode.init(doc.ast_context, 0);
+    } else {
+        return error.DocumentNotFound;
+    }
+}
+
 pub fn resolveImport(self: Self, node: AstNode) !?AstNode {
     var buf: [2]u32 = undefined;
     switch (node.getChildren(&buf)) {
@@ -105,6 +117,8 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                 } else {
                     return error.NoConainerDecl;
                 }
+            } else if (std.mem.eql(u8, builtin_name, "@cImport")) {
+                return try self.resolveCImport();
             } else {
                 logger.err("{s}", .{builtin_name});
                 return error.UnknownBuiltin;

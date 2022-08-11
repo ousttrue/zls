@@ -187,6 +187,13 @@ pub fn getMemberNameToken(self: Self) ?AstToken {
         .var_decl => |var_decl| {
             return AstToken.init(&self.context.tree, var_decl.ast.mut_token + 1);
         },
+        .fn_proto => |fn_proto| {
+            // extern
+            if(fn_proto.name_token)|name_token|
+            {
+                return AstToken.init(&self.context.tree, name_token);
+            }
+        },
         else => {
             // fn_decl.lhs => fn_proto.name
             if (self.getTag() == .fn_decl) {

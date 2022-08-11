@@ -23,6 +23,11 @@ const ls_pkg = std.build.Pkg{
     .dependencies = &.{ lsp_pkg, astutil_pkg, known_folders_pkg },
 };
 
+const c_pkg = std.build.Pkg{
+    .name = "c",
+    .source = .{ .path = "c.zig" },
+};
+
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
 
@@ -48,10 +53,13 @@ pub fn build(b: *std.build.Builder) !void {
     exe.addPackage(lsp_pkg);
     exe.addPackage(astutil_pkg);
     exe.addPackage(ls_pkg);
+    exe.addPackage(c_pkg);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
+    exe.addIncludeDir(".");
+    exe.addCSourceFile("./hello.cpp", &.{});
 
     b.installFile("src/special/build_runner.zig", "bin/build_runner.zig");
 

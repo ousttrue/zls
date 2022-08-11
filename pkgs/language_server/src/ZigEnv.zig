@@ -101,6 +101,36 @@ fn getZigBuiltinAlloc(
     return path;
 }
 
+/// zig build-lib src/c.zig --z -I.
+/// info(compilation): C import output: src\zig-cache\o\4cf7e05ea3dd9caa12de6a7fa9206deb\cimport.zig
+const prefix = "info(compilation): C import output: ";
+pub fn getZigCImport(
+    allocator: std.mem.Allocator,
+    zig_exe_path: FixedPath,
+    root: FixedPath,
+) !FixedPath {
+    const source = try std.fmt.allocPrint(allocator, "{s}/c.zig", .{root.slice()});
+    defer allocator.free(source);
+    const include = try std.fmt.allocPrint(allocator, "-I{s}", .{root.slice()});
+    defer allocator.free(include);
+    const result = try zig_exe_path.exec(allocator, &.{
+        "build-lib",
+        source,
+        "--verbose-cimport",
+        include,
+    });
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+    var it = std.mem.split(u8, result.stderr, "\n");
+    while (it.next()) |line| {
+        if (std.mem.startsWith(u8, line, prefix)) {
+            logger.debug("{s}", .{line});
+            return FixedPath.fromFullpath(line[prefix.len..]);
+        }
+    }
+    return error.NoCImport;
+}
+
 const Self = @This();
 
 exe: FixedPath,
@@ -260,7 +290,7 @@ const Project = struct {
 };
 
 // build file is project_root/build.zig
-pub fn loadPackages(self: Self, allocator: std.mem.Allocator, import_solver: *ImportSolver, root: FixedPath) !void {  
+pub fn loadPackages(self: Self, allocator: std.mem.Allocator, import_solver: *ImportSolver, root: FixedPath) !void {
     const zig_run_result = try self.runBuildRunner(allocator, root.child("build.zig"));
     defer allocator.free(zig_run_result);
 

@@ -331,10 +331,14 @@ pub fn completeContainerMember(
     if (type_node.containerIterator(&buf)) |*it| {
         while (it.next()) |member| {
             if (member.getMemberNameToken()) |name_token| {
-                var buf2: [2]u32 = undefined;
+                const name = name_token.getText();
+                if (name[0] == '_') {
+                    continue;
+                }
 
+                var buf2: [2]u32 = undefined;
                 try items.append(.{
-                    .label = name_token.getText(),
+                    .label = name,
                     .kind = switch (member.getChildren(&buf2)) {
                         .var_decl => .Value,
                         .container_field => .Property,

@@ -192,6 +192,18 @@ pub fn initialize(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonPar
     // initialize import_solver
     try self.zigenv.loadPackages(self.allocator, &self.import_solver, root);
 
+    // cimport
+    if(ZigEnv.getZigCImport(self.allocator, self.zigenv.exe, root))|path|
+    {
+        // self.import_solver.c_import = path;
+        _ = self.import_solver.pkg_path_map.remove("c");
+        try self.import_solver.push("c", path);
+    }
+    else |err|
+    {
+        logger.err("{}", .{err});
+    }
+
     return lsp.Response{
         .id = id,
         .result = .{ .InitializeResult = .{

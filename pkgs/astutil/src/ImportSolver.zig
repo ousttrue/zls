@@ -22,6 +22,7 @@ const Self = @This();
 
 allocator: std.mem.Allocator,
 pkg_path_map: std.StringHashMap(FixedPath),
+c_import: ?FixedPath = null,
 
 pub fn init(allocator: std.mem.Allocator) Self {
     return Self{
