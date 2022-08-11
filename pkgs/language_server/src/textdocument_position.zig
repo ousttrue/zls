@@ -122,7 +122,7 @@ fn gotoImport(project: ?Project, import_from: FixedPath, text: []const u8) ?Path
 
 pub fn getGoto(
     arena: *std.heap.ArenaAllocator,
-    project: ?Project,
+    project: Project,
     doc: *Document,
     token: AstToken,
 ) !?PathPosition {
@@ -181,9 +181,10 @@ pub fn getGoto(
                             }
                         },
                         .field_access => {
-                            // var data = node.getData();
-                            // var lhs = AstNode.init(node.context, data.lhs);
-                            // var var_type = try VarType.init(project, lhs);
+                            const type_node = try project.resolveFieldAccess(node);
+                            const text = try type_node.allocPrint(arena.allocator());
+                            logger.debug("{s}", .{text});
+
                             // // rhs
                             // var rhs = AstToken.init(&node.context.tree, data.rhs);
                             // if (try var_type.getMember(project, rhs.getText())) |member| {

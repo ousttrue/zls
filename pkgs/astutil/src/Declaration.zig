@@ -9,15 +9,98 @@ const PrimitiveType = @import("./primitives.zig").PrimitiveType;
 const logger = std.log.scoped(.Declaration);
 
 pub const LocalVariable = struct {
-    block: AstNode,
+    node: AstNode, // var_decl, if, while, switch_case, fn_proto
     variable: union(enum) {
-        var_decl: AstNode,
+        var_decl,
         if_payload,
         while_payload,
         switch_case_payload,
-        param: AstNode,
+        param: u32,
     },
     name_token: AstToken,
+
+    pub fn getTypeNode(self: LocalVariable) !AstNode {
+        const context = self.node.context;
+        var buf: [2]u32 = undefined;
+        const children = self.node.getChildren(&buf);
+        switch (self.variable) {
+            .var_decl => {
+                switch (children) {
+                    .var_decl => |full| {
+                        if (full.ast.type_node != 0) {
+                            return AstNode.init(context, full.ast.type_node);
+                        } else if (full.ast.init_node != 0) {
+                            return AstNode.init(context, full.ast.init_node);
+                        } else {
+                            return error.VarDeclHasNoTypeNode;
+                        }
+                    },
+                    else => {
+                        @panic("not var_decl");
+                    },
+                }
+            },
+            .if_payload => {
+                switch (children) {
+                    .@"if" => |full| {
+                        return AstNode.init(context, full.ast.cond_expr);
+                    },
+                    else => {
+                        @panic("not if");
+                    },
+                }
+            },
+            .while_payload => {
+                switch (children) {
+                    .@"while" => |full| {
+                        return AstNode.init(context, full.ast.cond_expr);
+                    },
+                    else => {
+                        @panic("not while");
+                    },
+                }
+            },
+            .switch_case_payload => {
+                switch (children) {
+                    .switch_case => {
+                        if (self.node.getParent()) |parent| {
+                            var buf2: [2]u32 = undefined;
+                            switch (parent.getChildren(&buf2)) {
+                                .@"switch" => |full| {
+                                    return AstNode.init(context, full.ast.cond_expr);
+                                },
+                                else => {
+                                    @panic("not switch");
+                                },
+                            }
+                        } else {
+                            return error.NoParent;
+                        }
+                    },
+                    else => {
+                        @panic("not switch_case");
+                    },
+                }
+            },
+            .param => |index| {
+                switch (children) {
+                    .fn_proto => |fn_proto| {
+                        var it = fn_proto.iterate(&context.tree);
+                        var i: u32 = 0;
+                        while (it.next()) |param| : (i += 1) {
+                            if (i == index) {
+                                return AstNode.init(context, param.type_expr);
+                            }
+                        }
+                        return error.NoParam;
+                    },
+                    else => {
+                        @panic("not fn_proto");
+                    },
+                }
+            },
+        }
+    }
 };
 
 pub const ContainerDecl = struct {
@@ -29,6 +112,11 @@ pub const ContainerDecl = struct {
         // test_decl: AstNode,
     },
     name_token: AstToken,
+
+    pub fn getTypeNode(self: ContainerDecl) !AstNode {
+        _ = self;
+        return error.NotImplemented;
+    }
 };
 
 pub const Declaration = union(enum) {
@@ -54,8 +142,8 @@ pub const Declaration = union(enum) {
                             const name_token = statement_node.getMainToken().getNext();
                             if (std.mem.eql(u8, name_token.getText(), symbol)) {
                                 return Self{ .local = .{
-                                    .block = scope,
-                                    .variable = .{ .var_decl = statement_node },
+                                    .node = statement_node,
+                                    .variable = .var_decl,
                                     .name_token = name_token,
                                 } };
                             }
@@ -70,7 +158,7 @@ pub const Declaration = union(enum) {
                     if (std.mem.eql(u8, name_token.getText(), symbol)) {
                         return Self{
                             .local = .{
-                                .block = scope,
+                                .node = scope,
                                 .variable = .if_payload,
                                 .name_token = name_token,
                             },
@@ -84,7 +172,7 @@ pub const Declaration = union(enum) {
                     if (std.mem.eql(u8, name_token.getText(), symbol)) {
                         return Self{
                             .local = .{
-                                .block = scope,
+                                .node = scope,
                                 .variable = .while_payload,
                                 .name_token = name_token,
                             },
@@ -98,7 +186,7 @@ pub const Declaration = union(enum) {
                     if (std.mem.eql(u8, name_token.getText(), symbol)) {
                         return Self{
                             .local = .{
-                                .block = scope,
+                                .node = scope,
                                 .variable = .switch_case_payload,
                                 .name_token = name_token,
                             },
@@ -113,16 +201,15 @@ pub const Declaration = union(enum) {
                         var buffer2: [2]u32 = undefined;
                         if (fn_proto_node.getFnProto(&buffer2)) |fn_proto| {
                             var params = fn_proto.iterate(tree);
-                            while (params.next()) |param| {
+                            var i: u32 = 0;
+                            while (params.next()) |param| : (i += 1) {
                                 if (param.name_token) |name_token_index| {
                                     const name_token = AstToken.init(tree, name_token_index);
                                     if (std.mem.eql(u8, name_token.getText(), symbol)) {
-                                        const param_type = AstNode.init(scope.context, param.type_expr);
-                                        // param
                                         return Self{
                                             .local = .{
-                                                .block = scope,
-                                                .variable = .{ .param = param_type },
+                                                .node = fn_proto_node,
+                                                .variable = .{ .param = i },
                                                 .name_token = name_token,
                                             },
                                         };
