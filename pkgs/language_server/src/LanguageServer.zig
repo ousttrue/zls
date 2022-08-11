@@ -224,7 +224,7 @@ pub fn shutdown(self: *Self, arena: *std.heap.ArenaAllocator, id: i64, jsonParam
 }
 
 fn publishDiagnostics(self: *Self, uri: []const u8, diagnostics: []lsp.diagnostic.Diagnostic) !void {
-    // logger.debug("diagnostics: {}", .{diagnostics.len});
+    logger.info("publishDiagnostics: {}", .{diagnostics.len});
     const notification = lsp.Notification{
         .method = "textDocument/publishDiagnostics",
         .params = .{

@@ -25,7 +25,7 @@ pub fn getHover(
     doc: *Document,
     token: AstToken,
 ) !?Hover {
-    _ = project;    
+    _ = project;
     const allocator = arena.allocator();
     const token_info = try token.allocPrint(allocator);
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
@@ -53,10 +53,21 @@ pub fn getHover(
                     if (Declaration.find(node)) |decl| {
                         const text = try decl.allocPrint(allocator);
                         try w.print("{s}", .{text});
-                        return Hover{
-                            .text = text_buffer.items,
-                            .loc = decl.token.getLoc(),
-                        };
+                        switch (decl) {
+                            .local => |local| {
+                                return Hover{
+                                    .text = text_buffer.items,
+                                    .loc = local.name_token.getLoc(),
+                                };
+                            },
+                            .container => |container| {
+                                return Hover{
+                                    .text = text_buffer.items,
+                                    .loc = container.name_token.getLoc(),
+                                };
+                            },
+                            .primitive => {},
+                        }
                     } else {
                         logger.debug("identifer: {s}: decl not found", .{token.getText()});
                     }
@@ -154,7 +165,17 @@ pub fn getGoto(
                             if (Declaration.find(node)) |decl| {
                                 const text = try decl.allocPrint(arena.allocator());
                                 logger.debug("{s}", .{text});
-                                return PathPosition{ .path = doc.path, .loc = decl.token.getLoc() };
+                                switch (decl) {
+                                    .local => |local| {
+                                        return PathPosition{ .path = doc.path, .loc = local.name_token.getLoc() };
+                                    },
+                                    .container => |container| {
+                                        return PathPosition{ .path = doc.path, .loc = container.name_token.getLoc() };
+                                    },
+                                    .primitive => {
+                                        return error.Primitive;
+                                    },
+                                }
                             } else {
                                 return error.DeclNotFound;
                             }
@@ -172,7 +193,7 @@ pub fn getGoto(
                             //     return null;
                             // }
 
-                            // TODO: var or field or fn 
+                            // TODO: var or field or fn
 
                             return null;
                         },
@@ -180,7 +201,7 @@ pub fn getGoto(
                             return null;
                         },
                         else => {
-                            logger.debug("unknown node tag: {s}", .{@tagName(node.getTag())});
+                            logger.debug("getGoto: unknown node tag: {s}", .{@tagName(node.getTag())});
                             return null;
                         },
                     }
