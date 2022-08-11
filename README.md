@@ -6,13 +6,15 @@ This is an experimental modified version
 
 * [x] cursor position => token => ast node
 * [x] @import completion (zig_files, std, user_pkg...etc)
-* [ ] @cImport completion (use zig translate-c ?)
+* [x] @cImport completion (use --verbose-cimport)
 * [ ] goto: .enum_literal
 * [ ] completion: add keywords to global completion(undefined, unreachable... etc)
 * [ ] completion: container field completion (trigger .)
 * [ ] hover: show reference count
-* [ ] snippet:
+* [ ] signature: not builtin
 * [x] field_access
+* [ ] package: zigmod
+* [ ] package: gyro
 
 ## MEMO
 
