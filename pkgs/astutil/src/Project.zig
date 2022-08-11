@@ -87,6 +87,9 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                 return error.NoInit;
             }
         },
+        .container_field => |full| {
+            return self.resolveType(AstNode.init(node.context, full.ast.type_expr));
+        },
         .builtin_call => {
             const builtin_name = node.getMainToken().getText();
             if (std.mem.eql(u8, builtin_name, "@import")) {

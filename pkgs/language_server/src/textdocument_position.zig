@@ -322,35 +322,28 @@ pub fn completeContainerMember(
     doc: *Document,
     token: AstToken,
 ) ![]const lsp.completion.CompletionItem {
-    _ = project;
-    _ = doc;
-    _ = token;
     var items = std.ArrayList(lsp.completion.CompletionItem).init(arena.allocator());
 
-    // const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
-    // const var_type = try VarType.init(project, node);
+    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+    const type_node = try project.resolveType(node);
 
-    // if (try var_type.getContainerNode(project)) |container_node| {
-    //     var buf: [2]u32 = undefined;
-    //     if (container_node.containerIterator(&buf)) |*it| {
-    //         while (it.next()) |member| {
-    //             if (member.getMemberNameToken()) |name_token| {
-    //                 var buf2: [2]u32 = undefined;
+    var buf: [2]u32 = undefined;
+    if (type_node.containerIterator(&buf)) |*it| {
+        while (it.next()) |member| {
+            if (member.getMemberNameToken()) |name_token| {
+                var buf2: [2]u32 = undefined;
 
-    //                 try items.append(.{
-    //                     .label = name_token.getText(),
-    //                     .kind = switch (member.getChildren(&buf2)) {
-    //                         .var_decl => .Value,
-    //                         .container_field => .Property,
-    //                         else => .Method,
-    //                     },
-    //                 });
-    //             } else {}
-    //         }
-    //     }
-    // } else {
-    //     logger.err("no container: {s}", .{try token.allocPrint(arena.allocator())});
-    // }
+                try items.append(.{
+                    .label = name_token.getText(),
+                    .kind = switch (member.getChildren(&buf2)) {
+                        .var_decl => .Value,
+                        .container_field => .Property,
+                        else => .Method,
+                    },
+                });
+            } else {}
+        }
+    }
 
     return items.toOwnedSlice();
 }
