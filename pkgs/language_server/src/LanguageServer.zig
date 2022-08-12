@@ -20,6 +20,7 @@ const FunctionSignature = astutil.FunctionSignature;
 const textdocument = @import("./textdocument.zig");
 const textdocument_position = @import("./textdocument_position.zig");
 const Hover = @import("./Hover.zig");
+const Goto = @import("./Goto.zig");
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 
@@ -535,7 +536,7 @@ pub fn @"textDocument/definition"(self: *Self, arena: *std.heap.ArenaAllocator, 
         return lsp.Response.createNull(id);
     };
 
-    if (try textdocument_position.getGoto(arena, Project.init(self.import_solver, &self.store), doc, token)) |location| {
+    if (try Goto.getGoto(arena, Project.init(self.import_solver, &self.store), doc, token)) |location| {
         const goto_doc = (try self.store.getOrLoad(location.path)) orelse {
             logger.warn("fail to load: {s}", .{location.path.slice()});
             return error.DocumentNotFound;
