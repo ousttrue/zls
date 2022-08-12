@@ -7,9 +7,9 @@ This is an experimental modified version
 * [x] cursor position => token => ast node
 * [x] @import completion (zig_files, std, user_pkg...etc)
 * [x] @cImport completion (use --verbose-cimport)
-* [ ] goto: .enum_literal
+* [x] goto: .enum_literal
 * [ ] completion: add keywords to global completion(undefined, unreachable... etc)
-* [ ] completion: container field completion (trigger .)
+* [x] completion: container field completion (trigger .)
 * [ ] hover: show reference count
 * [ ] signature: not builtin
 * [x] field_access

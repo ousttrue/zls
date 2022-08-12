@@ -52,9 +52,6 @@ pub fn getGoto(
                     // TODO: GetType
                     return PathPosition{ .path = doc.path, .loc = init_node.getMainToken().getLoc() };
                 },
-                .fn_proto => {
-                    return null;
-                },
                 else => {
                     switch (node.getTag()) {
                         .identifier => {
@@ -83,6 +80,32 @@ pub fn getGoto(
                         .fn_decl => {
                             return null;
                         },
+                        .enum_literal => {
+                            if (node.getParent()) |parent| {
+                                switch (parent.getChildren(&buf)) {
+                                    .switch_case => {
+                                        if (parent.getParent()) |pp| {
+                                            switch (pp.getChildren(&buf)) {
+                                                .@"switch" => |full| {
+                                                    const resolved = try project.resolveType(AstNode.init(node.context, full.ast.cond_expr));
+                                                    if(resolved.getMember(node.getMainToken().getText()))|member|
+                                                    {
+                                                        return member.gotoPosition();
+                                                    }
+                                                    return resolved.gotoPosition();
+                                                },
+                                                else => {},
+                                            }
+                                        } else {
+                                            return error.NoParentParent;
+                                        }
+                                    },
+                                    else => {},
+                                }
+                            } else {
+                                return error.NoParent;
+                            }
+                        },
                         else => {
                             logger.debug("getGoto: unknown node tag: {s}", .{@tagName(node.getTag())});
                             return null;
@@ -91,8 +114,7 @@ pub fn getGoto(
                 },
             }
         },
-        else => {
-            return null;
-        },
+        else => {},
     }
+    return null;
 }

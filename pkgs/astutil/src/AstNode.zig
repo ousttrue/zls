@@ -367,3 +367,10 @@ test "@This" {
 
     try std.testing.expectEqual(pp, node.getContainerNodeForThis().?);
 }
+
+pub fn gotoPosition(self: Self) PathPosition {
+    return PathPosition{
+        .path = self.context.path,
+        .loc = self.getMainToken().getLoc(),
+    };
+}
