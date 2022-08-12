@@ -730,7 +730,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
                 .value = signature.document,
             },
             .parameters = args.items,
-            .activeParameter = signature.param_count,
+            .activeParameter = signature.active_param,
         },
     };
 

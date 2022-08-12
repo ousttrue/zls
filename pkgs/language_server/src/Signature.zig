@@ -18,13 +18,17 @@ pub fn getSignature(
     doc: *Document,
     token: AstToken,
 ) !?FunctionSignature {
-    _ = project;
-
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
     var buf: [2]u32 = undefined;
     switch (node.getChildren(&buf)) {
-        .call => {
-            logger.debug("call", .{});
+        .call => |full| {
+            const fn_node = AstNode.init(node.context, full.ast.fn_expr);
+            const resolved = try project.resolveType(fn_node);
+            return try FunctionSignature.fromNode(
+                arena.allocator(),
+                resolved,
+                @intCast(u32, full.ast.params.len),
+            );
         },
         .builtin_call => |full| {
             const name = node.getMainToken().getText();
@@ -35,8 +39,8 @@ pub fn getSignature(
                         b.signature,
                         b.documentation,
                         "",
+                        @intCast(u32, full.ast.params.len),
                     );
-                    fs.param_count = @intCast(u32, full.ast.params.len);
                     for (b.arguments) |arg| {
                         if (std.mem.indexOf(u8, arg, ":")) |found| {
                             try fs.args.append(.{

@@ -76,15 +76,13 @@ pub fn getHover(
                 },
                 .field_access => {
                     const resolved = try project.resolveFieldAccess(node);
-                    if (resolved.getTag() == .fn_decl) {
-                        // get sinature
-                        const signature = try FunctionSignature.fromFnDecl(allocator, resolved);
+                    if (FunctionSignature.fromNode(allocator, resolved, 0)) |signature| {
                         const text = try signature.allocPrint(allocator);
                         try w.print("{s}", .{text});
                         return Self{
                             .text = text_buffer.items,
                         };
-                    } else {
+                    } else |_| {
                         const text = try resolved.allocPrint(allocator);
                         try w.print("{s}", .{text});
                         return Self{
