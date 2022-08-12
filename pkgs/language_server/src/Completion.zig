@@ -14,13 +14,22 @@ pub fn completeContainerMember(
     arena: *std.heap.ArenaAllocator,
     project: Project,
     doc: *Document,
-    token: AstToken,
+    period: AstToken,
 ) ![]const lsp.completion.CompletionItem {
-    var items = std.ArrayList(lsp.completion.CompletionItem).init(arena.allocator());
+    var token = period;
+    if (period.getTag() == .period) {
+        if (period.getPrev()) |prev| {
+            token = prev;
+        }
+    }
 
+    // token.debugPrint();
     const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
+    // node.debugPrint();
     const type_node = try project.resolveType(node);
+    // type_node.debugPrint();
 
+    var items = std.ArrayList(lsp.completion.CompletionItem).init(arena.allocator());
     var buf: [2]u32 = undefined;
     if (type_node.containerIterator(&buf)) |*it| {
         while (it.next()) |member| {
@@ -165,9 +174,7 @@ pub fn getCompletion(
     if (trigger_character) |trigger| {
         if (std.mem.eql(u8, trigger, ".")) {
             logger.debug("trigger '.' => field_access", .{});
-            if (token.getPrev()) |prev| {
-                return try completeContainerMember(arena, project, doc, prev);
-            }
+            return try completeContainerMember(arena, project, doc, token);
         } else if (std.mem.eql(u8, trigger, "@")) {
             // logger.debug("trigger '@' => builtin", .{});
             return builtin_completions.completeBuiltin();

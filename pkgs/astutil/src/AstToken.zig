@@ -1,5 +1,6 @@
 const std = @import("std");
 const Ast = std.zig.Ast;
+const logger = std.log.scoped(.AstToken);
 
 fn findTokenIndex(tree: *const Ast, byte_position: u32) ?u32 {
     const token_start = tree.tokens.items(.start);
@@ -33,6 +34,10 @@ pub fn init(tree: *const Ast, index: usize) Self {
         .tree = tree,
         .index = @intCast(u32, index),
     };
+}
+
+pub fn debugPrint(self: Self) void {
+    logger.debug("{}: {s}", .{self.getTag(), self.getText()});
 }
 
 pub fn fromBytePosition(tree: *const Ast, byte_position: usize) ?Self {

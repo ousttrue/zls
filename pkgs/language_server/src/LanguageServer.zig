@@ -22,6 +22,7 @@ const textdocument_position = @import("./textdocument_position.zig");
 const Hover = @import("./Hover.zig");
 const Goto = @import("./Goto.zig");
 const Completion = @import("./Completion.zig");
+const Signature = @import("./Signature.zig");
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 
@@ -701,7 +702,7 @@ pub fn @"textDocument/signatureHelp"(self: *Self, arena: *std.heap.ArenaAllocato
         return lsp.Response.createNull(id);
     };
 
-    const signature = (try textdocument_position.getSignature(
+    const signature = (try Signature.getSignature(
         arena,
         self.project(),
         doc,
