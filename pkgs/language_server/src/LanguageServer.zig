@@ -21,6 +21,7 @@ const textdocument = @import("./textdocument.zig");
 const textdocument_position = @import("./textdocument_position.zig");
 const Hover = @import("./Hover.zig");
 const Goto = @import("./Goto.zig");
+const Completion = @import("./Completion.zig");
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 
@@ -576,7 +577,7 @@ pub fn @"textDocument/completion"(self: *Self, arena: *std.heap.ArenaAllocator, 
     const line = try doc.utf8_buffer.getLine(@intCast(u32, position.line));
     const byte_position = try line.getBytePosition(@intCast(u32, position.character), self.encoding);
 
-    const completions = try textdocument_position.getCompletion(
+    const completions = try Completion.getCompletion(
         arena,
         self.project(),
         doc,
