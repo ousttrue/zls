@@ -118,6 +118,7 @@ fn getZigCImport(
     try args.appendSlice(&.{
         "build-lib",
         source,
+        "-lc",
         "--verbose-cimport",
     });
     try args.appendSlice(compile_options);
