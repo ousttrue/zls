@@ -58,6 +58,7 @@ pub fn build(b: *std.build.Builder) !void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
+    exe.linkLibCpp();
     exe.addIncludeDir("src");
     exe.addCSourceFile("src/hello.cpp", &.{});
 
