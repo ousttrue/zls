@@ -320,7 +320,6 @@ pub fn initPackagesAndCImport(self: Self, allocator: std.mem.Allocator, import_s
     const object = project.objects[0];
     if (getZigCImport(allocator, self.exe, object.compile_options)) |path| {
         // self.import_solver.c_import = path;
-        _ = import_solver.pkg_path_map.remove("c");
         try import_solver.push("c", path);
     } else |err| {
         logger.err("{}", .{err});

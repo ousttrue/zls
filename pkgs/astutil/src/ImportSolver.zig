@@ -40,9 +40,8 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
-    if(self.pkg_path_map.get(pkg))|_|
-    {
-        return;
+    if (self.pkg_path_map.fetchRemove("c")) |kv| {
+        self.allocator.free(kv.key);
     }
 
     const copy = try self.allocator.dupe(u8, pkg);
@@ -56,16 +55,14 @@ pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
 
 pub fn solve(self: Self, import_from: FixedPath, import: []const u8) ?FixedPath {
     const text = unquote(import);
-    if(std.mem.endsWith(u8, text, ".zig"))
-    {
+    if (std.mem.endsWith(u8, text, ".zig")) {
         // relative path
         if (import_from.parent()) |parent| {
             return parent.child(text);
         } else {
             return null;
         }
-    }
-    else{
+    } else {
         // pkg
         if (self.pkg_path_map.get(text)) |found| {
             return found;
