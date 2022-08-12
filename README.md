@@ -10,8 +10,9 @@ This is an experimental modified version
 * [x] goto: .enum_literal
 * [ ] completion: add keywords to global completion(undefined, unreachable... etc)
 * [x] completion: container field completion (trigger .)
-* [ ] hover: show reference count
-* [ ] signature: not builtin
+* [ ] hover: show local reference count for no pub decl(remove unused import)
+* [ ] hover: show global reference count for pub decl
+* [x] signature: not builtin
 * [x] field_access
 * [ ] package: zigmod
 * [ ] package: gyro
@@ -21,12 +22,11 @@ This is an experimental modified version
 * std.zig.Ast
 * std.zig.Ast.Node と std.zig.Token の対応表
 * std.zig.Ast.Node の親ノード表
-
-以外は事前に情報を蓄えずに、必要に応じて情報を引き出す方向性に改変する
-
-* Ast 処理では token / node レベルで操作する。bytePosition による処理を避ける
 * build.zig は root にひとつに決め打ち。簡略化する
-* completion => snippet, signature help
+
+
+`bytePosition` => `std.zig.Token` => `std.zig.Ast.Node` と情報を得る。
+
 
 ```
 +-------+ +---+
