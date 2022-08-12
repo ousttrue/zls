@@ -151,8 +151,11 @@ pub fn resolveType(self: Self, node: AstNode) anyerror!AstNode {
                     const field = try self.resolveFieldAccess(node);
                     return self.resolveType(field);
                 },
-                .optional_type, .@"try" => {
+                .optional_type, .@"try", .@"orelse" => {
                     return self.resolveType(AstNode.init(node.context, node.getData().lhs));
+                },
+                .error_union => {
+                    return self.resolveType(AstNode.init(node.context, node.getData().rhs));
                 },
                 else => {
                     node.debugPrint();

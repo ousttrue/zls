@@ -19,6 +19,7 @@ pub const URI = @import("./uri.zig");
 const FunctionSignature = astutil.FunctionSignature;
 const textdocument = @import("./textdocument.zig");
 const textdocument_position = @import("./textdocument_position.zig");
+const Hover = @import("./Hover.zig");
 const logger = std.log.scoped(.LanguageServer);
 pub var keep_running: bool = true;
 
@@ -483,7 +484,7 @@ pub fn @"textDocument/hover"(self: *Self, arena: *std.heap.ArenaAllocator, id: i
         return lsp.Response.createNull(id);
     };
 
-    const hover_or_null: ?textdocument_position.Hover = try textdocument_position.getHover(
+    const hover_or_null = try Hover.getHover(
         arena,
         Project.init(self.import_solver, &self.store),
         doc,

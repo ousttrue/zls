@@ -49,6 +49,11 @@ pub fn push(self: *Self, pkg: []const u8, path: FixedPath) !void {
     try self.pkg_path_map.put(copy, path);
 }
 
+// pub fn remove(self: *Self, pkg: []const u8) !void
+// {
+
+// }
+
 pub fn solve(self: Self, import_from: FixedPath, import: []const u8) ?FixedPath {
     const text = unquote(import);
     if(std.mem.endsWith(u8, text, ".zig"))

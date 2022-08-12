@@ -14,82 +14,6 @@ const ImportSolver = astutil.ImportSolver;
 const builtin_completions = @import("./builtin_completions.zig");
 const logger = std.log.scoped(.textdocument_position);
 
-pub const Hover = struct {
-    text: []const u8,
-    loc: ?std.zig.Token.Loc = null,
-};
-
-pub fn getHover(
-    arena: *std.heap.ArenaAllocator,
-    project: ?Project,
-    doc: *Document,
-    token: AstToken,
-) !?Hover {
-    _ = project;
-    const allocator = arena.allocator();
-    const token_info = try token.allocPrint(allocator);
-    const node = AstNode.fromTokenIndex(doc.ast_context, token.index);
-    const node_info = try node.allocPrint(allocator);
-
-    var text_buffer = std.ArrayList(u8).init(allocator);
-    const w = text_buffer.writer();
-    try w.print("`{s} => {s}`\n\n", .{ node_info, token_info });
-
-    switch (token.getTag()) {
-        .builtin => {
-            if (builtin_completions.find(token.getText())) |builtin| {
-                try w.print(
-                    "\n```zig\n{s}\n```\n\n{s}",
-                    .{ builtin.signature, builtin.documentation },
-                );
-                return Hover{
-                    .text = text_buffer.items,
-                };
-            }
-        },
-        .identifier => {
-            switch (node.getTag()) {
-                .identifier => {
-                    if (Declaration.find(node)) |decl| {
-                        const text = try decl.allocPrint(allocator);
-                        try w.print("{s}", .{text});
-                        switch (decl) {
-                            .local => |local| {
-                                return Hover{
-                                    .text = text_buffer.items,
-                                    .loc = local.name_token.getLoc(),
-                                };
-                            },
-                            .container => |container| {
-                                return Hover{
-                                    .text = text_buffer.items,
-                                    .loc = container.name_token.getLoc(),
-                                };
-                            },
-                            .primitive => {},
-                        }
-                    } else {
-                        logger.debug("identifier: {s}: decl not found", .{token.getText()});
-                    }
-                },
-                else => {
-                    // const var_type = try VarType.init(project, node);
-                    // const text = try var_type.allocPrint(allocator);
-                    // try w.print("var_type: {s}", .{text});
-                    // return Hover{
-                    //     .text = text_buffer.items,
-                    // };
-                },
-            }
-        },
-        else => {},
-    }
-
-    return Hover{
-        .text = text_buffer.items,
-    };
-}
-
 // pub fn getRename(
 //     arena: *std.heap.ArenaAllocator,
 //     workspace: *Workspace,
@@ -438,8 +362,9 @@ pub fn getSignature(
                         arena.allocator(),
                         b.signature,
                         b.documentation,
-                        @intCast(u32, full.ast.params.len),
+                        "",
                     );
+                    fs.param_count = @intCast(u32, full.ast.params.len);
                     for (b.arguments) |arg| {
                         if (std.mem.indexOf(u8, arg, ":")) |found| {
                             try fs.args.append(.{

@@ -34,7 +34,7 @@ pub fn debugPrint(self: Self) void {
         "debugPrint: {s}:{} [{}]{s}",
         .{
             self.context.path.slice(),
-            self.context.tree.tokenLocation(0, self.getMainToken().index).line+1,
+            self.context.tree.tokenLocation(0, self.getMainToken().index).line + 1,
             self.getTag(),
             self.getMainToken().getText(),
         },
@@ -88,6 +88,13 @@ pub fn allocPrint(self: Self, allocator: std.mem.Allocator) ![]const u8 {
     }
 
     return buffer.items;
+}
+
+pub fn getText(self: Self) []const u8 {
+    const tree = &self.context.tree;
+    const first = AstToken.init(tree, tree.firstToken(self.index)).getLoc();
+    const last = AstToken.init(tree, tree.lastToken(self.index)).getLoc();
+    return tree.source[first.start..last.end];
 }
 
 pub fn getTag(self: Self) Ast.Node.Tag {
@@ -189,8 +196,7 @@ pub fn getMemberNameToken(self: Self) ?AstToken {
         },
         .fn_proto => |fn_proto| {
             // extern
-            if(fn_proto.name_token)|name_token|
-            {
+            if (fn_proto.name_token) |name_token| {
                 return AstToken.init(&self.context.tree, name_token);
             }
         },
